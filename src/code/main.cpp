@@ -3,8 +3,6 @@
  * Import Buffer.cpp
  * Stop malloc
  *
- * FIX why shader compilation fails sometimes
- *
 */
 #include <cstdio>
 #include <cmath>
@@ -70,16 +68,20 @@ static void read_file(char **buffer, const char *source)
     FILE* file;
     long file_size = open_file(&file, source);
 
-    *buffer = (char*)malloc(file_size);
+    *buffer = (char*)malloc(file_size+1);
     if (*buffer)
     {
         size_t bytes_read = fread(*buffer, sizeof(char), file_size, file);
         if (bytes_read != file_size)
         {
-            fprintf(stderr, "Error: Failed to read %s\nfile_size: %lu, bytes_read: %zu", source, file_size, bytes_read);
+            fprintf(stderr, "Error: Failed to read %s\nfile_size: %lu, bytes_read: %zu\n", source, file_size, bytes_read);
             free(*buffer);
             fclose(file);
         }
+
+        // Null-terminate the buffer
+        (*buffer)[bytes_read] = '\0';
+
         fclose(file);
     }
     else
