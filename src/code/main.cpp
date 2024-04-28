@@ -4,6 +4,7 @@
  * Stop malloc
  *
 */
+
 #include <cstdio>
 #include <cmath>
 
@@ -22,17 +23,19 @@ typedef int32_t  b32;
 typedef float    f32;
 typedef double   f64;
 
+#include "buffer.cpp"
 
-static void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+
+static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
 {
     glViewport(0, 0, width, height);
 }  
 
-static u32 compile_shader(i32 type, char** source)
+static u32 compile_shader(i32 type, char* source)
 {
     u32 id;
     id = glCreateShader(type);
-    glShaderSource(id, 1, source, NULL);
+    glShaderSource(id, 1, &source, NULL);
     glCompileShader(id);
 
     i32 success;
@@ -50,7 +53,7 @@ static u32 compile_shader(i32 type, char** source)
 static long open_file(FILE **handle, char const *name)
 {
     *handle = fopen(name, "rb");
-    if (!handle)
+    if (!*handle)
     {
         fprintf(stderr, "Error: Couldn't open file: %s\n", name);
         return -1;
@@ -63,35 +66,42 @@ static long open_file(FILE **handle, char const *name)
     return file_size;
 }
 
-static void read_file(char **buffer, const char *source)
+static Buffer read_file(const char *file_name)
 {
-    FILE* file;
-    long file_size = open_file(&file, source);
+    Buffer result = {};
 
-    *buffer = (char*)malloc(file_size+1);
-    if (*buffer)
+    FILE* file;
+    long file_size = open_file(&file, file_name);
+
+    result = allocate_buffer(file_size + 1);
+
+    if (result.data)
     {
-        size_t bytes_read = fread(*buffer, sizeof(char), file_size, file);
-        if (bytes_read != file_size)
+        size_t bytes_read = fread(result.data, sizeof(char), result.count, file);
+        if ((bytes_read + 1) != result.count)
         {
-            fprintf(stderr, "Error: Failed to read %s\nfile_size: %lu, bytes_read: %zu\n", source, file_size, bytes_read);
-            free(*buffer);
+            fprintf(stderr, "Error: Failed to read %s\nfile_size: %zu, bytes_read: %zu\n", file_name, result.count, bytes_read);
+
+            free_buffer(&result);
             fclose(file);
+
+            return result;
         }
 
         // Null-terminate the buffer
-        (*buffer)[bytes_read] = '\0';
-
-        fclose(file);
+        result.data[result.count] = '\0';
     }
     else
     {
-        fprintf(stderr, "Error: Memory allocation failed.\n");
-        fclose(file);
+        fprintf(stderr, "Error: Memory allocation failed while reading file %s\n", file_name);
     }
+
+    fclose(file);
+
+    return result;
 }
 
-/*
+/* NOTE(Fermin): Print cwd
 #include <stdio.h>
 #define WINDOWS 
 #ifdef WINDOWS
@@ -112,23 +122,20 @@ printf("\n %s \n",buf);
 struct Program
 {
     u32 id;
-    char const* vertex_shader;
-    char const* fragment_shader;
+    char const *vertex_shader;
+    char const *fragment_shader;
 };
 
 static void build_program(Program *program)
 {
-    char* vertex_shader_source;
-    read_file(&vertex_shader_source, program->vertex_shader);
+    Buffer vertex_shader_buffer = read_file(program->vertex_shader);
+    Buffer fragment_shader_buffer = read_file(program->fragment_shader);
 
-    char* fragment_shader_source;
-    read_file(&fragment_shader_source, program->fragment_shader);
+    u32 vertex_shader_id = compile_shader(GL_VERTEX_SHADER, (char *)vertex_shader_buffer.data);
+    u32 fragment_shader_id = compile_shader(GL_FRAGMENT_SHADER, (char *)fragment_shader_buffer.data);
 
-    u32 vertex_shader_id = compile_shader(GL_VERTEX_SHADER, &vertex_shader_source);
-    u32 fragment_shader_id = compile_shader(GL_FRAGMENT_SHADER, &fragment_shader_source);
-
-    free(vertex_shader_source);
-    free(fragment_shader_source);
+    free_buffer(&vertex_shader_buffer);
+    free_buffer(&fragment_shader_buffer);
 
     u32 program_id;
     program_id = glCreateProgram();
@@ -138,7 +145,7 @@ static void build_program(Program *program)
 
     i32 success;
     char infoLog[512];
-    glGetProgramiv(program->id, GL_LINK_STATUS, &success);
+    glGetProgramiv(program_id, GL_LINK_STATUS, &success);
     if(!success)
     {
         glGetProgramInfoLog(program_id, 512, NULL, infoLog);
