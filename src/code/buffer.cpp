@@ -1,5 +1,4 @@
-#ifndef BUFFER_CPP
-#define BUFFER_CPP
+#if !defined(BUFFER_CPP)
 
 #include <Windows.h>
 
@@ -40,4 +39,5 @@ inline b32 is_valid(Buffer buffer)
     return result;
 }
 
+#define BUFFER_CPP
 #endif
