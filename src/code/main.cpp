@@ -13,6 +13,7 @@
 #include <GLFW/glfw3.h>
 #include "glad.c"
 
+// NOTE(Fermin): For reading files. In this case textures
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -26,7 +27,10 @@ typedef int32_t  b32;
 typedef float    f32;
 typedef double   f64;
 
+#define Pi32 3.14159265359f
+
 #include "buffer.cpp"
+#include "math.cpp"
 
 
 static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
@@ -162,172 +166,6 @@ static void build_program(Program *program)
     program->id = program_id;
 }
 
-// NOTE(Fermin): THis all should go in its own math file
-union V2
-{
-    struct
-    {
-        f32 x, y;
-    };
-    struct
-    {
-        f32 u, v;
-    };
-    f32 e[2];
-};
-union V3
-{
-    struct
-    {
-        f32 x, y, z;
-    };
-    struct
-    {
-        f32 u, v, w;
-    };
-    struct
-    {
-        f32 r, g, b;
-    };
-    struct
-    {
-        V2 xy;
-        f32 Ignored0_;
-    };
-    struct
-    {
-        f32 Ignored1_;
-        V2 yz;
-    };
-    struct
-    {
-        V2 uv;
-        f32 Ignored2_;
-    };
-    struct
-    {
-        f32 Ignored3_;
-        V2 vw;
-    };
-    f32 e[3];
-};
-union V4
-{
-    struct
-    {
-        union
-        {
-            V3 xyz;
-            struct
-            {
-                f32 x, y, z;
-            };
-        };
-        
-        f32 w;        
-    };
-    struct
-    {
-        union
-        {
-            V3 rgb;
-            struct
-            {
-                f32 r, g, b;
-            };
-        };
-        
-        f32 a;        
-    };
-    struct
-    {
-        V2 xy;
-        f32 Ignored0_;
-        f32 Ignored1_;
-    };
-    struct
-    {
-        f32 Ignored2_;
-        V2 yz;
-        f32 Ignored3_;
-    };
-    struct
-    {
-        f32 Ignored4_;
-        f32 Ignored5_;
-        V2 zw;
-    };
-    f32 e[4];
-};
-struct M4
-{
-    // NOTE(Fermin): Not sure how I'd like to store matrices.
-    // I'll start with this and see how it goes. Additionally we can
-    // use:
-    // {
-    //  V4 col/row1;
-    //  V4 col/row2;
-    //  V4 col/row3;
-    //  V4 col/row4;
-    // }
-
-    // NOTE(Fermin): ROW then COLUMN
-    V4 m[4];
-};
-static inline M4 get_m4_ident()
-{
-    M4 result = {};
-    result.m[0].x = 1.0f;
-    result.m[1].y = 1.0f;
-    result.m[2].z = 1.0f;
-    result.m[3].w = 1.0f;
-
-    return result;
-}
-static void translate(M4 *out, V3 translation)
-{
-    (*out).m[0].w = translation.x;
-    (*out).m[1].w = translation.y;
-    (*out).m[2].w = translation.z;
-}
-static M4 multiply_m4(const M4* a, const M4* b)
-{
-
-    M4 result = {};
-
-    for (i32 row = 0; row < 4; ++row) {
-        for (i32 col = 0; col < 4; ++col) {
-            result.m[row].e[col] = a->m[row].e[0] * b->m[0].e[col] +
-                                   a->m[row].e[1] * b->m[1].e[col] +
-                                   a->m[row].e[2] * b->m[2].e[col] +
-                                   a->m[row].e[3] * b->m[3].e[col];
-        }
-    }
-
-    return result;
-}
-static V4 multiply_m4_v4(const M4 *m, const V4 *v)
-{
-
-    V4 result = {};
-
-    for (i32 row = 0; row < 4; ++row) {
-        result.e[row] = m->m[row].e[0] * v->e[0] +
-                        m->m[row].e[1] * v->e[1] +
-                        m->m[row].e[2] * v->e[2] +
-                        m->m[row].e[3] * v->e[3];
-    }
-
-    return result;
-}
-inline V4 operator*(M4 a, V4 b)
-{
-    V4 result = multiply_m4_v4(&a, &b);
-
-    return result;
-}
-// NOTE(Fermin): End of math file
-
 int main()
 {
     // NOTE(Fermin) | Start | Init window and opengl
@@ -462,11 +300,10 @@ int main()
     glUniform1i(glGetUniformLocation(test_program.id, "texture2"), 1);
     // NOTE(Fermin) | End | Texture
 
-    V4 vec = { 1.0f, 0.0f, 0.0f, 1.0f };
-    M4 trans = get_m4_ident();
-    translate(&trans, {1.0f, 1.0f, 0.0f});
-    vec = trans * vec;
-    printf("%f %f %f", vec.x, vec.y, vec.z);
+    // NOTE(Fermin): Testing maths
+    M4 translation = translate({0.5f, -0.5f, 0.0f});
+    M4 scale = scale_m4({0.5, 0.5, 0.5});
+    // NOTE(Fermin): Testing maths
 
     b32 wireframe_mode = 0;
     // NOTE(Fermin): OFC we need an actual key struct for these...
@@ -484,6 +321,12 @@ int main()
 
         if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_RELEASE)
             f1_key_state = 0;
+
+        M4 rotation = rotate(glfwGetTime(), {0.0, 0.0, 1.0});
+        M4 transform = translation * rotation * scale;
+
+        u32 transform_loc = glGetUniformLocation(test_program.id, "transform");
+        glUniformMatrix4fv(transform_loc, 1, GL_TRUE, transform.e);
 
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
