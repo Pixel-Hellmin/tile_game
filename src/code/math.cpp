@@ -139,13 +139,30 @@ static inline f32 radians(f32 degrees)
     return result;
 }
 
-static inline M4 get_m4_ident()
+static inline M4 m4_ident()
 {
     M4 result = {};
     result.m[0].x = 1.0f;
     result.m[1].y = 1.0f;
     result.m[2].z = 1.0f;
     result.m[3].w = 1.0f;
+
+    return result;
+}
+
+static inline M4 perspective(f32 fov_radians, f32 aspect_ratio, f32 z_near, f32 z_far)
+{
+    // NOTE(Fermin): This is a row-major perspective matrix
+
+    M4 result = {};
+
+    f32 f = 1.0f / tanf(fov_radians / 2.0f);
+
+    result.m[0].x = f / aspect_ratio;
+    result.m[1].y = f;
+    result.m[2].z = (z_far + z_near) / (z_near - z_far);
+    result.m[2].w = (2.0f * z_far * z_near) / (z_near - z_far);
+    result.m[3].z = -1.0f;
 
     return result;
 }
@@ -157,7 +174,7 @@ static M4 scale_m4(V3 scale)
 {
     // TODO(Fermin): Make the function name 'scale' work
 
-    M4 result = get_m4_ident();
+    M4 result = m4_ident();
 
     result.m[0].x = scale.x;
     result.m[1].y = scale.y;
@@ -178,7 +195,7 @@ static M4 rotate(f32 radians, V3 axis)
     f32 y = axis.y;
     f32 z = axis.z;
 
-    M4 result = get_m4_ident();
+    M4 result = m4_ident();
 
     result.m[0].x = cos_theta + x * x * one_minus_cos_theta;
     result.m[0].y = x * y * one_minus_cos_theta - z * sin_theta;
@@ -197,7 +214,7 @@ static M4 rotate(f32 radians, V3 axis)
 
 static M4 translate(V3 translation)
 {
-    M4 result = get_m4_ident();
+    M4 result = m4_ident();
 
     result.m[0].w = translation.x;
     result.m[1].w = translation.y;

@@ -174,7 +174,9 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Window", NULL, NULL);
+    u32 screen_width = 1280;
+    u32 screen_height = 720;
+    GLFWwindow* window = glfwCreateWindow(screen_width, screen_height, "Window", NULL, NULL);
     if (window == NULL)
     {
         fprintf(stderr, "Failed to create GLFW window" );
@@ -189,7 +191,7 @@ int main()
         return -1;
     } 
 
-    glViewport(0, 0, 800, 600);
+    glViewport(0, 0, screen_width, screen_height);
 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  
     // NOTE(Fermin) | End | Init window and opengl
@@ -205,10 +207,52 @@ int main()
     // NOTE(Fermin) | Start | VAO, VBO. EBO
     float vertices[] = {
         // positions          // colors           // texture coords
-        0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   // top right
-        0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   // bottom right
-        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // bottom left
-        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f    // top left 
+        //0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   // top right
+        //0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   // bottom right
+        //-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // bottom left
+        //-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f    // top left 
+
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+
+        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+
+        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f
     };
     unsigned int indices[] = {  // note that we start from 0!
         0, 1, 3,   // first triangle
@@ -301,13 +345,28 @@ int main()
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Testing maths
-    M4 translation = translate({0.5f, -0.5f, 0.0f});
-    M4 scale = scale_m4({0.5, 0.5, 0.5});
+    // NOTE(Fermin): We're translating the scene in the reverse direction of where we want to move
+    M4 view = translate({0.0f, 0.0f, -3.0f});
+    f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
+    M4 projection = perspective(radians(45.0f), aspect_ratio, 0.1f, 100.0f);
+    V3 cube_positions[] = {
+        V3{ 0.0f,  0.0f,  0.0f}, 
+        V3{ 2.0f,  5.0f, -15.0f}, 
+        V3{-1.5f, -2.2f, -2.5f},  
+        V3{-3.8f, -2.0f, -12.3f},  
+        V3{ 2.4f, -0.4f, -3.5f},  
+        V3{-1.7f,  3.0f, -7.5f},  
+        V3{ 1.3f, -2.0f, -2.5f},  
+        V3{ 1.5f,  2.0f, -2.5f}, 
+        V3{ 1.5f,  0.2f, -1.5f}, 
+        V3{-1.3f,  1.0f, -1.5f}  
+    };
     // NOTE(Fermin): Testing maths
 
     b32 wireframe_mode = 0;
     // NOTE(Fermin): OFC we need an actual key struct for these...
     b32 f1_key_state = 0; // NOTE(Fermin): 0 released else pressed
+    // NOTE(Fermin): Main Loop
     while(!glfwWindowShouldClose(window))
     {
         if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -322,14 +381,8 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_RELEASE)
             f1_key_state = 0;
 
-        M4 rotation = rotate(glfwGetTime(), {0.0, 0.0, 1.0});
-        M4 transform = translation * rotation * scale;
-
-        u32 transform_loc = glGetUniformLocation(test_program.id, "transform");
-        glUniformMatrix4fv(transform_loc, 1, GL_TRUE, transform.e);
-
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // NOTE(Fermin): This is what we need to set to specify what and how to draw
         glUseProgram(test_program.id);
@@ -341,8 +394,32 @@ int main()
         glBindTexture(GL_TEXTURE_2D, texture2);
 
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        //glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glEnable(GL_DEPTH_TEST);
+
+        u32 view_loc = glGetUniformLocation(test_program.id, "view");
+        glUniformMatrix4fv(view_loc, 1, GL_TRUE, view.e);
+
+        u32 projection_loc = glGetUniformLocation(test_program.id, "projection");
+        glUniformMatrix4fv(projection_loc, 1, GL_TRUE, projection.e);
+
+        u32 model_loc = glGetUniformLocation(test_program.id, "model");
+        for(unsigned int i = 0; i < 10; i++)
+        {
+            M4 translation = translate(cube_positions[i]);
+            f32 angle = 20.0f * i; 
+            M4 rotation = rotate((f32)glfwGetTime() * radians(angle), {1.0f, 0.3f, 0.5f});
+            M4 model = translation * rotation;
+            glUniformMatrix4fv(model_loc, 1, GL_TRUE, model.e);
+
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+
+
+        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        //glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        glDisable(GL_DEPTH_TEST);
 
         if(wireframe_mode)
         {
