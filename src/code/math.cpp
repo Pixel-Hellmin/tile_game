@@ -1,5 +1,31 @@
 #if !defined(MATH_CPP)
+// NOTE(Fermin): This is the start of the code that should go in an intrinsics file
+static inline f32 square_root(f32 a)
+{
+    f32 result = sqrtf(a);
+    return result;
+}
+// NOTE(Fermin): THis is the end of the intrinsics file
 
+static inline f32 degrees(f32 radians)
+{
+    f32 result;
+    result = radians * (180.0f / Pi32);
+
+    return result;
+}
+
+static inline f32 radians(f32 degrees)
+{
+    f32 result;
+    result = degrees * (Pi32 / 180.0f);
+
+    return result;
+}
+
+/*
+* V2
+*/
 union V2
 {
     struct
@@ -13,6 +39,9 @@ union V2
     f32 e[2];
 };
 
+/*
+* V3
+*/
 union V3
 {
     struct
@@ -50,6 +79,106 @@ union V3
     f32 e[3];
 };
 
+inline V3 operator+(V3 a, V3 b)
+{
+    V3 result = {};
+
+    result.x = a.x + b.x;
+    result.y = a.y + b.y;
+    result.z = a.z + b.z;
+
+    return result;
+}
+
+inline V3 operator-(V3 a, V3 b)
+{
+    V3 result = {};
+
+    result.x = a.x - b.x;
+    result.y = a.y - b.y;
+    result.z = a.z - b.z;
+
+    return result;
+}
+
+inline V3 & operator+=(V3 &a, V3 b)
+{
+    a = a + b;
+
+    return a;
+}
+
+inline V3 & operator-=(V3 &a, V3 b)
+{
+    a = a - b;
+
+    return a;
+}
+
+inline V3 operator*(f32 b, V3 a)
+{
+    V3 result = {};
+
+    result.x = a.x * b;
+    result.y = a.y * b;
+    result.z = a.z * b;
+
+    return result;
+}
+
+inline V3 operator*(V3 a, f32 b)
+{
+    V3 result = {};
+
+    result.x = a.x * b;
+    result.y = a.y * b;
+    result.z = a.z * b;
+
+    return result;
+}
+
+static inline f32 inner(V3 a, V3 b)
+{
+    f32 result = a.x*b.x + a.y*b.y + a.z*b.z;
+
+    return result;
+}
+
+static inline V3 cross(V3 a, V3 b)
+{
+    V3 result = {};
+
+    result.x = a.y * b.z - a.z * b.y;
+    result.y = a.z * b.x - a.x * b.z;
+    result.z = a.x * b.y - a.y * b.x;
+
+    return result;
+}
+
+static inline f32 length_sq(V3 a)
+{
+    f32 result = inner(a, a);
+
+    return result;
+}
+
+static inline f32 length(V3 a)
+{
+    f32 result = square_root(length_sq(a));
+
+    return result;
+}
+
+static inline V3 normalize(V3 a)
+{
+    V3 result = a * (1.0f / length(a));
+
+    return result;
+}
+
+/*
+* V4
+*/
 union V4
 {
     struct
@@ -99,6 +228,9 @@ union V4
     f32 e[4];
 };
 
+/*
+* M4
+*/
 union M4
 {
     // NOTE(Fermin): OpenGL convention is column-major, my current
@@ -123,18 +255,48 @@ union M4
     f32 e[16];
 };
 
-static inline f32 degrees(f32 radians)
+static inline M4 multiply_m4(const M4* a, const M4* b)
 {
-    f32 result;
-    result = radians * (180.0f / Pi32);
+
+    M4 result = {};
+
+    for (i32 row = 0; row < 4; ++row) {
+        for (i32 col = 0; col < 4; ++col) {
+            result.m[row].e[col] = a->m[row].e[0] * b->m[0].e[col] +
+                                   a->m[row].e[1] * b->m[1].e[col] +
+                                   a->m[row].e[2] * b->m[2].e[col] +
+                                   a->m[row].e[3] * b->m[3].e[col];
+        }
+    }
 
     return result;
 }
 
-static inline f32 radians(f32 degrees)
+static inline V4 multiply_m4_v4(const M4 *m, const V4 *v)
 {
-    f32 result;
-    result = degrees * (Pi32 / 180.0f);
+
+    V4 result = {};
+
+    for (i32 row = 0; row < 4; ++row) {
+        result.e[row] = m->m[row].e[0] * v->e[0] +
+                        m->m[row].e[1] * v->e[1] +
+                        m->m[row].e[2] * v->e[2] +
+                        m->m[row].e[3] * v->e[3];
+    }
+
+    return result;
+}
+
+inline M4 operator*(M4 a, M4 b)
+{
+    M4 result = multiply_m4(&a, &b);
+
+    return result;
+}
+
+static inline V4 operator*(M4 a, V4 b)
+{
+    V4 result = multiply_m4_v4(&a, &b);
 
     return result;
 }
@@ -170,7 +332,7 @@ static inline M4 perspective(f32 fov_radians, f32 aspect_ratio, f32 z_near, f32 
 // NOTE(Fermin): From right to left order of operations for m4 transforms:
 // scale -> rotate -> translate
 // M4 transform = translate * rotate * scale;
-static M4 scale_m4(V3 scale)
+static inline M4 scale_m4(V3 scale)
 {
     // TODO(Fermin): Make the function name 'scale' work
 
@@ -183,7 +345,7 @@ static M4 scale_m4(V3 scale)
     return result;
 }
 
-static M4 rotate(f32 radians, V3 axis)
+static inline M4 rotate(f32 radians, V3 axis)
 {
     // NOTE(Fermin): angle must be a unit vector
 
@@ -212,7 +374,7 @@ static M4 rotate(f32 radians, V3 axis)
     return result;
 }
 
-static M4 translate(V3 translation)
+static inline M4 translate(V3 translation)
 {
     M4 result = m4_ident();
 
@@ -223,48 +385,58 @@ static M4 translate(V3 translation)
     return result;
 }
 
-static M4 multiply_m4(const M4* a, const M4* b)
+static inline M4 look_at(V3 pos, V3 target, V3 up)
 {
+    // NOTE(Fermin): For the view matrix's coordinate system we want its z-axis to be positive and because by convention (in OpenGL) the camera points towards the negative z-axis we want to negate the direction vector. If we switch the subtraction order around we now get a vector pointing towards the camera's positive z-axis:
+    V3 camera_direction = normalize(pos - target);
+    V3 camera_right = normalize(cross(up, camera_direction));
+    V3 camera_up = cross(camera_direction, camera_right);
 
     M4 result = {};
 
-    for (i32 row = 0; row < 4; ++row) {
-        for (i32 col = 0; col < 4; ++col) {
-            result.m[row].e[col] = a->m[row].e[0] * b->m[0].e[col] +
-                                   a->m[row].e[1] * b->m[1].e[col] +
-                                   a->m[row].e[2] * b->m[2].e[col] +
-                                   a->m[row].e[3] * b->m[3].e[col];
-        }
-    }
+    /* COLUMN MAJOR?? 
+    result.m[0].x = camera_right.x;
+    result.m[0].y = camera_right.y;
+    result.m[0].z = camera_right.z;
+    result.m[0].w = 0;
 
-    return result;
-}
+    result.m[1].x = camera_up.x;
+    result.m[1].y = camera_up.y;
+    result.m[1].z = camera_up.z;
+    result.m[1].w = 0;
 
-static V4 multiply_m4_v4(const M4 *m, const V4 *v)
-{
+    result.m[2].x = camera_direction.x;
+    result.m[2].y = camera_direction.y;
+    result.m[2].z = camera_direction.z;
+    result.m[2].w = 0;
 
-    V4 result = {};
+    result.m[3].x = -inner(camera_right, pos);
+    result.m[3].y = -inner(camera_up, pos);
+    result.m[3].z = -inner(camera_direction, pos);
+    result.m[3].w = 1;
+    */
 
-    for (i32 row = 0; row < 4; ++row) {
-        result.e[row] = m->m[row].e[0] * v->e[0] +
-                        m->m[row].e[1] * v->e[1] +
-                        m->m[row].e[2] * v->e[2] +
-                        m->m[row].e[3] * v->e[3];
-    }
+    /* ROW MAJOR??
+    */
+    result.m[0].x = camera_right.x;
+    result.m[0].y = camera_up.x;
+    result.m[0].z = camera_direction.x;
+    result.m[0].w = 0;
 
-    return result;
-}
+    result.m[1].x = camera_right.y;
+    result.m[1].y = camera_up.y;
+    result.m[1].z = camera_direction.y;
+    result.m[1].w = 0;
 
-inline M4 operator*(M4 a, M4 b)
-{
-    M4 result = multiply_m4(&a, &b);
+    result.m[2].x = camera_right.z;
+    result.m[2].y = camera_up.z;
+    result.m[2].z = camera_direction.z;
+    result.m[2].w = 0;
 
-    return result;
-}
-
-inline V4 operator*(M4 a, V4 b)
-{
-    V4 result = multiply_m4_v4(&a, &b);
+    result.m[3].x = -inner(camera_right, pos);
+    result.m[3].y = -inner(camera_up, pos);
+    result.m[3].z = -inner(camera_direction, pos);
+    result.m[3].w = 1;
 
     return result;
 }

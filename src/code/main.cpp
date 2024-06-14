@@ -27,16 +27,65 @@ typedef int32_t  b32;
 typedef float    f32;
 typedef double   f64;
 
+#define global_variable static
 #define Pi32 3.14159265359f
 
 #include "buffer.cpp"
 #include "math.cpp"
 
+global_variable u32 screen_width = 1280;
+global_variable u32 screen_height = 720;
+global_variable f32 last_mouse_x = ((f32)screen_width) / 2.0f;
+global_variable f32 last_mouse_y = ((f32)screen_height) / 2.0f;
+global_variable f32 camera_pitch = 0.0f;
+global_variable f32 camera_yaw = -90.0f;
+global_variable f32 fov = 45.0f;
 
 static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
 {
+    screen_width = width;
+    screen_height = height;
     glViewport(0, 0, width, height);
 }  
+
+static void mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
+{
+    static b32 first_mouse = 1;
+    if(first_mouse)
+    {
+        last_mouse_x = x_pos;
+        last_mouse_y = y_pos;
+        first_mouse = 0;
+    }
+
+    f32 x_offset = x_pos - last_mouse_x;
+    f32 y_offset = last_mouse_y - y_pos; // reversed since y-coord range from bot to top
+    last_mouse_x = x_pos;
+    last_mouse_y = y_pos;
+
+    f32 sensitivity = 0.05f;
+    x_offset *= sensitivity;
+    y_offset *= sensitivity;
+
+    camera_pitch += y_offset;
+    camera_yaw += x_offset;
+
+    if(camera_pitch > 89.0f)
+        camera_pitch =  89.0f;
+
+    if(camera_pitch < -89.0f)
+        camera_pitch = -89.0f;
+}
+
+static void scroll_callback(GLFWwindow* window, double x_offset, double y_offset)
+{
+    fov -= y_offset;
+
+    if(fov < 1.0f)
+        fov = 1.0f;
+    if(fov > 45.0f)
+        fov = 45.0f;
+}
 
 static u32 compile_shader(i32 type, char* source)
 {
@@ -174,8 +223,6 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    u32 screen_width = 1280;
-    u32 screen_height = 720;
     GLFWwindow* window = glfwCreateWindow(screen_width, screen_height, "Window", NULL, NULL);
     if (window == NULL)
     {
@@ -194,6 +241,11 @@ int main()
     glViewport(0, 0, screen_width, screen_height);
 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  
+    glfwSetCursorPosCallback(window, mouse_callback);  
+    glfwSetScrollCallback(window, scroll_callback); 
+
+    // NOTE(Fermin): Hide and capture cursor
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
     // NOTE(Fermin) | End | Init window and opengl
 
     // NOTE(Fermin) | Start | Shaders and Program
@@ -346,9 +398,6 @@ int main()
 
     // NOTE(Fermin): Testing maths
     // NOTE(Fermin): We're translating the scene in the reverse direction of where we want to move
-    M4 view = translate({0.0f, 0.0f, -3.0f});
-    f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-    M4 projection = perspective(radians(45.0f), aspect_ratio, 0.1f, 100.0f);
     V3 cube_positions[] = {
         V3{ 0.0f,  0.0f,  0.0f}, 
         V3{ 2.0f,  5.0f, -15.0f}, 
@@ -363,12 +412,47 @@ int main()
     };
     // NOTE(Fermin): Testing maths
 
+    // NOTE(Fermin): Testing camera logic, todo struct
+    V3 camera_pos = {0.0f, 0.0f, 3.0f};
+    V3 camera_up = {0.0f, 1.0f, 0.0f};
+    V3 camera_front = {0.0f, 0.0f, -1.0f};
+    // NOTE(Fermin): Testing camera logic
+
     b32 wireframe_mode = 0;
     // NOTE(Fermin): OFC we need an actual key struct for these...
     b32 f1_key_state = 0; // NOTE(Fermin): 0 released else pressed
+
+    f32 delta_time = 0.0f;
+    f32 last_frame = 0.0f;
+
     // NOTE(Fermin): Main Loop
     while(!glfwWindowShouldClose(window))
     {
+        f32 current_frame = glfwGetTime();
+        delta_time = current_frame - last_frame;
+        last_frame = current_frame;
+
+
+        f32 camera_speed = 2.5f * delta_time; // adjust accordingly
+
+        V3 camera_direction = {};
+        camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
+        camera_direction.y = sin(radians(camera_pitch));
+        camera_direction.z = sin(radians(camera_yaw)) * cos(radians(camera_pitch));
+        camera_front = normalize(camera_direction);
+
+        if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            camera_pos += camera_speed * camera_front;
+
+        if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            camera_pos -= camera_speed * camera_front;
+
+        if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            camera_pos -= normalize(cross(camera_front, camera_up)) * camera_speed;
+
+        if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            camera_pos += normalize(cross(camera_front, camera_up)) * camera_speed;
+
         if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
@@ -397,11 +481,15 @@ int main()
 
         glEnable(GL_DEPTH_TEST);
 
-        u32 view_loc = glGetUniformLocation(test_program.id, "view");
-        glUniformMatrix4fv(view_loc, 1, GL_TRUE, view.e);
-
+        f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
+        M4 projection = perspective(radians(fov), aspect_ratio, 0.1f, 100.0f);
         u32 projection_loc = glGetUniformLocation(test_program.id, "projection");
         glUniformMatrix4fv(projection_loc, 1, GL_TRUE, projection.e);
+
+        M4 view = look_at(camera_pos, camera_pos + camera_front, camera_up);
+        u32 view_loc = glGetUniformLocation(test_program.id, "view");
+        // NOTE-IMPORTANT(FERMIN): WHY THIS WORKS ONLY IF TRANSPOSE IS FALSE!!!!!!!!!!!!!!!
+        glUniformMatrix4fv(view_loc, 1, GL_FALSE, view.e);
 
         u32 model_loc = glGetUniformLocation(test_program.id, "model");
         for(unsigned int i = 0; i < 10; i++)
