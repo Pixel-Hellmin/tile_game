@@ -129,6 +129,7 @@ static Buffer read_file(const char *file_name)
     FILE* file;
     long file_size = open_file(&file, file_name);
 
+    // NOTE(Fermin): Do we need the +1 always?
     result = allocate_buffer(file_size + 1);
 
     if (result.data)
@@ -214,6 +215,75 @@ static void build_program(Program *program)
 
     program->id = program_id;
 }
+
+// NOTE(Fermin): TEsting fontsd start
+// HMH 163
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+struct font_glyph_info
+{
+    size_t offset;
+    u32 width;
+    u32 height;
+};
+static void test_init_fonts(font_glyph_info *glyph_info)
+{
+    Buffer tff_file = read_file("C:/windows/fonts/arial.ttf");
+
+    stbtt_fontinfo font;
+    stbtt_InitFont(&font, tff_file.data, stbtt_GetFontOffsetForIndex(tff_file.data, 0));
+
+    FILE *out = fopen("arial.font", "wb");
+
+    size_t offset = 0;
+    i32 bytes_per_pixel = 4;
+    i32 x_offset, y_offset, i_width, i_height;
+    for(u32 character = 'A';
+        character <= 'Z';
+        ++character)
+    {
+        u8 *mono_bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 128.0f), character, &i_width, &i_height, &x_offset, &y_offset);
+
+        size_t glyph_index = character - 'A';
+        font_glyph_info *glyph_slot = glyph_info + glyph_index;
+        glyph_slot->width = i_width;
+        glyph_slot->height = i_height;
+        glyph_slot->offset = offset;
+
+        i32 pitch = bytes_per_pixel * i_width;
+        size_t buffer_size = i_height * pitch;
+        
+        Buffer bitmap;
+        bitmap = allocate_buffer(buffer_size);
+
+        u8 *source = mono_bitmap;
+        u8 *dest_row = bitmap.data + (i_height - 1) * pitch;
+        for(i32 y = 0; y < i_height; y++)
+        {
+            u32 *dest = (u32 *)dest_row;
+            for(i32 x = 0; x < i_width; x++)
+            {
+                u8 alpha = *source++;
+                *dest++ = ((alpha << 24) |
+                           (alpha << 16) |
+                           (alpha <<  8) |
+                           (alpha <<  0));
+
+                offset+= bytes_per_pixel;
+            }
+            dest_row -= pitch;
+        }
+
+        fwrite(bitmap.data, bitmap.count, 1, out);
+        stbtt_FreeBitmap(mono_bitmap, 0);
+        free_buffer(&bitmap);
+    }
+
+    free_buffer(&tff_file);
+    fclose(out);
+}
+// NOTE(Fermin): TEsting fontsd end
 
 int main()
 {
@@ -362,9 +432,40 @@ int main()
     i32 width, height, nr_channels;
     const char *texture_file_path = "src\\misc\\assets\\textures\\container.jpg";
     unsigned char *data = stbi_load(texture_file_path, &width, &height, &nr_channels, 0); 
-    if(data)
+
+    // NOTE(Fermin): TEsting fonts
+    // NOTE(Fermin): Init
+    font_glyph_info arial[('Z' - 'A' + 1)] = {};
+    test_init_fonts(arial);
+
+    // NOTE(Fermin): Load
+    Buffer font_data = read_file("arial.font");
+
+    // NOTE(Fermin): Use
+    size_t glyph_index = 'Z' - 'A';
+    font_glyph_info a_info = arial[glyph_index];
+
+    Buffer bitmap;
+    i32 pitch = a_info.width * 4;
+    size_t bitmap_size = pitch * a_info.height;
+    bitmap = allocate_buffer(bitmap_size);
+
+    u32 *font_source = (u32 *)(font_data.data + a_info.offset);
+    u8 *dest_row = bitmap.data;
+    for(i32 y = 0; y < a_info.height; y++)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        u32 *dest = (u32 *)dest_row;
+        for(i32 x = 0; x < a_info.width; x++)
+        {
+            *dest++ = *font_source++;
+        }
+        dest_row += pitch;
+    }
+    // NOTE(Fermin): Test fonts end
+
+    if(bitmap.data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, a_info.width, a_info.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, bitmap.data);
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else
@@ -372,6 +473,7 @@ int main()
         fprintf(stderr, "Failed to load texture %s\n", texture_file_path);
     }
     stbi_image_free(data);
+    free_buffer(&bitmap);
 
 
     u32 texture2;
