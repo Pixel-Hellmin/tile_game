@@ -33,6 +33,8 @@ for /f "tokens=1-3 delims=/:" %%a in ("%TIME%")  do (set starttime=%%a:%%b:%%c)
 
 REM del *.pbd > NUL 2> NUL
 REM echo WAITING FOR PBD > lock.tmp
+REM Should I build asset_builder in debug or release?
+call cl %CommonCompilerFlags% ..\src\code\asset_builder.cpp  /link %CommonLinkerFlags% /OUT:asset_builder.exe
 call cl %CommonCompilerFlags% ..\src\code\main.cpp  /link %CommonLinkerFlags% /OUT:main_debug.exe
 call cl -O2 %CommonCompilerFlags% ..\src\code\main.cpp  /link %CommonLinkerFlags% /OUT:main_release.exe
 REM del lock.tmp

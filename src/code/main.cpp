@@ -1,35 +1,9 @@
 /*
  * TODO(Fermin):
- * Import Buffer.cpp
- * Stop malloc
  * Investigate FileSystem::getPath("resources/textures/container.jpg"
 */
 
-#include <cstdio>
-#include <cmath>
-
-// NOTE(Fermin): Include glad before glfw3
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-#include "glad.c"
-
-// NOTE(Fermin): For reading files. In this case textures
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
-typedef int32_t  i32;
-
-typedef uint8_t  u8;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int32_t  b32;
-
-typedef float    f32;
-typedef double   f64;
-
-#define global_variable static
-#define Pi32 3.14159265359f
-
+#include "main.h"
 #include "buffer.cpp"
 #include "math.cpp"
 
@@ -216,74 +190,39 @@ static void build_program(Program *program)
     program->id = program_id;
 }
 
-// NOTE(Fermin): TEsting fontsd start
-// HMH 163
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-
-struct font_glyph_info
+#if 0
+static void render_debug_string(char *string, u8 *glyphs, glyph_metadata *font_info)
 {
-    size_t offset;
-    u32 width;
-    u32 height;
-};
-static void test_init_fonts(font_glyph_info *glyph_info)
-{
-    Buffer tff_file = read_file("C:/windows/fonts/arial.ttf");
-
-    stbtt_fontinfo font;
-    stbtt_InitFont(&font, tff_file.data, stbtt_GetFontOffsetForIndex(tff_file.data, 0));
-
-    FILE *out = fopen("arial.font", "wb");
-
-    size_t offset = 0;
-    i32 bytes_per_pixel = 4;
-    i32 x_offset, y_offset, i_width, i_height;
-    for(u32 character = 'A';
-        character <= 'Z';
-        ++character)
+    u32 bytes_per_pixel = 4; //NOTE(Fermin): Global?
+    for(char *letter = string;
+        letter;
+        letter++)
     {
-        u8 *mono_bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 128.0f), character, &i_width, &i_height, &x_offset, &y_offset);
+        char higher_glyph_supported_glyph = '!';
+        size_t glyph_index = (size_t)(letter - higher_glyph_supported_glyph);
+        glyph_metadata glyph_info = font_info[glyph_index];
 
-        size_t glyph_index = character - 'A';
-        font_glyph_info *glyph_slot = glyph_info + glyph_index;
-        glyph_slot->width = i_width;
-        glyph_slot->height = i_height;
-        glyph_slot->offset = offset;
-
-        i32 pitch = bytes_per_pixel * i_width;
-        size_t buffer_size = i_height * pitch;
-        
         Buffer bitmap;
-        bitmap = allocate_buffer(buffer_size);
+        i32 pitch = glyph_info.width * bytes_per_pixel;
+        size_t bitmap_size = pitch * glyph_info.height;
+        bitmap = allocate_buffer(bitmap_size);
 
-        u8 *source = mono_bitmap;
-        u8 *dest_row = bitmap.data + (i_height - 1) * pitch;
-        for(i32 y = 0; y < i_height; y++)
+        u32 *font_source = (u32 *)(glyphs + glyph_info.offset);
+        u8 *dest_row = bitmap.data;
+        for(i32 y = 0; y < glyph_info.height; y++)
         {
             u32 *dest = (u32 *)dest_row;
-            for(i32 x = 0; x < i_width; x++)
+            for(i32 x = 0; x < glyph_info.width; x++)
             {
-                u8 alpha = *source++;
-                *dest++ = ((alpha << 24) |
-                           (alpha << 16) |
-                           (alpha <<  8) |
-                           (alpha <<  0));
-
-                offset+= bytes_per_pixel;
+                *dest++ = *font_source++;
             }
-            dest_row -= pitch;
+            dest_row += pitch;
         }
 
-        fwrite(bitmap.data, bitmap.count, 1, out);
-        stbtt_FreeBitmap(mono_bitmap, 0);
-        free_buffer(&bitmap);
+        // TODO(Fermin): Push Glyph ID?
     }
-
-    free_buffer(&tff_file);
-    fclose(out);
 }
-// NOTE(Fermin): TEsting fontsd end
+#endif
 
 int main()
 {
@@ -433,48 +372,53 @@ int main()
     const char *texture_file_path = "src\\misc\\assets\\textures\\container.jpg";
     unsigned char *data = stbi_load(texture_file_path, &width, &height, &nr_channels, 0); 
 
-    // NOTE(Fermin): TEsting fonts
-    // NOTE(Fermin): Init
-    font_glyph_info arial[('Z' - 'A' + 1)] = {};
-    test_init_fonts(arial);
+    //glyph_metadata arial[('~' - '!' + 1)] = {};
 
-    // NOTE(Fermin): Load
+    // NOTE(Fermin): Load font glyphs. This is done at initialization
     Buffer font_data = read_file("arial.font");
 
     // NOTE(Fermin): Use
-    size_t glyph_index = 'Z' - 'A';
-    font_glyph_info a_info = arial[glyph_index];
+    // NOTE(Fermi): IT's to soon to render bitmaps, come back to this when we can do that easily
+    // render_debug_string("first line of unaligned text", font_data.data, arial);
+    // NOTE(Fermin): ! is the first char and ~ the last
+    // NOTE(Fermin): INvisetigate why we see black outlines in the characyers
+    size_t letter_index = sizeof(glyph_metadata) * ('F' - '!');
+    glyph_metadata *letter_info = (glyph_metadata *)(font_data.data + letter_index);
+    u32 letter_bitmap_size = letter_info->width * 4 * letter_info->height;
 
-    Buffer bitmap;
-    i32 pitch = a_info.width * 4;
-    size_t bitmap_size = pitch * a_info.height;
-    bitmap = allocate_buffer(bitmap_size);
+    Buffer letter = {};
+    letter = allocate_buffer(letter_bitmap_size);
 
-    u32 *font_source = (u32 *)(font_data.data + a_info.offset);
-    u8 *dest_row = bitmap.data;
-    for(i32 y = 0; y < a_info.height; y++)
+    u32 character_count = '~' - '!' + 1;
+    u32 *source = (u32 *)(font_data.data + sizeof(glyph_metadata) * character_count + letter_info->offset);
+    u32 *dest = (u32 *)letter.data;
+    for(u32 y = 0;
+        y < letter_info->height;
+        y++)
     {
-        u32 *dest = (u32 *)dest_row;
-        for(i32 x = 0; x < a_info.width; x++)
+        for(u32 x = 0;
+            x < letter_info->width;
+            x++)
         {
-            *dest++ = *font_source++;
+            *dest++ = *source++;
         }
-        dest_row += pitch;
     }
     // NOTE(Fermin): Test fonts end
 
-    if(bitmap.data)
+    //if(data)
+    if(letter.data)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, a_info.width, a_info.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, bitmap.data);
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, letter_info->width, letter_info->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, letter.data);
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else
     {
         fprintf(stderr, "Failed to load texture %s\n", texture_file_path);
     }
+    free_buffer(&font_data); //NOTE(Fermin): Debug
     stbi_image_free(data);
-    free_buffer(&bitmap);
-
+    free_buffer(&letter);
 
     u32 texture2;
     glGenTextures(1, &texture2);  
