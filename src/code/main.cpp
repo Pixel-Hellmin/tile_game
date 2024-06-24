@@ -1,6 +1,9 @@
 /*
  * TODO(Fermin):
- * Investigate FileSystem::getPath("resources/textures/container.jpg"
+ * - Investigate FileSystem::getPath("resources/textures/container.jpg"
+ * - Asset Manager?
+ * - Need a way to formalize loaded characters from fonts so the game and
+ *   the asset builder are always synced
 */
 
 #include "main.h"
@@ -14,7 +17,10 @@ global_variable f32 last_mouse_y = ((f32)screen_height) / 2.0f;
 global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
 global_variable f32 fov = 45.0f;
+global_variable u32 bytes_per_pixel = 4;
+global_variable const u32 font_character_count = '~' - '!' + 1;
 
+// OpenGL
 static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
 {
     screen_width = width;
@@ -22,6 +28,7 @@ static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
     glViewport(0, 0, width, height);
 }  
 
+// OpenGL
 static void mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
 {
     static b32 first_mouse = 1;
@@ -51,6 +58,7 @@ static void mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
         camera_pitch = -89.0f;
 }
 
+// OpenGL
 static void scroll_callback(GLFWwindow* window, double x_offset, double y_offset)
 {
     fov -= y_offset;
@@ -61,6 +69,7 @@ static void scroll_callback(GLFWwindow* window, double x_offset, double y_offset
         fov = 45.0f;
 }
 
+// OpenGL
 static u32 compile_shader(i32 type, char* source)
 {
     u32 id;
@@ -131,6 +140,7 @@ static Buffer read_file(const char *file_name)
 
     return result;
 }
+// NOTE(Fermin): read_file declaration should go in main.h, fix error when moving
 
 /* NOTE(Fermin): Print cwd
 #include <stdio.h>
@@ -150,6 +160,7 @@ getcwd(buf,100);
 printf("\n %s \n",buf);
 */
 
+// OpenGL
 struct Program
 {
     u32 id;
@@ -157,6 +168,7 @@ struct Program
     char const *fragment_shader;
 };
 
+// OpenGL
 static void build_program(Program *program)
 {
     Buffer vertex_shader_buffer = read_file(program->vertex_shader);
@@ -190,39 +202,81 @@ static void build_program(Program *program)
     program->id = program_id;
 }
 
-#if 0
-static void render_debug_string(char *string, u8 *glyphs, glyph_metadata *font_info)
+// OpenGL
+static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format)
 {
-    u32 bytes_per_pixel = 4; //NOTE(Fermin): Global?
-    for(char *letter = string;
-        letter;
-        letter++)
+    u32 result;
+    glGenTextures(1, &result);  
+    glBindTexture(GL_TEXTURE_2D, result);  
+
+    // set the texture wrapping/filtering options (on the currently bound texture object)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    if (data)
     {
-        char higher_glyph_supported_glyph = '!';
-        size_t glyph_index = (size_t)(letter - higher_glyph_supported_glyph);
-        glyph_metadata glyph_info = font_info[glyph_index];
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
 
-        Buffer bitmap;
-        i32 pitch = glyph_info.width * bytes_per_pixel;
-        size_t bitmap_size = pitch * glyph_info.height;
-        bitmap = allocate_buffer(bitmap_size);
+    return result;
+}
 
-        u32 *font_source = (u32 *)(glyphs + glyph_info.offset);
-        u8 *dest_row = bitmap.data;
-        for(i32 y = 0; y < glyph_info.height; y++)
+// OpenGL
+static u32 generate_texture(char *path, u32 format)
+{
+    u32 result;
+
+    i32 width, height, nr_channels;
+    u8 *data = stbi_load(path, &width, &height, &nr_channels, 0); 
+
+    result = generate_texture(data, width, height, format);
+
+    stbi_image_free(data);
+
+    return result;
+}
+
+static void generate_font_glyphs(u32 *glyph_ids)
+{
+    Buffer font_data = read_file("arial.font");
+
+    for(char character = '!';
+        character <= '~';
+        character++)
+    {
+        size_t metadata_offset = sizeof(glyph_metadata) * (character - '!');
+        glyph_metadata *character_info = (glyph_metadata *)(font_data.data + metadata_offset);
+        u32 character_bitmap_size = character_info->width * bytes_per_pixel * character_info->height;
+
+        // TODO(Fermin): This is local so try to dont use buffer and 
+        // just create a local var
+        Buffer character_buffer = {};
+        character_buffer = allocate_buffer(character_bitmap_size);
+
+        u32 *source = (u32 *)(font_data.data + sizeof(glyph_metadata) * font_character_count + character_info->offset);
+        u32 *dest = (u32 *)character_buffer.data;
+        for(u32 y = 0;
+            y < character_info->height;
+            y++)
         {
-            u32 *dest = (u32 *)dest_row;
-            for(i32 x = 0; x < glyph_info.width; x++)
+            for(u32 x = 0;
+                x < character_info->width;
+                x++)
             {
-                *dest++ = *font_source++;
+                *dest++ = *source++;
             }
-            dest_row += pitch;
         }
 
-        // TODO(Fermin): Push Glyph ID?
+        *glyph_ids++ = generate_texture((u8 *)character_buffer.data, character_info->width, character_info->height, GL_RGBA);
+
+        free_buffer(&character_buffer);
     }
+
+    free_buffer(&font_data);
 }
-#endif
 
 int main()
 {
@@ -360,87 +414,20 @@ int main()
     // NOTE(Fermin) | Start | Textures
     stbi_set_flip_vertically_on_load(true);
 
-    u32 texture;
-    glGenTextures(1, &texture);  
-    glBindTexture(GL_TEXTURE_2D, texture);  
-    // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    i32 width, height, nr_channels;
-    const char *texture_file_path = "src\\misc\\assets\\textures\\container.jpg";
-    unsigned char *data = stbi_load(texture_file_path, &width, &height, &nr_channels, 0); 
+    u32 container_id = generate_texture("src\\misc\\assets\\textures\\container.jpg", GL_RGB);
+    u32 awesome_face_id = generate_texture("src\\misc\\assets\\textures\\awesomeface.png", GL_RGBA);
 
-    //glyph_metadata arial[('~' - '!' + 1)] = {};
-
-    // NOTE(Fermin): Load font glyphs. This is done at initialization
-    Buffer font_data = read_file("arial.font");
-
-    // NOTE(Fermin): Use
-    // NOTE(Fermi): IT's to soon to render bitmaps, come back to this when we can do that easily
-    // render_debug_string("first line of unaligned text", font_data.data, arial);
-    // NOTE(Fermin): ! is the first char and ~ the last
-    // NOTE(Fermin): INvisetigate why we see black outlines in the characyers
-    size_t letter_index = sizeof(glyph_metadata) * ('F' - '!');
-    glyph_metadata *letter_info = (glyph_metadata *)(font_data.data + letter_index);
-    u32 letter_bitmap_size = letter_info->width * 4 * letter_info->height;
-
-    Buffer letter = {};
-    letter = allocate_buffer(letter_bitmap_size);
-
-    u32 character_count = '~' - '!' + 1;
-    u32 *source = (u32 *)(font_data.data + sizeof(glyph_metadata) * character_count + letter_info->offset);
-    u32 *dest = (u32 *)letter.data;
-    for(u32 y = 0;
-        y < letter_info->height;
-        y++)
-    {
-        for(u32 x = 0;
-            x < letter_info->width;
-            x++)
-        {
-            *dest++ = *source++;
-        }
-    }
-    // NOTE(Fermin): Test fonts end
-
-    //if(data)
-    if(letter.data)
-    {
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, letter_info->width, letter_info->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, letter.data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else
-    {
-        fprintf(stderr, "Failed to load texture %s\n", texture_file_path);
-    }
-    free_buffer(&font_data); //NOTE(Fermin): Debug
-    stbi_image_free(data);
-    free_buffer(&letter);
-
-    u32 texture2;
-    glGenTextures(1, &texture2);  
-    glBindTexture(GL_TEXTURE_2D, texture2);  
-    // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    const char *texture2_file_path = "src\\misc\\assets\\textures\\awesomeface.png";
-    data = stbi_load(texture2_file_path, &width, &height, &nr_channels, 0);
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    stbi_image_free(data);
-
+    // NOTE(Fermin): This tells OpenGL to which texture unit (GL_TEXTURE0, etc) each shader sampler belongs to 
     glUseProgram(test_program.id);
     glUniform1i(glGetUniformLocation(test_program.id, "texture1"), 0);
     glUniform1i(glGetUniformLocation(test_program.id, "texture2"), 1);
     // NOTE(Fermin) | End | Texture
+
+    // NOTE(Fermin): Test fonts start
+    u32 font_glyphs_textures_ids[font_character_count] = {};
+    generate_font_glyphs(font_glyphs_textures_ids);
+    //print_debug_text('DEBUG text PRINT);
+    // NOTE(Fermin): Test fonts end
 
     // NOTE(Fermin): Testing maths
     // NOTE(Fermin): We're translating the scene in the reverse direction of where we want to move
@@ -518,10 +505,11 @@ int main()
         glUseProgram(test_program.id);
 
         glActiveTexture(GL_TEXTURE0); // activate the texture unit first before binding texture
-        glBindTexture(GL_TEXTURE_2D, texture);
+        //glBindTexture(GL_TEXTURE_2D, container_id);
+        glBindTexture(GL_TEXTURE_2D, font_glyphs_textures_ids['6' - '!']);
 
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, texture2);
+        glBindTexture(GL_TEXTURE_2D, awesome_face_id);
 
         glBindVertexArray(VAO);
 
