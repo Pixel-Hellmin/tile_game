@@ -4,6 +4,7 @@
  * - Asset Manager?
  * - Need a way to formalize loaded characters from fonts so the game and
  *   the asset builder are always synced
+ * - Investigate why are the boxes deformed when rotated?
 */
 
 #include "main.h"
@@ -203,22 +204,26 @@ static void build_program(Program *program)
 }
 
 // OpenGL
-static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format)
+static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format, u32 internal = GL_RGB)
 {
+
     u32 result;
     glGenTextures(1, &result);  
     glBindTexture(GL_TEXTURE_2D, result);  
 
     // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     if (data)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexImage2D(GL_TEXTURE_2D, 0, internal, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        //glGenerateMipmap(GL_TEXTURE_2D);
     }
 
     return result;
@@ -241,41 +246,66 @@ static u32 generate_texture(char *path, u32 format)
 
 static void generate_font_glyphs(u32 *glyph_ids)
 {
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
     Buffer font_data = read_file("arial.font");
 
+    u32 bytes_per_pixel_fonts = 1;
     for(char character = '!';
         character <= '~';
         character++)
     {
         size_t metadata_offset = sizeof(glyph_metadata) * (character - '!');
         glyph_metadata *character_info = (glyph_metadata *)(font_data.data + metadata_offset);
-        u32 character_bitmap_size = character_info->width * bytes_per_pixel * character_info->height;
+        u32 character_bitmap_size = character_info->width * bytes_per_pixel_fonts * character_info->height;
 
         // TODO(Fermin): This is local so try to dont use buffer and 
-        // just create a local var
+        // just create a local var?
         Buffer character_buffer = {};
         character_buffer = allocate_buffer(character_bitmap_size);
 
-        u32 *source = (u32 *)(font_data.data + sizeof(glyph_metadata) * font_character_count + character_info->offset);
-        u32 *dest = (u32 *)character_buffer.data;
-        for(u32 y = 0;
-            y < character_info->height;
-            y++)
+        u8 *source = font_data.data + sizeof(glyph_metadata) * font_character_count + character_info->offset;
+        u8 *dest = character_buffer.data;
+        for(u32 y = 0; y < character_info->height; y++)
         {
-            for(u32 x = 0;
-                x < character_info->width;
-                x++)
+            for(u32 x = 0; x < character_info->width; x++)
             {
-                *dest++ = *source++;
+                u8 result = *source++;
+                *dest++ = result;
+                //*dest++ = *source++;
             }
         }
 
-        *glyph_ids++ = generate_texture((u8 *)character_buffer.data, character_info->width, character_info->height, GL_RGBA);
+        *glyph_ids++ = generate_texture(character_buffer.data, character_info->width, character_info->height, GL_RED, GL_RED);
 
         free_buffer(&character_buffer);
     }
 
     free_buffer(&font_data);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+}
+static void print_debug_text(char *string, u32 *glyph_ids, u32 VBO, u32 program_id)
+{
+    glActiveTexture(GL_TEXTURE0);
+    u32 offset_loc = glGetUniformLocation(program_id, "char_offset");
+    f32 offset = 0.0f;
+
+    for(char *c = string; *c; c++)
+    {
+        glUniform1f(offset_loc, offset);
+
+        if(*c != ' ')
+        {
+            glBindTexture(GL_TEXTURE_2D, glyph_ids[*c - '!']);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        offset += 52.0f;
+    }
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 int main()
@@ -409,6 +439,10 @@ int main()
     //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 
 
     glBindVertexArray(0); 
+    
+    // NOTE(Fermin): This tells OpenGL to which texture unit (GL_TEXTURE0, etc) each shader sampler belongs to 
+    glUniform1i(glGetUniformLocation(test_program.id, "texture1"), 0);
+    glUniform1i(glGetUniformLocation(test_program.id, "texture2"), 1);
     // NOTE(Fermin) | End | VAO, VBO. EBO
 
     // NOTE(Fermin) | Start | Textures
@@ -417,16 +451,57 @@ int main()
     u32 container_id = generate_texture("src\\misc\\assets\\textures\\container.jpg", GL_RGB);
     u32 awesome_face_id = generate_texture("src\\misc\\assets\\textures\\awesomeface.png", GL_RGBA);
 
-    // NOTE(Fermin): This tells OpenGL to which texture unit (GL_TEXTURE0, etc) each shader sampler belongs to 
-    glUseProgram(test_program.id);
-    glUniform1i(glGetUniformLocation(test_program.id, "texture1"), 0);
-    glUniform1i(glGetUniformLocation(test_program.id, "texture2"), 1);
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Test fonts start
+    Program font_program = {};
+    font_program.vertex_shader = "src\\code\\font.vert";
+    font_program.fragment_shader = "src\\code\\font.frag";
+
+    build_program(&font_program);
+
+    f32 x = 50.0f;
+    f32 y = 50.0f;
+    f32 w = 50.0f;
+    f32 h = 50.0f;
+    /*
+    f32 x = -0.5;
+    f32 y = -0.5;
+    f32 w = 1.0f;
+    f32 h = 1.0f;
+    */
+    float font_vertices[] = {
+        x,     y + h,   0.0f, 1.0f,            
+        x,     y,       0.0f, 0.0f,
+        x + w, y,       1.0f, 0.0f,
+
+        x,     y + h,   0.0f, 1.0f,
+        x + w, y,       1.0f, 0.0f,
+        x + w, y + h,   1.0f, 1.0f           
+    };
+
+    u32 font_VBO, font_VAO;
+    glGenVertexArrays(1, &font_VAO);  
+    glGenBuffers(1, &font_VBO); 
+
+    glBindVertexArray(font_VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, font_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2*sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // NOTE(Fermin) THis unbinds the vbo and vao
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    glUniform1i(glGetUniformLocation(font_program.id, "sampler"), 0);
+
     u32 font_glyphs_textures_ids[font_character_count] = {};
     generate_font_glyphs(font_glyphs_textures_ids);
-    //print_debug_text('DEBUG text PRINT);
     // NOTE(Fermin): Test fonts end
 
     // NOTE(Fermin): Testing maths
@@ -501,19 +576,15 @@ int main()
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // NOTE(Fermin): This is what we need to set to specify what and how to draw
-        glUseProgram(test_program.id);
+        // NOTE(Fermin): START cubes render state
+        glEnable(GL_DEPTH_TEST);
 
         glActiveTexture(GL_TEXTURE0); // activate the texture unit first before binding texture
-        //glBindTexture(GL_TEXTURE_2D, container_id);
-        glBindTexture(GL_TEXTURE_2D, font_glyphs_textures_ids['6' - '!']);
-
+        glBindTexture(GL_TEXTURE_2D, container_id);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, awesome_face_id);
 
-        glBindVertexArray(VAO);
-
-        glEnable(GL_DEPTH_TEST);
+        glUseProgram(test_program.id);
 
         f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
         M4 projection = perspective(radians(fov), aspect_ratio, 0.1f, 100.0f);
@@ -526,6 +597,7 @@ int main()
         glUniformMatrix4fv(view_loc, 1, GL_FALSE, view.e);
 
         u32 model_loc = glGetUniformLocation(test_program.id, "model");
+        glBindVertexArray(VAO);
         for(unsigned int i = 0; i < 10; i++)
         {
             M4 translation = translate(cube_positions[i]);
@@ -536,12 +608,32 @@ int main()
 
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
-
-
+        glDisable(GL_DEPTH_TEST);
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         //glDrawArrays(GL_TRIANGLES, 0, 36);
+        // NOTE(Fermin): END cubes render state
 
-        glDisable(GL_DEPTH_TEST);
+        // NOTE(Fermin): Start FONT render state
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+
+        // TESTING
+        glUseProgram(font_program.id);
+
+        M4 font_projection = orthogonal(0.0f, screen_width, 0.0f, screen_height, -1.0f, 1000.0f);
+        u32 font_projection_loc = glGetUniformLocation(font_program.id, "projection");
+        glUniformMatrix4fv(font_projection_loc, 1, GL_FALSE, font_projection.e);
+        glUniform3f(glGetUniformLocation(font_program.id, "textColor"), 0.5f, 0.8f, 0.2f);
+
+        glBindVertexArray(font_VAO);
+        print_debug_text("GG Debug Text 90%", font_glyphs_textures_ids, font_VBO, font_program.id);
+
+        glDisable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+        // Return render state to how it was after debug print
+        //glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        // NOTE(Fermin): END FONT render state
 
         if(wireframe_mode)
         {
@@ -567,6 +659,9 @@ int main()
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &EBO);
+
+    glDeleteVertexArrays(1, &font_VAO);
+    glDeleteBuffers(1, &font_VBO);
 
     glfwTerminate();
 

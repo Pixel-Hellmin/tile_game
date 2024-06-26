@@ -68,7 +68,7 @@ static void init_fonts()
     FILE *out = fopen("arial.font", "wb");
 
     size_t offset = 0;
-    i32 bytes_per_pixel = 4;
+    i32 bytes_per_pixel = 1;
     i32 x_offset, y_offset, width, height;
 
     Buffer glyph_bitmaps = {};
@@ -91,14 +91,17 @@ static void init_fonts()
         u8 *dest_row = glyph_bitmaps.data + offset + (height - 1) * pitch;
         for(i32 y = 0; y < height; y++)
         {
-            u32 *dest = (u32 *)dest_row;
+            u8 *dest = dest_row;
             for(i32 x = 0; x < width; x++)
             {
-                u8 alpha = *source++;
+                //u8 alpha = *source++;
+                *dest++ = *source++;
+                /*
                 *dest++ = ((alpha << 24) |
                            (alpha << 16) |
                            (alpha <<  8) |
                            (alpha <<  0));
+                */
 
                 offset+= bytes_per_pixel;
             }

@@ -329,6 +329,29 @@ static inline M4 perspective(f32 fov_radians, f32 aspect_ratio, f32 z_near, f32 
     return result;
 }
 
+static inline M4 orthogonal(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far)
+{
+    // NOTE: This is a row-major orthographic matrix
+
+    M4 result = {};
+
+    result.m[0].x = 2.0f / (right - left);
+    result.m[1].y = 2.0f / (top - bottom);
+    result.m[2].z = -2.0f / (z_far - z_near);
+    result.m[3].w = 1.0f;
+
+    result.m[3].x = -(right + left) / (right - left);
+    result.m[3].y = -(top + bottom) / (top - bottom);
+    result.m[3].z = -(z_far + z_near) / (z_far - z_near);
+
+    /*
+    result.m[0].w = -(right + left) / (right - left);
+    result.m[1].w = -(top + bottom) / (top - bottom);
+    result.m[2].w = -(z_far + z_near) / (z_far - z_near);
+    */
+
+    return result;
+}
 // NOTE(Fermin): From right to left order of operations for m4 transforms:
 // scale -> rotate -> translate
 // M4 transform = translate * rotate * scale;
