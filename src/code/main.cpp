@@ -1,12 +1,3 @@
-/*
- * TODO(Fermin):
- * - Investigate FileSystem::getPath("resources/textures/container.jpg"
- * - Asset Manager?
- * - Need a way to formalize loaded characters from fonts so the game and
- *   the asset builder are always synced
- * - Investigate why are the boxes deformed when rotated?
-*/
-
 #include "main.h"
 #include "buffer.cpp"
 #include "math.cpp"
@@ -19,7 +10,7 @@ global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
 global_variable f32 fov = 45.0f;
 global_variable u32 bytes_per_pixel = 4;
-global_variable const u32 font_character_count = '~' - '!' + 1;
+
 
 // OpenGL
 static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
@@ -142,6 +133,7 @@ static Buffer read_file(const char *file_name)
     return result;
 }
 // NOTE(Fermin): read_file declaration should go in main.h, fix error when moving
+global_variable Buffer font_data = read_file("src\\misc\\assets\\consola.font");
 
 /* NOTE(Fermin): Print cwd
 #include <stdio.h>
@@ -244,31 +236,41 @@ static u32 generate_texture(char *path, u32 format)
     return result;
 }
 
+static void get_character_metadata(char character, glyph_metadata *out)
+{
+    size_t metadata_offset = sizeof(glyph_metadata) * (character - font_first_character);
+    glyph_metadata *character_info = (glyph_metadata *)(font_data.data + metadata_offset);
+
+    out->width = character_info->width;
+    out->height = character_info->height;
+    out->offset = character_info->offset;
+    out->y_offset = character_info->y_offset;
+    out->advance = character_info->advance;
+}
+
 static void generate_font_glyphs(u32 *glyph_ids)
 {
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    Buffer font_data = read_file("arial.font");
-
     u32 bytes_per_pixel_fonts = 1;
-    for(char character = '!';
-        character <= '~';
+    for(char character = font_first_character;
+        character <= font_last_character;
         character++)
     {
-        size_t metadata_offset = sizeof(glyph_metadata) * (character - '!');
-        glyph_metadata *character_info = (glyph_metadata *)(font_data.data + metadata_offset);
-        u32 character_bitmap_size = character_info->width * bytes_per_pixel_fonts * character_info->height;
+        glyph_metadata character_info = {};
+        get_character_metadata(character, &character_info);
+        u32 character_bitmap_size = character_info.width * bytes_per_pixel_fonts * character_info.height;
 
         // TODO(Fermin): This is local so try to dont use buffer and 
         // just create a local var?
         Buffer character_buffer = {};
         character_buffer = allocate_buffer(character_bitmap_size);
 
-        u8 *source = font_data.data + sizeof(glyph_metadata) * font_character_count + character_info->offset;
+        u8 *source = font_data.data + sizeof(glyph_metadata) * font_character_count + character_info.offset;
         u8 *dest = character_buffer.data;
-        for(u32 y = 0; y < character_info->height; y++)
+        for(u32 y = 0; y < character_info.height; y++)
         {
-            for(u32 x = 0; x < character_info->width; x++)
+            for(u32 x = 0; x < character_info.width; x++)
             {
                 u8 result = *source++;
                 *dest++ = result;
@@ -276,36 +278,69 @@ static void generate_font_glyphs(u32 *glyph_ids)
             }
         }
 
-        *glyph_ids++ = generate_texture(character_buffer.data, character_info->width, character_info->height, GL_RED, GL_RED);
+        *glyph_ids++ = generate_texture(character_buffer.data, character_info.width, character_info.height, GL_RED, GL_RED);
 
         free_buffer(&character_buffer);
     }
-
-    free_buffer(&font_data);
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
 static void print_debug_text(char *string, u32 *glyph_ids, u32 VBO, u32 program_id)
 {
     glActiveTexture(GL_TEXTURE0);
-    u32 offset_loc = glGetUniformLocation(program_id, "char_offset");
-    f32 offset = 0.0f;
+
+    f32 x = 10.0f;
+    f32 font_size = 25.0f;
+    f32 base_y = screen_height - font_size - debug_print_line * 35.0f;
+    f32 char_size = font_size;
+    f32 max_scale = char_size / font_point_size;
 
     for(char *c = string; *c; c++)
     {
-        glUniform1f(offset_loc, offset);
-
         if(*c != ' ')
         {
-            glBindTexture(GL_TEXTURE_2D, glyph_ids[*c - '!']);
+            glyph_metadata glyph_info = {};
+            get_character_metadata(*c, &glyph_info);
+
+            f32 y_scale = glyph_info.height/font_point_size;
+            f32 x_scale = glyph_info.width/font_point_size;
+            f32 h = char_size * y_scale;
+            f32 w = char_size * x_scale;
+            f32 y = base_y - glyph_info.y_offset * max_scale;
+            f32 advance = glyph_info.advance*max_scale;
+
+            float font_vertices[] = {
+                x,     y + h, 0.0f, 1.0f,            
+                x,     y,     0.0f, 0.0f,
+                x + w, y,     1.0f, 0.0f,
+
+                x,     y + h, 0.0f, 1.0f,
+                x + w, y,     1.0f, 0.0f,
+                x + w, y + h, 1.0f, 1.0f           
+            };
+
+            glBindTexture(GL_TEXTURE_2D, glyph_ids[*c - font_first_character]);
+            // TODO(Fermin): Figure a way to transform the glyphs without
+            // uploading new data each character. Using uniforms and
+            // matrices? This is too slow, probably.
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(font_vertices), font_vertices); 
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+
             glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            x += advance + 1;
+        }
+        else
+        {
+            x += 8.0f;
         }
 
-        offset += 52.0f;
     }
 
-    glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    debug_print_line++;
 }
 
 int main()
@@ -460,26 +495,6 @@ int main()
 
     build_program(&font_program);
 
-    f32 x = 50.0f;
-    f32 y = 50.0f;
-    f32 w = 50.0f;
-    f32 h = 50.0f;
-    /*
-    f32 x = -0.5;
-    f32 y = -0.5;
-    f32 w = 1.0f;
-    f32 h = 1.0f;
-    */
-    float font_vertices[] = {
-        x,     y + h,   0.0f, 1.0f,            
-        x,     y,       0.0f, 0.0f,
-        x + w, y,       1.0f, 0.0f,
-
-        x,     y + h,   0.0f, 1.0f,
-        x + w, y,       1.0f, 0.0f,
-        x + w, y + h,   1.0f, 1.0f           
-    };
-
     u32 font_VBO, font_VAO;
     glGenVertexArrays(1, &font_VAO);  
     glGenBuffers(1, &font_VBO); 
@@ -487,7 +502,7 @@ int main()
     glBindVertexArray(font_VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, font_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(font_vertices), font_vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(f32)*4*6, NULL, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -500,6 +515,8 @@ int main()
 
     glUniform1i(glGetUniformLocation(font_program.id, "sampler"), 0);
 
+    // TODO(Fermin): We could save the glyph metadata structures in a buffer
+    // and free the font data file once we upload the bitmaps so we save memory.
     u32 font_glyphs_textures_ids[font_character_count] = {};
     generate_font_glyphs(font_glyphs_textures_ids);
     // NOTE(Fermin): Test fonts end
@@ -527,8 +544,10 @@ int main()
     // NOTE(Fermin): Testing camera logic
 
     b32 wireframe_mode = 0;
+    b32 show_debug_prints = 1; // default on
     // NOTE(Fermin): OFC we need an actual key struct for these...
     b32 f1_key_state = 0; // NOTE(Fermin): 0 released else pressed
+    b32 f2_key_state = 0; // NOTE(Fermin): 0 released else pressed
 
     f32 delta_time = 0.0f;
     f32 last_frame = 0.0f;
@@ -539,6 +558,8 @@ int main()
         f32 current_frame = glfwGetTime();
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
+
+        debug_print_line = 0.0f;
 
 
         f32 camera_speed = 2.5f * delta_time; // adjust accordingly
@@ -566,12 +587,21 @@ int main()
 
         if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS && !f1_key_state)
         {
-            wireframe_mode = !wireframe_mode;
+            show_debug_prints = !show_debug_prints;
             f1_key_state = 1;
+        }
+
+        if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_PRESS && !f2_key_state)
+        {
+            wireframe_mode = !wireframe_mode;
+            f2_key_state = 1;
         }
 
         if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_RELEASE)
             f1_key_state = 0;
+
+        if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_RELEASE)
+            f2_key_state = 0;
 
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -613,27 +643,28 @@ int main()
         //glDrawArrays(GL_TRIANGLES, 0, 36);
         // NOTE(Fermin): END cubes render state
 
-        // NOTE(Fermin): Start FONT render state
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+        if(show_debug_prints)
+        {
+            glEnable(GL_CULL_FACE);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
-        // TESTING
-        glUseProgram(font_program.id);
+            glUseProgram(font_program.id);
 
-        M4 font_projection = orthogonal(0.0f, screen_width, 0.0f, screen_height, -1.0f, 1000.0f);
-        u32 font_projection_loc = glGetUniformLocation(font_program.id, "projection");
-        glUniformMatrix4fv(font_projection_loc, 1, GL_FALSE, font_projection.e);
-        glUniform3f(glGetUniformLocation(font_program.id, "textColor"), 0.5f, 0.8f, 0.2f);
+            M4 font_projection = orthogonal(0.0f, screen_width, 0.0f, screen_height, -1.0f, 1000.0f);
+            u32 font_projection_loc = glGetUniformLocation(font_program.id, "projection");
+            glUniformMatrix4fv(font_projection_loc, 1, GL_FALSE, font_projection.e);
+            glUniform3f(glGetUniformLocation(font_program.id, "textColor"), 1.0f, 0.5f, 0.0f);
 
-        glBindVertexArray(font_VAO);
-        print_debug_text("GG Debug Text 90%", font_glyphs_textures_ids, font_VBO, font_program.id);
+            glBindVertexArray(font_VAO);
 
-        glDisable(GL_BLEND);
-        glDisable(GL_CULL_FACE);
-        // Return render state to how it was after debug print
-        //glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        // NOTE(Fermin): END FONT render state
+            // Stop passing all this buffer and program info. Globals for now? then manager
+            print_debug_text("rate: 16ms/f  60f/s", font_glyphs_textures_ids, font_VBO, font_program.id);
+            print_debug_text("memory allocated: 3.420 Gbs", font_glyphs_textures_ids, font_VBO, font_program.id);
+
+            glDisable(GL_BLEND);
+            glDisable(GL_CULL_FACE);
+        }
 
         if(wireframe_mode)
         {
@@ -662,6 +693,9 @@ int main()
 
     glDeleteVertexArrays(1, &font_VAO);
     glDeleteBuffers(1, &font_VBO);
+
+    free_buffer(&font_data);
+
 
     glfwTerminate();
 

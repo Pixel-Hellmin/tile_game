@@ -60,12 +60,12 @@ static Buffer read_file(const char *file_name)
 }
 static void init_fonts()
 {
-    Buffer tff_file = read_file("C:/windows/fonts/arial.ttf");
+    Buffer tff_file = read_file("C:/windows/fonts/consola.ttf");
 
     stbtt_fontinfo font;
     stbtt_InitFont(&font, tff_file.data, stbtt_GetFontOffsetForIndex(tff_file.data, 0));
 
-    FILE *out = fopen("arial.font", "wb");
+    FILE *out = fopen("src\\misc\\assets\\consola.font", "wb");
 
     size_t offset = 0;
     i32 bytes_per_pixel = 1;
@@ -74,16 +74,24 @@ static void init_fonts()
     Buffer glyph_bitmaps = {};
     glyph_bitmaps = allocate_buffer(gigabytes(1));
 
-    for(u32 character = '!';
-        character <= '~';
+    for(u32 character = font_first_character;
+        character <= font_last_character;
         ++character)
     {
-        u8 *mono_bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 64.0f), character, &width, &height, &x_offset, &y_offset);
+        f32 scale = stbtt_ScaleForPixelHeight(&font, font_point_size);
+        u8 *mono_bitmap = stbtt_GetCodepointBitmap(&font, 0, scale, character, &width, &height, &x_offset, &y_offset);
+
+
+        int y1, advance, lsb;
+        stbtt_GetCodepointBitmapBox(&font, character, scale, scale, 0, 0, 0, &y1);
+        stbtt_GetCodepointHMetrics(&font, character, &advance, &lsb);
 
         glyph_metadata glyph_data = {};
         glyph_data.offset = offset;
         glyph_data.width = width;
         glyph_data.height = height;
+        glyph_data.y_offset = y1;
+        glyph_data.advance = (advance - lsb) * scale;
         fwrite(&glyph_data, sizeof(glyph_metadata), 1, out);
 
         i32 pitch = bytes_per_pixel * width;
@@ -94,14 +102,7 @@ static void init_fonts()
             u8 *dest = dest_row;
             for(i32 x = 0; x < width; x++)
             {
-                //u8 alpha = *source++;
                 *dest++ = *source++;
-                /*
-                *dest++ = ((alpha << 24) |
-                           (alpha << 16) |
-                           (alpha <<  8) |
-                           (alpha <<  0));
-                */
 
                 offset+= bytes_per_pixel;
             }
