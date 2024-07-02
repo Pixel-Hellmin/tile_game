@@ -45,7 +45,7 @@ global_variable const u32 font_first_character = '!';
 global_variable const u32 font_last_character = '~';
 global_variable const u32 font_character_count = font_last_character - font_first_character + 1;
 
-struct glyph_metadata
+struct Glyph_Metadata
 {
     // NOTE(Fermin): advance has left side bearing calculated already
     size_t offset;
@@ -53,6 +53,12 @@ struct glyph_metadata
     i32 height;
     i32 y_offset;
     i32 advance;
+};
+
+struct Font
+{
+    u32 glyph_texture_ids[font_character_count];
+    Glyph_Metadata metadata[font_character_count];
 };
 
 #define MAIN_H

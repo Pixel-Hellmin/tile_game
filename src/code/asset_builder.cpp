@@ -86,13 +86,13 @@ static void init_fonts()
         stbtt_GetCodepointBitmapBox(&font, character, scale, scale, 0, 0, 0, &y1);
         stbtt_GetCodepointHMetrics(&font, character, &advance, &lsb);
 
-        glyph_metadata glyph_data = {};
+        Glyph_Metadata glyph_data = {};
         glyph_data.offset = offset;
         glyph_data.width = width;
         glyph_data.height = height;
         glyph_data.y_offset = y1;
         glyph_data.advance = (advance - lsb) * scale;
-        fwrite(&glyph_data, sizeof(glyph_metadata), 1, out);
+        fwrite(&glyph_data, sizeof(Glyph_Metadata), 1, out);
 
         i32 pitch = bytes_per_pixel * width;
         u8 *source = mono_bitmap;
