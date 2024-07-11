@@ -1,6 +1,8 @@
+#include "game.h"
 #include "main.h"
 #include "buffer.cpp"
 #include "math.cpp"
+#include "Windows.h"
 
 global_variable u32 screen_width = 1280;
 global_variable u32 screen_height = 720;
@@ -362,6 +364,46 @@ static void print_debug_text(char *string, Font *font, u32 VBO, u32 program_id)
     debug_print_line++;
 }
 
+struct Game_Code
+{
+    HMODULE game_code_dll;
+    Game_Update_And_Render *update_and_render;
+
+    b32 is_valid;
+};
+static Game_Code load_game_code()
+{
+    Game_Code result = {};
+
+    CopyFile("build//game.dll", "build//game_tmp.dll", FALSE);
+
+    result.game_code_dll = LoadLibraryA("game_tmp.dll");
+    if(result.game_code_dll)
+    {
+        result.update_and_render = (Game_Update_And_Render *)GetProcAddress(result.game_code_dll, "game_update_and_render");
+
+        result.is_valid = result.update_and_render && 1;
+    }
+
+    if(!result.is_valid)
+    {
+        // NOTE(Femin): If we call a function in a null pointer we crash
+        result.update_and_render = game_update_and_render_stub;
+    }
+
+    return result;
+}
+static void unload_game_code(Game_Code *game_code)
+{
+    if(game_code->game_code_dll)
+    {
+        FreeLibrary(game_code->game_code_dll);
+        game_code->game_code_dll = 0;
+    }
+
+    game_code->is_valid = false;
+    game_code->update_and_render = game_update_and_render_stub;
+}
 int main()
 {
     // NOTE(Fermin) | Start | Init window and opengl
@@ -570,15 +612,24 @@ int main()
     f32 delta_time = 0.0f;
     f32 last_frame = 0.0f;
 
+    Game_Code game = load_game_code();
+
+    i32 reload_count = 0;
     // NOTE(Fermin): Main Loop
     while(!glfwWindowShouldClose(window))
     {
+        if(reload_count++ > 240)
+        {
+            unload_game_code(&game);
+            game = load_game_code();
+            reload_count = 0;
+        }
+
         f32 current_frame = glfwGetTime();
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
 
         debug_print_line = 0.0f;
-
 
         f32 camera_speed = 2.5f * delta_time; // adjust accordingly
 
@@ -684,6 +735,9 @@ int main()
             print_debug_text("memory allocated: 3.420 Gbs", &consola, font_VBO, font_program.id);
             print_debug_text("Tomorrow", &consola, font_VBO, font_program.id);
         }
+
+        game.update_and_render(text_buffer);
+        game.update_and_render("\n");
 
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
