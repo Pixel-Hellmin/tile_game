@@ -3,6 +3,7 @@
 setLocal
 
 REM This build has to be run from vim in the root of the project
+REM Should I build asset_builder in debug or release?
 
 where /q cl || (
   echo ERROR: "cl" not found - please run this from the MSVC x64 native tools command prompt.
@@ -31,13 +32,13 @@ for /f "tokens=1-3 delims=/:" %%a in ("%TIME%")  do (set starttime=%%a:%%b:%%c)
 @echo Compilation started %startdate% at %starttime%
 @echo:
 
-REM del *.pbd > NUL 2> NUL
-REM echo WAITING FOR PBD > lock.tmp
-REM Should I build asset_builder in debug or release?
-call cl %CommonCompilerFlags% ..\src\code\asset_builder.cpp  /link %CommonLinkerFlags% /OUT:asset_builder.exe
-call cl %CommonCompilerFlags% ..\src\code\game.cpp /LD /link /EXPORT:game_update_and_render
-call cl %CommonCompilerFlags% ..\src\code\main.cpp  /link %CommonLinkerFlags% /OUT:main_debug.exe
-call cl -O2 %CommonCompilerFlags% ..\src\code\main.cpp  /link %CommonLinkerFlags% /OUT:main_release.exe
+REM delete pdbs each compilation since we make a new one each time we compile for live code editing and send output streams to NUL so it doesnt echo
+del *.pdb > NUL 2> NUL
+
+call cl %CommonCompilerFlags% ..\src\code\asset_builder.cpp  /link %CommonLinkerFlags% -OUT:asset_builder.exe
+call cl %CommonCompilerFlags% ..\src\code\game.cpp -LD /link -incremental:no -opt:ref -PDB:game_%date:~-8,2%%date:~-5,2%%date:~-2,2%_%time:~-11,2%%time:~-8,2%%time:~-5,2%%time:~-2,2%.pdb -EXPORT:game_update_and_render
+call cl %CommonCompilerFlags% ..\src\code\windows_main.cpp  /link %CommonLinkerFlags% -OUT:windows_main_debug.exe
+call cl -O2 %CommonCompilerFlags% ..\src\code\windows_main.cpp  /link %CommonLinkerFlags% -OUT:windows_main_release.exe
 REM del lock.tmp
 
 for /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set finishdate=%%b-%%a-%%c)

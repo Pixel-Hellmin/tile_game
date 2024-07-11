@@ -1,7 +1,7 @@
 /*
 * TODO(Fermin): open_file and read_file exist in here and in main.cpp. FIX
 */
-#include "main.h"
+#include "windows_main.h"
 #include "buffer.cpp"
 
 #define STB_TRUETYPE_IMPLEMENTATION

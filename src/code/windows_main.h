@@ -6,6 +6,8 @@
  * - Recalculate projection matrices only when parameters change instead
  *   of every frame
  * - Fix font bearings
+ *
+ * - Get rid of vc140.pdb when building
 */
 
 #if !defined(MAIN_H)

@@ -1,5 +1,5 @@
 #include "game.h"
-#include "main.h"
+#include "windows_main.h"
 #include "buffer.cpp"
 #include "math.cpp"
 #include "Windows.h"
@@ -136,25 +136,6 @@ static Buffer read_file(const char *file_name)
     return result;
 }
 // NOTE(Fermin): read_file declaration should go in main.h, fix error when moving
-
-
-/* NOTE(Fermin): Print cwd
-#include <stdio.h>
-#define WINDOWS 
-#ifdef WINDOWS
-#include <direct.h>
-#define GetCurrentDir _getcwd
-#else
-#include <unistd.h>
-#define GetCurrentDir getcwd
-#endif
-
-
-char *buf;
-buf=(char *)malloc(100*sizeof(char));
-getcwd(buf,100);
-printf("\n %s \n",buf);
-*/
 
 // OpenGL
 struct Program
@@ -367,17 +348,33 @@ static void print_debug_text(char *string, Font *font, u32 VBO, u32 program_id)
 struct Game_Code
 {
     HMODULE game_code_dll;
+    FILETIME dll_last_write_time;
     Game_Update_And_Render *update_and_render;
 
     b32 is_valid;
 };
-static Game_Code load_game_code()
+inline FILETIME get_last_write_time(char *file_name)
+{
+    FILETIME result = {};
+
+    WIN32_FIND_DATA find_data;
+    HANDLE find_handle = FindFirstFileA(file_name, &find_data);
+    if(find_handle != INVALID_HANDLE_VALUE)
+    {
+        result = find_data.ftLastWriteTime;
+        FindClose(find_handle);
+    }
+
+    return result;
+}
+static Game_Code load_game_code(char *src_dll_name, char *tmp_dll_name)
 {
     Game_Code result = {};
 
-    CopyFile("build//game.dll", "build//game_tmp.dll", FALSE);
+    result.dll_last_write_time = get_last_write_time(src_dll_name);
 
-    result.game_code_dll = LoadLibraryA("game_tmp.dll");
+    CopyFile(src_dll_name, tmp_dll_name, FALSE);
+    result.game_code_dll = LoadLibraryA(tmp_dll_name);
     if(result.game_code_dll)
     {
         result.update_and_render = (Game_Update_And_Render *)GetProcAddress(result.game_code_dll, "game_update_and_render");
@@ -404,8 +401,57 @@ static void unload_game_code(Game_Code *game_code)
     game_code->is_valid = false;
     game_code->update_and_render = game_update_and_render_stub;
 }
+
+static void cat_strings(size_t source_a_count, char *source_a,
+                        size_t source_b_count, char *source_b, 
+                        size_t dest_count, char *dest)
+{
+    for(int index = 0;
+        index < source_a_count;
+        ++index)
+    {
+        *dest++ = *source_a++;
+    }
+
+    for(int index = 0;
+        index < source_b_count;
+        ++index)
+    {
+        *dest++ = *source_b++;
+    }
+
+    *dest++ = 0;
+}
+
 int main()
 {
+
+    // NOTE(Fermin): Never use MAX_PATH in code that is user-facing since that is not the max size anymore
+    char exe_file_name[MAX_PATH];
+    DWORD size_of_file_name = GetModuleFileNameA(0, exe_file_name, sizeof(exe_file_name));
+    char *one_past_last_slash = exe_file_name;
+    for(char *scan = exe_file_name;
+        *scan;
+        ++scan)
+    {
+        if(*scan == '\\')
+        {
+            one_past_last_slash = scan + 1;
+        }
+    }
+
+    char src_game_code_dll_filename[] = "game.dll";
+    char src_game_code_dll_full_path[MAX_PATH];
+    cat_strings(one_past_last_slash - exe_file_name, exe_file_name,
+                sizeof(src_game_code_dll_filename) - 1, src_game_code_dll_filename,
+                sizeof(src_game_code_dll_full_path) - 1, src_game_code_dll_full_path);
+
+    char tmp_game_code_dll_filename[] = "game_tmp.dll";
+    char tmp_game_code_dll_full_path[MAX_PATH];
+    cat_strings(one_past_last_slash - exe_file_name, exe_file_name,
+                sizeof(tmp_game_code_dll_filename) - 1, tmp_game_code_dll_filename,
+                sizeof(tmp_game_code_dll_full_path) - 1, tmp_game_code_dll_full_path);
+
     // NOTE(Fermin) | Start | Init window and opengl
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -612,17 +658,18 @@ int main()
     f32 delta_time = 0.0f;
     f32 last_frame = 0.0f;
 
-    Game_Code game = load_game_code();
+    Game_Code game = load_game_code(src_game_code_dll_full_path,
+                                    tmp_game_code_dll_full_path);
 
-    i32 reload_count = 0;
     // NOTE(Fermin): Main Loop
     while(!glfwWindowShouldClose(window))
     {
-        if(reload_count++ > 240)
+        FILETIME new_dll_write_time = get_last_write_time(src_game_code_dll_full_path);
+        if(CompareFileTime(&new_dll_write_time, &game.dll_last_write_time) != 0)
         {
             unload_game_code(&game);
-            game = load_game_code();
-            reload_count = 0;
+            game = load_game_code(src_game_code_dll_full_path,
+                                  tmp_game_code_dll_full_path);
         }
 
         f32 current_frame = glfwGetTime();
