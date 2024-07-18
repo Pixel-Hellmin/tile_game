@@ -1,7 +1,7 @@
-#include "game.h"
 #include "windows_main.h"
-#include "buffer.cpp"
 #include "math.cpp"
+#include "game.h"
+#include "buffer.cpp"
 #include "Windows.h"
 
 global_variable u32 screen_width = 1280;
@@ -423,6 +423,41 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
+void draw_rectangle(Program *program, u32 VAO, Rect *rect,
+                    M4 *view, M4 *projection)
+{
+    // NOTE(Fermin): Can we pass a function pointer of the render functions
+    // to the game and render from there?
+    glUseProgram(program->id);
+
+    // NOTE(Fermin): I decided that 1 unit in model space is equial to:
+    f32 px_to_model_space = 100.0f;
+    f32 width_scale = (rect->max_p.x - rect->min_p.x)/px_to_model_space;
+    f32 height_scale = (rect->max_p.y - rect->min_p.y)/px_to_model_space;
+    f32 x_scale = rect->min_p.x/px_to_model_space;
+    f32 y_scale = rect->min_p.y/px_to_model_space;
+
+    M4 scale = scale_m4(V3{width_scale, height_scale, 1.0f});
+    M4 translation = translate(V3{x_scale, y_scale, 0.0});
+    M4 model = translation * scale;
+
+    u32 model_loc = glGetUniformLocation(program->id, "model");
+    glUniformMatrix4fv(model_loc, 1, GL_TRUE, model.e);
+
+    u32 view_loc = glGetUniformLocation(program->id, "view");
+    glUniformMatrix4fv(view_loc, 1, GL_FALSE, view->e);
+
+    u32 proj_loc = glGetUniformLocation(program->id, "projection");
+    glUniformMatrix4fv(proj_loc, 1, GL_TRUE, projection->e);
+
+    u32 color_loc = glGetUniformLocation(program->id, "in_color");
+    glUniform3f(color_loc, rect->color.r, rect->color.g, rect->color.b);
+
+    glBindVertexArray(VAO);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
 int main()
 {
 
@@ -658,10 +693,50 @@ int main()
     f32 delta_time = 0.0f;
     f32 last_frame = 0.0f;
 
+    // NOTE(Fermin): Game things start
     Game_Code game = load_game_code(src_game_code_dll_full_path,
                                     tmp_game_code_dll_full_path);
 
+    Program draw_rectangle_program = {};
+    draw_rectangle_program.vertex_shader = "src\\code\\draw_rectangle.vert";
+    draw_rectangle_program.fragment_shader = "src\\code\\draw_rectangle.frag";
+    build_program(&draw_rectangle_program);
+
+    float rectangle_vertices[] = {
+         0.5f,  0.5f, 0.0f,  // top right
+         0.5f, -0.5f, 0.0f,  // bottom right
+        -0.5f, -0.5f, 0.0f,  // bottom left
+        -0.5f,  0.5f, 0.0f   // top left 
+    };
+    unsigned int rectangle_indices[] = {  // note that we start from 0!
+        0, 1, 3,  // first Triangle
+        1, 2, 3   // second Triangle
+    };
+
+    unsigned int draw_rectangle_VBO, draw_rectangle_VAO, draw_rectangle_EBO;
+    glGenVertexArrays(1, &draw_rectangle_VAO);
+    glGenBuffers(1, &draw_rectangle_VBO);
+    glGenBuffers(1, &draw_rectangle_EBO);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(draw_rectangle_VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, draw_rectangle_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(rectangle_vertices), rectangle_vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, draw_rectangle_EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(rectangle_indices), rectangle_indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+    glBindVertexArray(0); 
+    // NOTE(Fermin): Game things end
+
+
     // NOTE(Fermin): Main Loop
+    Buffer render_rectangles = {};
+    render_rectangles = allocate_buffer(17*9*sizeof(Rect));
     while(!glfwWindowShouldClose(window))
     {
         FILETIME new_dll_write_time = get_last_write_time(src_game_code_dll_full_path);
@@ -719,6 +794,7 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_RELEASE)
             f2_key_state = 0;
 
+        /*
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -758,8 +834,32 @@ int main()
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         //glDrawArrays(GL_TRIANGLES, 0, 36);
         // NOTE(Fermin): END cubes render state
+        */
+
+        game.update_and_render(&render_rectangles);
+
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // NOTE(Fermin): Compute this once, and then only when screen dimensions change
+        f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
+        M4 projection = perspective(radians(fov), aspect_ratio, 0.1f, 100.0f);
+
+        M4 view = look_at(camera_pos, camera_pos + camera_front, camera_up);
+
+        u32 rect_count = 0;
+        Rect *tiles = (Rect *)render_rectangles.data;
+        for(u32 row = 0; row < 9; row++)
+        {
+            for(u32 col = 0; col < 17; col++)
+            {
+                Rect *rect = tiles + rect_count++;
+                draw_rectangle(&draw_rectangle_program, draw_rectangle_VAO, rect, &view, &projection);
+            }
+        }
 
         // NOTE(Fermin): START font render state
+        glClear(GL_DEPTH_BUFFER_BIT);
         glEnable(GL_CULL_FACE);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
@@ -782,9 +882,6 @@ int main()
             print_debug_text("memory allocated: 3.420 Gbs", &consola, font_VBO, font_program.id);
             print_debug_text("Tomorrow", &consola, font_VBO, font_program.id);
         }
-
-        game.update_and_render(text_buffer);
-        game.update_and_render("\n");
 
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
