@@ -188,11 +188,8 @@ static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format, u32 int
     glBindTexture(GL_TEXTURE_2D, result);  
 
     // set the texture wrapping/filtering options (on the currently bound texture object)
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -423,22 +420,28 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangle(Program *program, u32 VAO, Rect *rect,
-                    M4 *view, M4 *projection)
+void draw_rectangle(Program *program, u32 VAO, Rect *rect, M4 *view, M4 *projection)
 {
     // NOTE(Fermin): Can we pass a function pointer of the render functions
     // to the game and render from there?
     glUseProgram(program->id);
 
     // NOTE(Fermin): I decided that 1 unit in model space is equial to:
-    f32 px_to_model_space = 100.0f;
-    f32 width_scale = (rect->max_p.x - rect->min_p.x)/px_to_model_space;
-    f32 height_scale = (rect->max_p.y - rect->min_p.y)/px_to_model_space;
-    f32 x_scale = rect->min_p.x/px_to_model_space;
-    f32 y_scale = rect->min_p.y/px_to_model_space;
+    f32 px_to_model_space = 50.0f;
 
-    M4 scale = scale_m4(V3{width_scale, height_scale, 1.0f});
-    M4 translation = translate(V3{x_scale, y_scale, 0.0});
+    f32 model_width = (rect->max_p.x - rect->min_p.x)/px_to_model_space;
+    f32 model_height = (rect->max_p.y - rect->min_p.y)/px_to_model_space;
+    f32 half_width = model_width*0.5f;
+    f32 half_height = model_height*0.5f;
+
+    // NOTE(Fermin): We want the origin of the rect to be its min_p, we need to
+    // translate the rect by width/2 and half/2 in x and y
+    M4 translation = translate(V3{
+        rect->min_p.x/px_to_model_space+half_width,
+        rect->min_p.y/px_to_model_space+half_height,
+        0.0
+    });
+    M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
     M4 model = translation * scale;
 
     u32 model_loc = glGetUniformLocation(program->id, "model");
@@ -460,7 +463,6 @@ void draw_rectangle(Program *program, u32 VAO, Rect *rect,
 
 int main()
 {
-
     // NOTE(Fermin): Never use MAX_PATH in code that is user-facing since that is not the max size anymore
     char exe_file_name[MAX_PATH];
     DWORD size_of_file_name = GetModuleFileNameA(0, exe_file_name, sizeof(exe_file_name));
@@ -520,116 +522,11 @@ int main()
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
     // NOTE(Fermin) | End | Init window and opengl
 
-    // NOTE(Fermin) | Start | Shaders and Program
-    Program test_program = {};
-    test_program.vertex_shader = "src\\code\\vertex.vert";
-    test_program.fragment_shader = "src\\code\\fragment.frag";
-
-    build_program(&test_program);
-    // NOTE(Fermin) | End | Shaders and Program
-
-    // NOTE(Fermin) | Start | VAO, VBO. EBO
-    float vertices[] = {
-        // positions          // colors           // texture coords
-        //0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   // top right
-        //0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   // bottom right
-        //-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // bottom left
-        //-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f    // top left 
-
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-
-        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f
-    };
-    unsigned int indices[] = {  // note that we start from 0!
-        0, 1, 3,   // first triangle
-        1, 2, 3    // second triangle
-    };  
-
-    // NOTE(Fermin): When we create and bind a VAO, every VBO generation and 
-    // attribute property specification we create is saved on the current binded
-    // VAO. When we switch between drawn objects we just bind the VAO and use the 
-    // program.
-    u32 VBO, VAO, EBO;
-    glGenVertexArrays(1, &VAO);  
-    glGenBuffers(1, &VBO); 
-    glGenBuffers(1, &EBO);
-    
-    // NOTE(Fermin): bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-    glBindVertexArray(VAO);
-
-    // NOTE(Fermin) | Warning | glBufferData allocates memory and stores data
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW); 
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3* sizeof(float)));
-    glEnableVertexAttribArray(1);
-    // texture uv
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    // NOTE(Fermin): that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
-    glBindBuffer(GL_ARRAY_BUFFER, 0); 
-
-    // NOTE(Fermin): | Warning | do NOT unbind the EBO while a VAO is active as the bound element buffer object IS stored in the VAO; keep the EBO bound.
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 
-
-    glBindVertexArray(0); 
-    
-    // NOTE(Fermin): This tells OpenGL to which texture unit (GL_TEXTURE0, etc) each shader sampler belongs to 
-    glUniform1i(glGetUniformLocation(test_program.id, "texture1"), 0);
-    glUniform1i(glGetUniformLocation(test_program.id, "texture2"), 1);
-    // NOTE(Fermin) | End | VAO, VBO. EBO
-
     // NOTE(Fermin) | Start | Textures
     stbi_set_flip_vertically_on_load(true);
 
     u32 container_id = generate_texture("src\\misc\\assets\\textures\\container.jpg", GL_RGB);
     u32 awesome_face_id = generate_texture("src\\misc\\assets\\textures\\awesomeface.png", GL_RGBA);
-
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Test fonts start
@@ -662,33 +559,12 @@ int main()
     init_font(&consola, "src\\misc\\assets\\consola.font");
     // NOTE(Fermin): Test fonts end
 
-    // NOTE(Fermin): Testing maths
-    // NOTE(Fermin): We're translating the scene in the reverse direction of where we want to move
-    V3 cube_positions[] = {
-        V3{ 0.0f,  0.0f,  0.0f}, 
-        V3{ 2.0f,  5.0f, -15.0f}, 
-        V3{-1.5f, -2.2f, -2.5f},  
-        V3{-3.8f, -2.0f, -12.3f},  
-        V3{ 2.4f, -0.4f, -3.5f},  
-        V3{-1.7f,  3.0f, -7.5f},  
-        V3{ 1.3f, -2.0f, -2.5f},  
-        V3{ 1.5f,  2.0f, -2.5f}, 
-        V3{ 1.5f,  0.2f, -1.5f}, 
-        V3{-1.3f,  1.0f, -1.5f}  
-    };
-    // NOTE(Fermin): Testing maths
-
     // NOTE(Fermin): Testing camera logic, todo struct
-    V3 camera_pos = {0.0f, 0.0f, 3.0f};
+    V3 camera_pos = {3.0f, -1.0f, 9.0f};
+    //V3 camera_pos = {0.0f, 0.0f, 1.0f};
     V3 camera_up = {0.0f, 1.0f, 0.0f};
     V3 camera_front = {0.0f, 0.0f, -1.0f};
     // NOTE(Fermin): Testing camera logic
-
-    b32 wireframe_mode = 0;
-    b32 show_debug_prints = 1; // default on
-    // NOTE(Fermin): OFC we need an actual key struct for these...
-    b32 f1_key_state = 0; // NOTE(Fermin): 0 released else pressed
-    b32 f2_key_state = 0; // NOTE(Fermin): 0 released else pressed
 
     f32 delta_time = 0.0f;
     f32 last_frame = 0.0f;
@@ -734,9 +610,27 @@ int main()
     // NOTE(Fermin): Game things end
 
 
+    // NOTE(Fermin): Game stuff start
+    Rect dude = {};
+    dude.min_p = V2{0.0, 0.0f};
+    dude.max_p = V2{20.0, 20.0f};
+    dude.color = V4{0.0, 1.0, 0.0, 1.0};
+
+    Controls input_state = {};
+
+    b32 wireframe_mode = 0;
+    b32 show_debug_prints = 1; // default on
+    // NOTE(Fermin): OFC we need an actual key struct for these...
+    b32 f1_key_state = 0; // NOTE(Fermin): 0 released else pressed
+    b32 f2_key_state = 0; // NOTE(Fermin): 0 released else pressed
+
+    Buffer level_tiles = {};
+    u32 tile_count = 0;
+    u32 tile_cap = gigabytes(1)/sizeof(Rect);
+    level_tiles = allocate_buffer(gigabytes(1));
+    // NOTE(Fermin): Game stuff end
+
     // NOTE(Fermin): Main Loop
-    Buffer render_rectangles = {};
-    render_rectangles = allocate_buffer(17*9*sizeof(Rect));
     while(!glfwWindowShouldClose(window))
     {
         FILETIME new_dll_write_time = get_last_write_time(src_game_code_dll_full_path);
@@ -762,16 +656,28 @@ int main()
         camera_front = normalize(camera_direction);
 
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            camera_pos += camera_speed * camera_front;
+            input_state.up = 1;
+            //camera_pos += camera_speed * camera_front;
+        if(glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE)
+            input_state.up = 0;
 
         if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            camera_pos -= camera_speed * camera_front;
+            input_state.down = 1;
+            //camera_pos -= camera_speed * camera_front;
+        if(glfwGetKey(window, GLFW_KEY_S) == GLFW_RELEASE)
+            input_state.down = 0;
 
         if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            camera_pos -= normalize(cross(camera_front, camera_up)) * camera_speed;
+            input_state.left = 1;
+            //camera_pos -= normalize(cross(camera_front, camera_up)) * camera_speed;
+        if(glfwGetKey(window, GLFW_KEY_A) == GLFW_RELEASE)
+            input_state.left = 0;
 
         if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            camera_pos += normalize(cross(camera_front, camera_up)) * camera_speed;
+            input_state.right = 1;
+            //camera_pos += normalize(cross(camera_front, camera_up)) * camera_speed;
+        if(glfwGetKey(window, GLFW_KEY_D) == GLFW_RELEASE)
+            input_state.right = 0;
 
         if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
@@ -794,49 +700,7 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_RELEASE)
             f2_key_state = 0;
 
-        /*
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // NOTE(Fermin): START cubes render state
-        glEnable(GL_DEPTH_TEST);
-
-        glActiveTexture(GL_TEXTURE0); // activate the texture unit first before binding texture
-        glBindTexture(GL_TEXTURE_2D, container_id);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, awesome_face_id);
-
-        glUseProgram(test_program.id);
-
-        f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-        M4 projection = perspective(radians(fov), aspect_ratio, 0.1f, 100.0f);
-        u32 projection_loc = glGetUniformLocation(test_program.id, "projection");
-        glUniformMatrix4fv(projection_loc, 1, GL_TRUE, projection.e);
-
-        M4 view = look_at(camera_pos, camera_pos + camera_front, camera_up);
-        u32 view_loc = glGetUniformLocation(test_program.id, "view");
-        // NOTE-IMPORTANT(FERMIN): WHY THIS WORKS ONLY IF TRANSPOSE IS FALSE!!!!!!!!!!!!!!!
-        glUniformMatrix4fv(view_loc, 1, GL_FALSE, view.e);
-
-        u32 model_loc = glGetUniformLocation(test_program.id, "model");
-        glBindVertexArray(VAO);
-        for(unsigned int i = 0; i < 10; i++)
-        {
-            M4 translation = translate(cube_positions[i]);
-            f32 angle = 20.0f * i; 
-            M4 rotation = rotate((f32)glfwGetTime() * radians(angle), {1.0f, 0.3f, 0.5f});
-            M4 model = translation * rotation;
-            glUniformMatrix4fv(model_loc, 1, GL_TRUE, model.e);
-
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-        glDisable(GL_DEPTH_TEST);
-        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        //glDrawArrays(GL_TRIANGLES, 0, 36);
-        // NOTE(Fermin): END cubes render state
-        */
-
-        game.update_and_render(&render_rectangles);
+        game.update_and_render(&level_tiles, &tile_count, &dude, &input_state);
 
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -847,16 +711,15 @@ int main()
 
         M4 view = look_at(camera_pos, camera_pos + camera_front, camera_up);
 
-        u32 rect_count = 0;
-        Rect *tiles = (Rect *)render_rectangles.data;
-        for(u32 row = 0; row < 9; row++)
+        Rect *tiles = (Rect *)level_tiles.data;
+        for(u32 tile = 0; tile < tile_count; tile++)
         {
-            for(u32 col = 0; col < 17; col++)
-            {
-                Rect *rect = tiles + rect_count++;
-                draw_rectangle(&draw_rectangle_program, draw_rectangle_VAO, rect, &view, &projection);
-            }
+            Rect *rect = tiles + tile;
+            draw_rectangle(&draw_rectangle_program, draw_rectangle_VAO, rect, &view, &projection);
         }
+
+        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap
+        draw_rectangle(&draw_rectangle_program, draw_rectangle_VAO, &dude, &view, &projection);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -879,8 +742,15 @@ int main()
         if(show_debug_prints)
         {
             // Stop passing all this buffer and program info. Globals for now? then manager
-            print_debug_text("memory allocated: 3.420 Gbs", &consola, font_VBO, font_program.id);
-            print_debug_text("Tomorrow", &consola, font_VBO, font_program.id);
+            _snprintf_s(text_buffer, sizeof(text_buffer), "tiles capacity %i/%i)", tile_count, tile_cap);
+            print_debug_text(text_buffer, &consola, font_VBO, font_program.id);
+
+            //f32 dude_x = dude.min_p.x + (dude.max_p.x - dude.min_p.x)/2.0f;
+            //f32 dude_y = dude.min_p.y + (dude.max_p.y - dude.min_p.y)/2.0f;
+            f32 dude_x = dude.min_p.x;
+            f32 dude_y = dude.min_p.y;
+            _snprintf_s(text_buffer, sizeof(text_buffer), "dude min (%.2f, %.2f)", dude_x, dude_y);
+            print_debug_text(text_buffer, &consola, font_VBO, font_program.id);
         }
 
         glDisable(GL_BLEND);
@@ -908,9 +778,9 @@ int main()
         glfwPollEvents();    
     }
 
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
+    glDeleteVertexArrays(1, &draw_rectangle_VAO);
+    glDeleteBuffers(1, &draw_rectangle_VBO);
+    glDeleteBuffers(1, &draw_rectangle_EBO);
 
     glDeleteVertexArrays(1, &font_VAO);
     glDeleteBuffers(1, &font_VBO);
