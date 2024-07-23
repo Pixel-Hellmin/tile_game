@@ -1,29 +1,22 @@
 #if !defined(GAME_H)
 
-#include "buffer.cpp"
-#include "math.cpp"
+#include "windows_main.h"
 
-struct Controls
+inline b32 is_set(Game_State *game_state, u32 flag)
 {
-    b32 up;
-    b32 down;
-    b32 right;
-    b32 left;
-};
+    b32 result = game_state->debug_flags & flag;
+    
+    return result;
+}
 
-struct Rect
+inline void set_flag(Game_State *game_state, u32 flag)
 {
-    // NOTE(Fermin): This rectangles are drawn in 3d space,
-    // the min and max p are coords in world space and z is always 0
-    V2 min_p;
-    V2 max_p;
-    V4 color;
-};
+    game_state->debug_flags |= flag;
+}
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Buffer *render_rect, u32 *tile_count, Rect *dude, Controls *input_state)
-typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
-GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
+inline void unset_flag(Game_State *game_state, u32 flag)
 {
+    game_state->debug_flags &= ~flag;
 }
 
 #define GAME_H

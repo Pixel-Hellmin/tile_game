@@ -1,13 +1,12 @@
-#include "windows_main.h"
-#include "math.cpp"
-#include "game.h"
-#include "buffer.cpp"
 #include "Windows.h"
+#include "windows_main.h"
+#include "game.h"
 
 global_variable u32 screen_width = 1280;
 global_variable u32 screen_height = 720;
 global_variable f32 last_mouse_x = ((f32)screen_width) / 2.0f;
 global_variable f32 last_mouse_y = ((f32)screen_height) / 2.0f;
+global_variable b32 mouse_enabled = 1;
 global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
 global_variable f32 fov = 45.0f;
@@ -34,23 +33,26 @@ static void mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
         first_mouse = 0;
     }
 
-    f32 x_offset = x_pos - last_mouse_x;
-    f32 y_offset = last_mouse_y - y_pos; // reversed since y-coord range from bot to top
-    last_mouse_x = x_pos;
-    last_mouse_y = y_pos;
+    if(!mouse_enabled)
+    {
+        f32 x_offset = x_pos - last_mouse_x;
+        f32 y_offset = last_mouse_y - y_pos; // reversed since y-coord range from bot to top
+        last_mouse_x = x_pos;
+        last_mouse_y = y_pos;
 
-    f32 sensitivity = 0.05f;
-    x_offset *= sensitivity;
-    y_offset *= sensitivity;
+        f32 sensitivity = 0.05f;
+        x_offset *= sensitivity;
+        y_offset *= sensitivity;
 
-    camera_pitch += y_offset;
-    camera_yaw += x_offset;
+        camera_pitch += y_offset;
+        camera_yaw += x_offset;
 
-    if(camera_pitch > 89.0f)
-        camera_pitch =  89.0f;
+        if(camera_pitch > 89.0f)
+            camera_pitch =  89.0f;
 
-    if(camera_pitch < -89.0f)
-        camera_pitch = -89.0f;
+        if(camera_pitch < -89.0f)
+            camera_pitch = -89.0f;
+    }
 }
 
 // OpenGL
@@ -67,8 +69,7 @@ static void scroll_callback(GLFWwindow* window, double x_offset, double y_offset
 // OpenGL
 static u32 compile_shader(i32 type, char* source)
 {
-    u32 id;
-    id = glCreateShader(type);
+    u32 id = glCreateShader(type);
     glShaderSource(id, 1, &source, NULL);
     glCompileShader(id);
 
@@ -79,6 +80,7 @@ static u32 compile_shader(i32 type, char* source)
     {
         glGetShaderInfoLog(id, 512, NULL, infoLog);
         fprintf(stderr, "ERROR::SHADER::%s::COMPILATION_FAILED\n%s", type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT", infoLog);
+        assert(!"Program validation failed");
     }
 
     return id;
@@ -107,13 +109,12 @@ static Buffer read_file(const char *file_name)
     FILE* file;
     long file_size = open_file(&file, file_name);
 
-    // NOTE(Fermin): Do we need the +1 always?
-    result = allocate_buffer(file_size + 1);
+    result = allocate_buffer(file_size);
 
     if (result.data)
     {
         size_t bytes_read = fread(result.data, sizeof(char), result.count, file);
-        if ((bytes_read + 1) != result.count)
+        if ((bytes_read) != result.count)
         {
             fprintf(stderr, "Error: Failed to read %s\nfile_size: %zu, bytes_read: %zu\n", file_name, result.count, bytes_read);
 
@@ -122,9 +123,6 @@ static Buffer read_file(const char *file_name)
 
             return result;
         }
-
-        // Null-terminate the buffer
-        result.data[result.count] = '\0';
     }
     else
     {
@@ -137,28 +135,22 @@ static Buffer read_file(const char *file_name)
 }
 // NOTE(Fermin): read_file declaration should go in main.h, fix error when moving
 
-// OpenGL
 struct Program
 {
-    u32 id;
-    char const *vertex_shader;
-    char const *fragment_shader;
+    GLuint id;
+    GLuint model;
+    GLuint view;
+    GLuint proj;
+    GLuint color;
+    GLuint vao;
 };
-
 // OpenGL
-static void build_program(Program *program)
+static GLuint build_program(char *vertex_code, char *fragment_code)
 {
-    Buffer vertex_shader_buffer = read_file(program->vertex_shader);
-    Buffer fragment_shader_buffer = read_file(program->fragment_shader);
+    u32 vertex_shader_id = compile_shader(GL_VERTEX_SHADER, vertex_code);
+    u32 fragment_shader_id = compile_shader(GL_FRAGMENT_SHADER, fragment_code);
 
-    u32 vertex_shader_id = compile_shader(GL_VERTEX_SHADER, (char *)vertex_shader_buffer.data);
-    u32 fragment_shader_id = compile_shader(GL_FRAGMENT_SHADER, (char *)fragment_shader_buffer.data);
-
-    free_buffer(&vertex_shader_buffer);
-    free_buffer(&fragment_shader_buffer);
-
-    u32 program_id;
-    program_id = glCreateProgram();
+    GLuint program_id = glCreateProgram();
     glAttachShader(program_id, vertex_shader_id);
     glAttachShader(program_id, fragment_shader_id);
     glLinkProgram(program_id);
@@ -170,13 +162,14 @@ static void build_program(Program *program)
     {
         glGetProgramInfoLog(program_id, 512, NULL, infoLog);
         fprintf(stderr, "ERROR::SHADER::LINKING_FAILED\n%s", infoLog);
+        assert(!"Program validation failed");
     } 
     glUseProgram(program_id);
 
     glDeleteShader(vertex_shader_id);
     glDeleteShader(fragment_shader_id); 
 
-    program->id = program_id;
+    return program_id;
 }
 
 // OpenGL
@@ -342,14 +335,6 @@ static void print_debug_text(char *string, Font *font, u32 VBO, u32 program_id)
     debug_print_line++;
 }
 
-struct Game_Code
-{
-    HMODULE game_code_dll;
-    FILETIME dll_last_write_time;
-    Game_Update_And_Render *update_and_render;
-
-    b32 is_valid;
-};
 inline FILETIME get_last_write_time(char *file_name)
 {
     FILETIME result = {};
@@ -364,6 +349,7 @@ inline FILETIME get_last_write_time(char *file_name)
 
     return result;
 }
+
 static Game_Code load_game_code(char *src_dll_name, char *tmp_dll_name)
 {
     Game_Code result = {};
@@ -387,6 +373,7 @@ static Game_Code load_game_code(char *src_dll_name, char *tmp_dll_name)
 
     return result;
 }
+
 static void unload_game_code(Game_Code *game_code)
 {
     if(game_code->game_code_dll)
@@ -420,11 +407,13 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangle(Program *program, u32 VAO, Rect *rect, M4 *view, M4 *projection)
+void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection)
 {
-    // NOTE(Fermin): Can we pass a function pointer of the render functions
-    // to the game and render from there?
-    glUseProgram(program->id);
+    // TODO(Fermin): Currently we use a dummy model of a rectangle and
+    // transformations to draw the rects. Another option is to upload
+    // vertices directly using a dynamic buffer object. Test both and see
+    // which is faster
+    glUseProgram(prog->id);
 
     // NOTE(Fermin): I decided that 1 unit in model space is equial to:
     f32 px_to_model_space = 50.0f;
@@ -444,21 +433,16 @@ void draw_rectangle(Program *program, u32 VAO, Rect *rect, M4 *view, M4 *project
     M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
     M4 model = translation * scale;
 
-    u32 model_loc = glGetUniformLocation(program->id, "model");
-    glUniformMatrix4fv(model_loc, 1, GL_TRUE, model.e);
+    glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
+    glUniformMatrix4fv(prog->view, 1, GL_FALSE, view->e);
+    glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
+    glUniform3f(prog->color, rect->color.r, rect->color.g, rect->color.b);
 
-    u32 view_loc = glGetUniformLocation(program->id, "view");
-    glUniformMatrix4fv(view_loc, 1, GL_FALSE, view->e);
-
-    u32 proj_loc = glGetUniformLocation(program->id, "projection");
-    glUniformMatrix4fv(proj_loc, 1, GL_TRUE, projection->e);
-
-    u32 color_loc = glGetUniformLocation(program->id, "in_color");
-    glUniform3f(color_loc, rect->color.r, rect->color.g, rect->color.b);
-
-    glBindVertexArray(VAO);
+    glBindVertexArray(prog->vao);
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    glUseProgram(0);
 }
 
 int main()
@@ -518,8 +502,6 @@ int main()
 
     glfwSwapInterval(1); // V sync (0 = off, 1 = on)
 
-    // NOTE(Fermin): Hide and capture cursor
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
     // NOTE(Fermin) | End | Init window and opengl
 
     // NOTE(Fermin) | Start | Textures
@@ -530,11 +512,41 @@ int main()
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Test fonts start
-    Program font_program = {};
-    font_program.vertex_shader = "src\\code\\font.vert";
-    font_program.fragment_shader = "src\\code\\font.frag";
+    char *font_vertex_code = R"FOO(
+        #version 330 core
 
-    build_program(&font_program);
+        layout (location = 0) in vec2 aPos;
+        layout (location = 1) in vec2 aTexCoord;
+
+        out vec2 TexCoord;
+
+        uniform mat4 projection;
+
+        void main()
+        {
+            gl_Position = projection * vec4(aPos.x, aPos.y , 0.0, 1.0);
+            TexCoord = aTexCoord;
+        }
+    )FOO";
+
+    char *font_fragment_code = R"FOO(
+        #version 330 core
+
+        in vec2 TexCoord;
+
+        out vec4 FragColor;
+
+        uniform sampler2D sampler;
+        uniform vec3 textColor;
+
+        void main()
+        {
+            vec4 sampled = vec4(1.0, 1.0, 1.0, texture(sampler, TexCoord).r);
+            FragColor = vec4(textColor, 1.0) * sampled;
+        }
+    )FOO";
+
+    u32 font_program_id = build_program(font_vertex_code, font_fragment_code);
 
     u32 font_VBO, font_VAO;
     glGenVertexArrays(1, &font_VAO);  
@@ -554,29 +566,55 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    glUniform1i(glGetUniformLocation(font_program.id, "sampler"), 0);
+    glUniform1i(glGetUniformLocation(font_program_id, "sampler"), 0);
 
     init_font(&consola, "src\\misc\\assets\\consola.font");
     // NOTE(Fermin): Test fonts end
-
-    // NOTE(Fermin): Testing camera logic, todo struct
-    V3 camera_pos = {3.0f, -1.0f, 9.0f};
-    //V3 camera_pos = {0.0f, 0.0f, 1.0f};
-    V3 camera_up = {0.0f, 1.0f, 0.0f};
-    V3 camera_front = {0.0f, 0.0f, -1.0f};
-    // NOTE(Fermin): Testing camera logic
-
-    f32 delta_time = 0.0f;
-    f32 last_frame = 0.0f;
 
     // NOTE(Fermin): Game things start
     Game_Code game = load_game_code(src_game_code_dll_full_path,
                                     tmp_game_code_dll_full_path);
 
-    Program draw_rectangle_program = {};
-    draw_rectangle_program.vertex_shader = "src\\code\\draw_rectangle.vert";
-    draw_rectangle_program.fragment_shader = "src\\code\\draw_rectangle.frag";
-    build_program(&draw_rectangle_program);
+    char *draw_rectangle_vertex_code = R"FOO(
+        #version 330 core
+
+        layout (location = 0) in vec3 pos;
+
+        out vec3 out_color;
+
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+        uniform vec3 in_color;
+
+        void main()
+        {
+           gl_Position = projection * view * model * vec4(pos, 1.0);
+           out_color = in_color;
+        }
+    )FOO";
+
+    char *draw_rectangle_fragment_code = R"FOO(
+        #version 330 core
+
+        in vec3 out_color;
+
+        out vec4 FragColor;
+
+        void main()
+        {
+           FragColor = vec4(out_color, 1.0f);
+        }
+    )FOO";
+    
+    Program draw_rect_prog = {};
+    draw_rect_prog.id = build_program(draw_rectangle_vertex_code,
+                                      draw_rectangle_fragment_code);
+
+    draw_rect_prog.model = glGetUniformLocation(draw_rect_prog.id, "model");
+    draw_rect_prog.view = glGetUniformLocation(draw_rect_prog.id, "view");
+    draw_rect_prog.proj = glGetUniformLocation(draw_rect_prog.id, "projection");
+    draw_rect_prog.color = glGetUniformLocation(draw_rect_prog.id, "in_color");
 
     float rectangle_vertices[] = {
          0.5f,  0.5f, 0.0f,  // top right
@@ -589,12 +627,12 @@ int main()
         1, 2, 3   // second Triangle
     };
 
-    unsigned int draw_rectangle_VBO, draw_rectangle_VAO, draw_rectangle_EBO;
-    glGenVertexArrays(1, &draw_rectangle_VAO);
+    unsigned int draw_rectangle_VBO, draw_rectangle_EBO;
+    glGenVertexArrays(1, &draw_rect_prog.vao);
     glGenBuffers(1, &draw_rectangle_VBO);
     glGenBuffers(1, &draw_rectangle_EBO);
     // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-    glBindVertexArray(draw_rectangle_VAO);
+    glBindVertexArray(draw_rect_prog.vao);
 
     glBindBuffer(GL_ARRAY_BUFFER, draw_rectangle_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(rectangle_vertices), rectangle_vertices, GL_STATIC_DRAW);
@@ -612,23 +650,23 @@ int main()
 
     // NOTE(Fermin): Game stuff start
     Rect dude = {};
-    dude.min_p = V2{0.0, 0.0f};
-    dude.max_p = V2{20.0, 20.0f};
-    dude.color = V4{0.0, 1.0, 0.0, 1.0};
+    dude.min_p = V3{0.0f, 0.0f, 0.0f};
+    dude.max_p = V3{20.0f, 20.0f, 0.0f};
+    dude.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
 
-    Controls input_state = {};
-
-    b32 wireframe_mode = 0;
-    b32 show_debug_prints = 1; // default on
-    // NOTE(Fermin): OFC we need an actual key struct for these...
-    b32 f1_key_state = 0; // NOTE(Fermin): 0 released else pressed
-    b32 f2_key_state = 0; // NOTE(Fermin): 0 released else pressed
-
-    Buffer level_tiles = {};
-    u32 tile_count = 0;
-    u32 tile_cap = gigabytes(1)/sizeof(Rect);
-    level_tiles = allocate_buffer(gigabytes(1));
+    Game_State game_state = {};
+    game_state.camera.pos = {3.0f, -1.0f, 9.0f};
+    //game_state.camera.pos = {0.0f, 0.0f, 1.0f};
+    game_state.camera.up = {0.0f, 1.0f, 0.0f};
+    game_state.camera.front = {0.0f, 0.0f, -1.0f};
+    
+    Render_Buffer rects = {};
+    rects.buffer = allocate_buffer(gigabytes(1));
+    u32 rect_cap = gigabytes(1)/sizeof(Rect);
     // NOTE(Fermin): Game stuff end
+
+    f32 delta_time = 0.0f;
+    f32 last_frame = 0.0f;
 
     // NOTE(Fermin): Main Loop
     while(!glfwWindowShouldClose(window))
@@ -644,64 +682,61 @@ int main()
         f32 current_frame = glfwGetTime();
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
+        game_state.delta = delta_time;
 
         debug_print_line = 0.0f;
 
         f32 camera_speed = 2.5f * delta_time; // adjust accordingly
 
+        // TODO(Fermin): Feel like this should go in the game.
         V3 camera_direction = {};
         camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
         camera_direction.y = sin(radians(camera_pitch));
         camera_direction.z = sin(radians(camera_yaw)) * cos(radians(camera_pitch));
-        camera_front = normalize(camera_direction);
+        game_state.camera.front = normalize(camera_direction);
+
 
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            input_state.up = 1;
-            //camera_pos += camera_speed * camera_front;
+            game_state.input_state.w = 1;
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE)
-            input_state.up = 0;
+            game_state.input_state.w = 0;
 
         if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            input_state.down = 1;
-            //camera_pos -= camera_speed * camera_front;
+            game_state.input_state.s = 1;
         if(glfwGetKey(window, GLFW_KEY_S) == GLFW_RELEASE)
-            input_state.down = 0;
+            game_state.input_state.s = 0;
 
         if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            input_state.left = 1;
-            //camera_pos -= normalize(cross(camera_front, camera_up)) * camera_speed;
+            game_state.input_state.a = 1;
         if(glfwGetKey(window, GLFW_KEY_A) == GLFW_RELEASE)
-            input_state.left = 0;
+            game_state.input_state.a = 0;
 
         if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            input_state.right = 1;
-            //camera_pos += normalize(cross(camera_front, camera_up)) * camera_speed;
+            game_state.input_state.d = 1;
         if(glfwGetKey(window, GLFW_KEY_D) == GLFW_RELEASE)
-            input_state.right = 0;
+            game_state.input_state.d = 0;
 
         if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
-        if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS && !f1_key_state)
-        {
-            show_debug_prints = !show_debug_prints;
-            f1_key_state = 1;
-        }
-
-        if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_PRESS && !f2_key_state)
-        {
-            wireframe_mode = !wireframe_mode;
-            f2_key_state = 1;
-        }
-
+        if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
+            game_state.input_state.f1 = 1;
         if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_RELEASE)
-            f1_key_state = 0;
+            game_state.input_state.f1 = 0;
 
+        if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_PRESS)
+            game_state.input_state.f2 = 1;
         if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_RELEASE)
-            f2_key_state = 0;
+            game_state.input_state.f2 = 0;
 
-        game.update_and_render(&level_tiles, &tile_count, &dude, &input_state);
+        if(glfwGetKey(window, GLFW_KEY_F3) == GLFW_PRESS)
+            game_state.input_state.f3 = 1;
+        if(glfwGetKey(window, GLFW_KEY_F3) == GLFW_RELEASE)
+            game_state.input_state.f3 = 0;
 
+        game.update_and_render(&rects, &dude, &game_state);
+
+        // NOTE(Fermin): Render buffers
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -709,17 +744,18 @@ int main()
         f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
         M4 projection = perspective(radians(fov), aspect_ratio, 0.1f, 100.0f);
 
-        M4 view = look_at(camera_pos, camera_pos + camera_front, camera_up);
+        M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
-        Rect *tiles = (Rect *)level_tiles.data;
-        for(u32 tile = 0; tile < tile_count; tile++)
+        Rect *tiles = (Rect *)rects.buffer.data;
+        for(u32 tile = 0; tile < rects.count; tile++)
         {
             Rect *rect = tiles + tile;
-            draw_rectangle(&draw_rectangle_program, draw_rectangle_VAO, rect, &view, &projection);
+            draw_rectangle(&draw_rect_prog, rect, &view, &projection);
         }
 
-        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap
-        draw_rectangle(&draw_rectangle_program, draw_rectangle_VAO, &dude, &view, &projection);
+        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
+        // Or use a different Z coord for him and use the Z-buffer
+        draw_rectangle(&draw_rect_prog, &dude, &view, &projection);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -727,38 +763,45 @@ int main()
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
-        glUseProgram(font_program.id);
+        glUseProgram(font_program_id);
 
         M4 font_projection = orthogonal(0.0f, screen_width, 0.0f, screen_height, -1.0f, 1000.0f);
-        u32 font_projection_loc = glGetUniformLocation(font_program.id, "projection");
+        u32 font_projection_loc = glGetUniformLocation(font_program_id, "projection");
         glUniformMatrix4fv(font_projection_loc, 1, GL_FALSE, font_projection.e);
-        glUniform3f(glGetUniformLocation(font_program.id, "textColor"), 1.0f, 0.5f, 0.0f);
+        glUniform3f(glGetUniformLocation(font_program_id, "textColor"), 1.0f, 0.5f, 0.0f);
 
         glBindVertexArray(font_VAO);
 
         char text_buffer[256];
         _snprintf_s(text_buffer, sizeof(text_buffer), "rate: %.4fms/f %.4ff/s", delta_time*1000.0f, 1.0f/delta_time);
-        print_debug_text(text_buffer, &consola, font_VBO, font_program.id);
-        if(show_debug_prints)
+        print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+        if(is_set(&game_state, game_state_flag_prints))
         {
             // Stop passing all this buffer and program info. Globals for now? then manager
-            _snprintf_s(text_buffer, sizeof(text_buffer), "tiles capacity %i/%i)", tile_count, tile_cap);
-            print_debug_text(text_buffer, &consola, font_VBO, font_program.id);
+            _snprintf_s(text_buffer, sizeof(text_buffer), "rects capacity %i/%i)", rects.count, rect_cap);
+            print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
             //f32 dude_x = dude.min_p.x + (dude.max_p.x - dude.min_p.x)/2.0f;
             //f32 dude_y = dude.min_p.y + (dude.max_p.y - dude.min_p.y)/2.0f;
             f32 dude_x = dude.min_p.x;
             f32 dude_y = dude.min_p.y;
             _snprintf_s(text_buffer, sizeof(text_buffer), "dude min (%.2f, %.2f)", dude_x, dude_y);
-            print_debug_text(text_buffer, &consola, font_VBO, font_program.id);
+            print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+
+            if(is_set(&game_state, game_state_flag_free_cam_mode))
+            {
+                _snprintf_s(text_buffer, sizeof(text_buffer), "camera free mode ON");
+                print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+            }
         }
 
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
         // NOTE(Fermin): END font render state
 
-        if(wireframe_mode)
+        if(is_set(&game_state, game_state_flag_wireframe_mode))
         {
+#if 0
             // TODO(Fermin): We need a different color for the wireframe
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -770,6 +813,19 @@ int main()
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+#endif
+        }
+
+        // NOTE(Fermin): Hide and capture cursor
+        if(!is_set(&game_state, game_state_flag_free_cam_mode))
+        {
+            mouse_enabled = 1;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);  
+        }
+        else
+        {
+            mouse_enabled = 0;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
         }
 
         glBindVertexArray(0);
@@ -778,7 +834,7 @@ int main()
         glfwPollEvents();    
     }
 
-    glDeleteVertexArrays(1, &draw_rectangle_VAO);
+    glDeleteVertexArrays(1, &draw_rect_prog.vao);
     glDeleteBuffers(1, &draw_rectangle_VBO);
     glDeleteBuffers(1, &draw_rectangle_EBO);
 
