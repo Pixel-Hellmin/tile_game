@@ -114,6 +114,33 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             dude->min_p.x += dude_speed; 
             dude->max_p.x += dude_speed; 
         }
+        if(input_state.left_mouse && !last_frame_input_state.left_mouse)
+        //if(input_state.left_mouse)
+        {
+            // TODO(Fermin): Intrinsics
+            // TODO(Fermin): Use the acutal z near value
+            f32 rot_x = tan(input_state.cursor.y/1.0);
+            f32 rot_y = tan(input_state.cursor.x/1.0);
+            M4 rotation_y = rotate(-rot_y, V3{0.0, 1.0, 0.0});
+            M4 rotation_x = rotate(rot_x, V3{1.0, 0.0, 0.0});
+            V4 front = V4{game_state->camera.front, 1.0};
+            V3 ray_direction = (rotation_x * rotation_y * front).xyz;
+            V3 origin = game_state->camera.pos;
+            //game_state->camera.front = ray_direction;
+            
+            printf("ray direction %.2f, %.2f, %.2f\n", ray_direction.x, ray_direction.y, ray_direction.z);
+            printf("ray origin %.2f, %.2f, %.2f\n", origin.x, origin.y, origin.z);
+
+            // NOTE(Fermin): This seems correct. NOTE that the coords are in
+            // camera space????
+            f32 ray_length = 20.0f;
+            for(f32 point = 1; point < ray_length;)
+            {
+                V3 point_in_ray = origin + (ray_direction * point);
+            printf("poit in ray %.2f, %.2f, %.2f\n", point_in_ray.x, point_in_ray.y, point_in_ray.z);
+                point += 0.5;
+            }
+        }
     }
     else
     {

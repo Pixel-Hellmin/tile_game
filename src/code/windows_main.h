@@ -89,9 +89,11 @@ struct Input_Keys
     b32 a;
     b32 s;
     b32 d;
+    b32 left_mouse;
     b32 f1;
     b32 f2;
     b32 f3;
+    V2 cursor; // NOTE(Fermin): (-1, -1) to (1, 1)
 };
 
 enum Game_State_Debug_Flags

@@ -37,8 +37,6 @@ static void mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
     {
         f32 x_offset = x_pos - last_mouse_x;
         f32 y_offset = last_mouse_y - y_pos; // reversed since y-coord range from bot to top
-        last_mouse_x = x_pos;
-        last_mouse_y = y_pos;
 
         f32 sensitivity = 0.05f;
         x_offset *= sensitivity;
@@ -53,6 +51,9 @@ static void mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
         if(camera_pitch < -89.0f)
             camera_pitch = -89.0f;
     }
+
+    last_mouse_x = x_pos;
+    last_mouse_y = y_pos;
 }
 
 // OpenGL
@@ -655,10 +656,11 @@ int main()
     dude.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
 
     Game_State game_state = {};
-    game_state.camera.pos = {3.0f, -1.0f, 9.0f};
-    //game_state.camera.pos = {0.0f, 0.0f, 1.0f};
+    //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
+    game_state.camera.pos = {0.0f, 0.0f, 5.0f};
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
+    set_flag(&game_state, game_state_flag_prints);
     
     Render_Buffer rects = {};
     rects.buffer = allocate_buffer(gigabytes(1));
@@ -686,15 +688,27 @@ int main()
 
         debug_print_line = 0.0f;
 
-        f32 camera_speed = 2.5f * delta_time; // adjust accordingly
+        // NOTE(Fermin): Hide and capture cursor
+        if(!is_set(&game_state, game_state_flag_free_cam_mode))
+        {
+            mouse_enabled = 1;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);  
+        }
+        else
+        {
+            mouse_enabled = 0;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
 
-        // TODO(Fermin): Feel like this should go in the game.
-        V3 camera_direction = {};
-        camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
-        camera_direction.y = sin(radians(camera_pitch));
-        camera_direction.z = sin(radians(camera_yaw)) * cos(radians(camera_pitch));
-        game_state.camera.front = normalize(camera_direction);
+            // TODO(Fermin): Feel like this should go in the game.
+            V3 camera_direction = {};
+            camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
+            camera_direction.y = sin(radians(camera_pitch));
+            camera_direction.z = sin(radians(camera_yaw)) * cos(radians(camera_pitch));
+            game_state.camera.front = normalize(camera_direction);
+        }
 
+        game_state.input_state.cursor.x = last_mouse_x/screen_width + (last_mouse_x - screen_width)/screen_width;
+        game_state.input_state.cursor.y = -1.0 * (last_mouse_y/screen_height + (last_mouse_y - screen_height)/screen_height);
 
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             game_state.input_state.w = 1;
@@ -716,8 +730,10 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_D) == GLFW_RELEASE)
             game_state.input_state.d = 0;
 
-        if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            glfwSetWindowShouldClose(window, true);
+        if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+            game_state.input_state.left_mouse = 1;
+        if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
+            game_state.input_state.left_mouse = 0;
 
         if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
             game_state.input_state.f1 = 1;
@@ -734,6 +750,9 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_F3) == GLFW_RELEASE)
             game_state.input_state.f3 = 0;
 
+        if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+            glfwSetWindowShouldClose(window, true);
+
         game.update_and_render(&rects, &dude, &game_state);
 
         // NOTE(Fermin): Render buffers
@@ -742,7 +761,7 @@ int main()
 
         // NOTE(Fermin): Compute this once, and then only when screen dimensions change
         f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-        M4 projection = perspective(radians(fov), aspect_ratio, 0.1f, 100.0f);
+        M4 projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
 
         M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
@@ -788,9 +807,14 @@ int main()
             _snprintf_s(text_buffer, sizeof(text_buffer), "dude min (%.2f, %.2f)", dude_x, dude_y);
             print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
-            if(is_set(&game_state, game_state_flag_free_cam_mode))
+            if(!is_set(&game_state, game_state_flag_free_cam_mode))
             {
-                _snprintf_s(text_buffer, sizeof(text_buffer), "camera free mode ON");
+                // NOTE(Fermin): Screen space
+                //_snprintf_s(text_buffer, sizeof(text_buffer), "cursor in cam space (%.2f, %.2f)", last_mouse_x, last_mouse_y);
+                //print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+
+                // NOTE(Fermin): camera space?
+                _snprintf_s(text_buffer, sizeof(text_buffer), "cursor space(%.4f, %.4f)", game_state.input_state.cursor.x, game_state.input_state.cursor.y);
                 print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
             }
         }
@@ -814,18 +838,6 @@ int main()
 
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 #endif
-        }
-
-        // NOTE(Fermin): Hide and capture cursor
-        if(!is_set(&game_state, game_state_flag_free_cam_mode))
-        {
-            mouse_enabled = 1;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);  
-        }
-        else
-        {
-            mouse_enabled = 0;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
         }
 
         glBindVertexArray(0);
