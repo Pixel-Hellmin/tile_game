@@ -4,12 +4,14 @@
 
 global_variable u32 screen_width = 1280;
 global_variable u32 screen_height = 720;
+global_variable f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
+global_variable f32 fov = 45.0f;
+global_variable M4 projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
 global_variable f32 last_mouse_x = ((f32)screen_width) / 2.0f;
 global_variable f32 last_mouse_y = ((f32)screen_height) / 2.0f;
 global_variable b32 mouse_enabled = 1;
 global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
-global_variable f32 fov = 45.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
 
@@ -19,6 +21,9 @@ static void framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
 {
     screen_width = width;
     screen_height = height;
+    aspect_ratio = ((f32)screen_width)/((f32)screen_height);
+    projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
+
     glViewport(0, 0, width, height);
 }  
 
@@ -436,7 +441,7 @@ void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection)
     M4 model = translation * scale;
 
     glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
-    glUniformMatrix4fv(prog->view, 1, GL_FALSE, view->e);
+    glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
     glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
     glUniform3f(prog->color, rect->color.r, rect->color.g, rect->color.b);
 
@@ -662,6 +667,11 @@ int main()
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
     set_flag(&game_state, game_state_flag_prints);
+
+    M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
+
+    game_state.proj = &projection;
+    game_state.view = &view;
     
     Render_Buffer debug_persist_rects = {};
     debug_persist_rects.buffer = allocate_buffer(gigabytes(1));
@@ -756,20 +766,15 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
-        f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-        M4 projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
-
-        M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
-
-        game_state.proj = invert(&(projection * view));
+        // TODO(Fermin): Where is it convinient to update this matrix?
+        // We need to see how ofter the camera state changes
+        view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
         game.update_and_render(&rects, &dude, &game_state, &debug_persist_rects);
 
         // NOTE(Fermin): Render buffers
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-
-        // NOTE(Fermin): Compute this once, and then only when screen dimensions change
 
         Rect *tiles = (Rect *)rects.buffer.data;
         for(u32 tile = 0; tile < rects.count; tile++)
@@ -778,16 +783,16 @@ int main()
             draw_rectangle(&draw_rect_prog, rect, &view, &projection);
         }
 
+        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
+        // Or use a different Z coord for him and use the Z-buffer
+        draw_rectangle(&draw_rect_prog, &dude, &view, &projection);
+
         Rect *debugs = (Rect *)debug_persist_rects.buffer.data;
         for(u32 index = 0; index < debug_persist_rects.count; index++)
         {
             Rect *rect = debugs + index;
             draw_rectangle(&draw_rect_prog, rect, &view, &projection);
         }
-
-        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
-        // Or use a different Z coord for him and use the Z-buffer
-        draw_rectangle(&draw_rect_prog, &dude, &view, &projection);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);

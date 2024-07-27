@@ -117,7 +117,8 @@ struct Game_State
     Input_Keys last_frame_input_state;
     u32 debug_flags;
     Camera camera;
-    M4 proj;
+    M4 *proj;
+    M4 *view;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *rects, Rect *dude, Game_State *game_state, Render_Buffer *debug)

@@ -137,6 +137,17 @@ inline V3 operator*(V3 a, f32 b)
     return result;
 }
 
+inline V3 operator/(V3 a, f32 b)
+{
+    V3 result = {};
+
+    result.x = a.x / b;
+    result.y = a.y / b;
+    result.z = a.z / b;
+
+    return result;
+}
+
 static inline f32 inner(V3 a, V3 b)
 {
     f32 result = a.x*b.x + a.y*b.y + a.z*b.z;
@@ -331,7 +342,7 @@ static inline M4 perspective(f32 fov_radians, f32 aspect_ratio, f32 z_near, f32 
 
 static inline M4 orthogonal(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far)
 {
-    // NOTE: This is a row-major orthographic matrix
+    // NOTE: This is a column-major orthographic matrix
 
     M4 result = {};
 
@@ -417,30 +428,29 @@ static inline M4 look_at(V3 pos, V3 target, V3 up)
 
     M4 result = {};
 
-    /* COLUMN MAJOR?? 
+    /* ROW MAJOR
+    */
     result.m[0].x = camera_right.x;
     result.m[0].y = camera_right.y;
     result.m[0].z = camera_right.z;
-    result.m[0].w = 0;
+    result.m[0].w = -inner(camera_right, pos);
 
     result.m[1].x = camera_up.x;
     result.m[1].y = camera_up.y;
     result.m[1].z = camera_up.z;
-    result.m[1].w = 0;
+    result.m[1].w = -inner(camera_up, pos);
 
     result.m[2].x = camera_direction.x;
     result.m[2].y = camera_direction.y;
     result.m[2].z = camera_direction.z;
-    result.m[2].w = 0;
+    result.m[2].w = -inner(camera_direction, pos);
 
-    result.m[3].x = -inner(camera_right, pos);
-    result.m[3].y = -inner(camera_up, pos);
-    result.m[3].z = -inner(camera_direction, pos);
+    result.m[3].x = 0;
+    result.m[3].y = 0;
+    result.m[3].z = 0;
     result.m[3].w = 1;
-    */
 
-    /* ROW MAJOR??
-    */
+    /* COLUMN MAJOR
     result.m[0].x = camera_right.x;
     result.m[0].y = camera_up.x;
     result.m[0].z = camera_direction.x;
@@ -460,12 +470,14 @@ static inline M4 look_at(V3 pos, V3 target, V3 up)
     result.m[3].y = -inner(camera_up, pos);
     result.m[3].z = -inner(camera_direction, pos);
     result.m[3].w = 1;
+    */
 
     return result;
 }
 
 static inline f32 determinant_4x4(M4* mat)
 {
+    // NOTE(Fermin): Chatgpt says this is column major
     f32 det;
     det  = mat->m[0].e[3] * mat->m[1].e[2] * mat->m[2].e[1] * mat->m[3].e[0] - mat->m[0].e[2] * mat->m[1].e[3] * mat->m[2].e[1] * mat->m[3].e[0] -
            mat->m[0].e[3] * mat->m[1].e[1] * mat->m[2].e[2] * mat->m[3].e[0] + mat->m[0].e[1] * mat->m[1].e[3] * mat->m[2].e[2] * mat->m[3].e[0] +
@@ -482,6 +494,28 @@ static inline f32 determinant_4x4(M4* mat)
 
     return det;
 }
+
+/*
+static inline f32 determinant_4x4(M4* mat)
+{
+    // NOTE(Fermin): Chatgpt says this is row major
+    f32 det;
+    det  = mat->m[3].e[0] * mat->m[2].e[1] * mat->m[1].e[2] * mat->m[0].e[3] - mat->m[2].e[0] * mat->m[3].e[1] * mat->m[1].e[2] * mat->m[0].e[3] -
+           mat->m[3].e[0] * mat->m[1].e[1] * mat->m[2].e[2] * mat->m[0].e[3] + mat->m[1].e[0] * mat->m[3].e[1] * mat->m[2].e[2] * mat->m[0].e[3] +
+           mat->m[2].e[0] * mat->m[1].e[1] * mat->m[3].e[2] * mat->m[0].e[3] - mat->m[1].e[0] * mat->m[2].e[1] * mat->m[3].e[2] * mat->m[0].e[3] -
+           mat->m[3].e[0] * mat->m[2].e[1] * mat->m[0].e[2] * mat->m[1].e[3] + mat->m[2].e[0] * mat->m[3].e[1] * mat->m[0].e[2] * mat->m[1].e[3] +
+           mat->m[3].e[0] * mat->m[0].e[1] * mat->m[2].e[2] * mat->m[1].e[3] - mat->m[0].e[0] * mat->m[3].e[1] * mat->m[2].e[2] * mat->m[1].e[3] -
+           mat->m[2].e[0] * mat->m[0].e[1] * mat->m[3].e[2] * mat->m[1].e[3] + mat->m[0].e[0] * mat->m[2].e[1] * mat->m[3].e[2] * mat->m[1].e[3] +
+           mat->m[3].e[0] * mat->m[1].e[1] * mat->m[0].e[2] * mat->m[2].e[3] - mat->m[1].e[0] * mat->m[3].e[1] * mat->m[0].e[2] * mat->m[2].e[3] -
+           mat->m[3].e[0] * mat->m[0].e[1] * mat->m[1].e[2] * mat->m[2].e[3] + mat->m[0].e[0] * mat->m[3].e[1] * mat->m[1].e[2] * mat->m[2].e[3] +
+           mat->m[1].e[0] * mat->m[0].e[1] * mat->m[3].e[2] * mat->m[2].e[3] - mat->m[0].e[0] * mat->m[1].e[1] * mat->m[3].e[2] * mat->m[2].e[3] -
+           mat->m[2].e[0] * mat->m[1].e[1] * mat->m[0].e[2] * mat->m[3].e[3] + mat->m[1].e[0] * mat->m[2].e[1] * mat->m[0].e[2] * mat->m[3].e[3] +
+           mat->m[2].e[0] * mat->m[0].e[1] * mat->m[1].e[2] * mat->m[3].e[3] - mat->m[0].e[0] * mat->m[2].e[1] * mat->m[1].e[2] * mat->m[3].e[3] -
+           mat->m[1].e[0] * mat->m[0].e[1] * mat->m[2].e[2] * mat->m[3].e[3] + mat->m[0].e[0] * mat->m[1].e[1] * mat->m[2].e[2] * mat->m[3].e[3];
+
+    return det;
+}
+*/
 
 static inline M4 adjoint(M4* mat)
 {

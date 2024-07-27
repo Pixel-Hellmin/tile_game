@@ -116,57 +116,46 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             dude->max_p.x += dude_speed; 
         }
         if(input_state.left_mouse && !last_frame_input_state.left_mouse)
-        //if(input_state.left_mouse)
         {
+            // NOTE(Fermin): Raycasting
             // TODO(Fermin): Intrinsics
-            // TODO(Fermin): Use the acutal z near value
-            //f32 rot_x = tan(input_state.cursor.y/1.0);
-            //f32 rot_y = tan(input_state.cursor.x/1.0);
-            //M4 rotation_y = rotate(-rot_y, V3{0.0, 1.0, 0.0});
-            //M4 rotation_x = rotate(rot_x, V3{1.0, 0.0, 0.0});
-            //V4 front = V4{game_state->camera.front, 1.0};
-            //V3 ray_direction = (rotation_x * rotation_y * front).xyz;
-            V3 origin = game_state->camera.pos + V3{0.0, 0.0, 1.0}; // add z-near
-            //V3 origin = game_state->camera.pos;
+            V3 origin = game_state->camera.pos;
+
+            V4 cursor_pos_ndc = V4{input_state.cursor.x,
+                                   input_state.cursor.y,
+                                   -1.0,
+                                   1.0};
+
+            // NOTE(Fermin): Speed. Calculate the inverse when proj changes?
+            V4 ray_eye = invert(game_state->proj) * cursor_pos_ndc;
+            ray_eye.z = -1.0;
+            ray_eye.w = 0.0;
+
+            V3 ray_world = (invert(game_state->view) * ray_eye).xyz;
+            V3 ray_direction = normalize(ray_world);
+
+            // NOTE(Fermin): Ray equation
+            // NOTE(Fermin): We know the plane we are trying to draw to is on z = 0.0
+            // this may change, be aware
+            f32 plane_z = 0.0;
+            f32 distance_to_end = (plane_z - origin.z) / ray_direction.z;
+            V3 ray_at_z_0 = V3 {origin.x + distance_to_end * ray_direction.x,
+                                origin.y + distance_to_end * ray_direction.y,
+                                0.0};
+
+            /*
             printf("ray origin %.2f, %.2f, %.2f\n", origin.x, origin.y, origin.z);
-
-            V4 cursor_pos_ndc = V4{
-                input_state.cursor.x,
-                input_state.cursor.y,
-                -1.0,
-                1.0
-            };
-            V3 ray_direction = normalize((game_state->proj * cursor_pos_ndc).xyz);
             printf("ray direction %.2f, %.2f, %.2f\n", ray_direction.x, ray_direction.y, ray_direction.z);
+            printf("ray at plane %.2f, %.2f, %.2f\n", ray_at_z_0.x, ray_at_z_0.y, ray_at_z_0.z);
+            */
 
-            f32 ray_length = 20.0f;
-            for(f32 point = 1; point < ray_length;)
-            {
-                V3 point_in_ray = origin + (ray_direction * point);
-                point += 0.1;
-
-                if (point_in_ray.z <= 0.1 && point_in_ray.z >= -0.1)
-                {
-                    printf("HIT -> ");
-                    printf("poit in ray %.2f, %.2f, %.2f\n", point_in_ray.x, point_in_ray.y, point_in_ray.z);
-
-                    Rect *rect = debug_draws + debug->count++;
-                    rect->min_p = point_in_ray * 40.0;
-                    rect->min_p.z = 0.0f;
-                    rect->max_p = point_in_ray * 40.0 + V3{2.0, 2.0, 0.0};
-                    rect->max_p.z = 0.0f;
-                    rect->color = V4{1.0, 0.0, 0.0, 1.0};
-
-                    printf("rect pos min %.2f, %.2f, max %.2f %.2f\n\n",
-                           rect->min_p.x,
-                           rect->min_p.y,
-                           rect->max_p.x,
-                           rect->max_p.y
-                   );
-
-                   break;
-                }
-            }
+            Rect *rect = debug_draws;
+            rect->min_p = ray_at_z_0 * 40.0 - V3{1.0, 1.0, 0.0};
+            rect->min_p.z = 0.0f;
+            rect->max_p = ray_at_z_0 * 40.0 + V3{1.0, 1.0, 0.0};
+            rect->max_p.z = 0.0f;
+            rect->color = V4{1.0, 0.0, 0.0, 1.0};
+            debug->count++;
         }
     }
     else
