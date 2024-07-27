@@ -464,5 +464,71 @@ static inline M4 look_at(V3 pos, V3 target, V3 up)
     return result;
 }
 
+static inline f32 determinant_4x4(M4* mat)
+{
+    f32 det;
+    det  = mat->m[0].e[3] * mat->m[1].e[2] * mat->m[2].e[1] * mat->m[3].e[0] - mat->m[0].e[2] * mat->m[1].e[3] * mat->m[2].e[1] * mat->m[3].e[0] -
+           mat->m[0].e[3] * mat->m[1].e[1] * mat->m[2].e[2] * mat->m[3].e[0] + mat->m[0].e[1] * mat->m[1].e[3] * mat->m[2].e[2] * mat->m[3].e[0] +
+           mat->m[0].e[2] * mat->m[1].e[1] * mat->m[2].e[3] * mat->m[3].e[0] - mat->m[0].e[1] * mat->m[1].e[2] * mat->m[2].e[3] * mat->m[3].e[0] -
+           mat->m[0].e[3] * mat->m[1].e[2] * mat->m[2].e[0] * mat->m[3].e[1] + mat->m[0].e[2] * mat->m[1].e[3] * mat->m[2].e[0] * mat->m[3].e[1] +
+           mat->m[0].e[3] * mat->m[1].e[0] * mat->m[2].e[2] * mat->m[3].e[1] - mat->m[0].e[0] * mat->m[1].e[3] * mat->m[2].e[2] * mat->m[3].e[1] -
+           mat->m[0].e[2] * mat->m[1].e[0] * mat->m[2].e[3] * mat->m[3].e[1] + mat->m[0].e[0] * mat->m[1].e[2] * mat->m[2].e[3] * mat->m[3].e[1] +
+           mat->m[0].e[3] * mat->m[1].e[1] * mat->m[2].e[0] * mat->m[3].e[2] - mat->m[0].e[1] * mat->m[1].e[3] * mat->m[2].e[0] * mat->m[3].e[2] -
+           mat->m[0].e[3] * mat->m[1].e[0] * mat->m[2].e[1] * mat->m[3].e[2] + mat->m[0].e[0] * mat->m[1].e[3] * mat->m[2].e[1] * mat->m[3].e[2] +
+           mat->m[0].e[1] * mat->m[1].e[0] * mat->m[2].e[3] * mat->m[3].e[2] - mat->m[0].e[0] * mat->m[1].e[1] * mat->m[2].e[3] * mat->m[3].e[2] -
+           mat->m[0].e[2] * mat->m[1].e[1] * mat->m[2].e[0] * mat->m[3].e[3] + mat->m[0].e[1] * mat->m[1].e[2] * mat->m[2].e[0] * mat->m[3].e[3] +
+           mat->m[0].e[2] * mat->m[1].e[0] * mat->m[2].e[1] * mat->m[3].e[3] - mat->m[0].e[0] * mat->m[1].e[2] * mat->m[2].e[1] * mat->m[3].e[3] -
+           mat->m[0].e[1] * mat->m[1].e[0] * mat->m[2].e[2] * mat->m[3].e[3] + mat->m[0].e[0] * mat->m[1].e[1] * mat->m[2].e[2] * mat->m[3].e[3];
+
+    return det;
+}
+
+static inline M4 adjoint(M4* mat)
+{
+    M4 adj;
+
+    adj.m[0].e[0] =  mat->m[1].e[1] * (mat->m[2].e[2] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[2]) - mat->m[1].e[2] * (mat->m[2].e[1] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[1]) + mat->m[1].e[3] * (mat->m[2].e[1] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[1]);
+    adj.m[0].e[1] = -mat->m[0].e[1] * (mat->m[2].e[2] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[2]) + mat->m[0].e[2] * (mat->m[2].e[1] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[1]) - mat->m[0].e[3] * (mat->m[2].e[1] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[1]);
+    adj.m[0].e[2] =  mat->m[0].e[1] * (mat->m[1].e[2] * mat->m[3].e[3] - mat->m[1].e[3] * mat->m[3].e[2]) - mat->m[0].e[2] * (mat->m[1].e[1] * mat->m[3].e[3] - mat->m[1].e[3] * mat->m[3].e[1]) + mat->m[0].e[3] * (mat->m[1].e[1] * mat->m[3].e[2] - mat->m[1].e[2] * mat->m[3].e[1]);
+    adj.m[0].e[3] = -mat->m[0].e[1] * (mat->m[1].e[2] * mat->m[2].e[3] - mat->m[1].e[3] * mat->m[2].e[2]) + mat->m[0].e[2] * (mat->m[1].e[1] * mat->m[2].e[3] - mat->m[1].e[3] * mat->m[2].e[1]) - mat->m[0].e[3] * (mat->m[1].e[1] * mat->m[2].e[2] - mat->m[1].e[2] * mat->m[2].e[1]);
+
+    adj.m[1].e[0] = -mat->m[1].e[0] * (mat->m[2].e[2] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[2]) + mat->m[1].e[2] * (mat->m[2].e[0] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[0]) - mat->m[1].e[3] * (mat->m[2].e[0] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[0]);
+    adj.m[1].e[1] =  mat->m[0].e[0] * (mat->m[2].e[2] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[2]) - mat->m[0].e[2] * (mat->m[2].e[0] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[0]) + mat->m[0].e[3] * (mat->m[2].e[0] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[0]);
+    adj.m[1].e[2] = -mat->m[0].e[0] * (mat->m[1].e[2] * mat->m[3].e[3] - mat->m[1].e[3] * mat->m[3].e[2]) + mat->m[0].e[2] * (mat->m[1].e[0] * mat->m[3].e[3] - mat->m[1].e[3] * mat->m[3].e[0]) - mat->m[0].e[3] * (mat->m[1].e[0] * mat->m[3].e[2] - mat->m[1].e[2] * mat->m[3].e[0]);
+    adj.m[1].e[3] =  mat->m[0].e[0] * (mat->m[1].e[2] * mat->m[2].e[3] - mat->m[1].e[3] * mat->m[2].e[2]) - mat->m[0].e[2] * (mat->m[1].e[0] * mat->m[2].e[3] - mat->m[1].e[3] * mat->m[2].e[0]) + mat->m[0].e[3] * (mat->m[1].e[0] * mat->m[2].e[2] - mat->m[1].e[2] * mat->m[2].e[0]);
+
+    adj.m[2].e[0] =  mat->m[1].e[0] * (mat->m[2].e[1] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[1]) - mat->m[1].e[1] * (mat->m[2].e[0] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[0]) + mat->m[1].e[3] * (mat->m[2].e[0] * mat->m[3].e[1] - mat->m[2].e[1] * mat->m[3].e[0]);
+    adj.m[2].e[1] = -mat->m[0].e[0] * (mat->m[2].e[1] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[1]) + mat->m[0].e[1] * (mat->m[2].e[0] * mat->m[3].e[3] - mat->m[2].e[3] * mat->m[3].e[0]) - mat->m[0].e[3] * (mat->m[2].e[0] * mat->m[3].e[1] - mat->m[2].e[1] * mat->m[3].e[0]);
+    adj.m[2].e[2] =  mat->m[0].e[0] * (mat->m[1].e[1] * mat->m[3].e[3] - mat->m[1].e[3] * mat->m[3].e[1]) - mat->m[0].e[1] * (mat->m[1].e[0] * mat->m[3].e[3] - mat->m[1].e[3] * mat->m[3].e[0]) + mat->m[0].e[3] * (mat->m[1].e[0] * mat->m[3].e[1] - mat->m[1].e[1] * mat->m[3].e[0]);
+    adj.m[2].e[3] = -mat->m[0].e[0] * (mat->m[1].e[1] * mat->m[2].e[3] - mat->m[1].e[3] * mat->m[2].e[1]) + mat->m[0].e[1] * (mat->m[1].e[0] * mat->m[2].e[3] - mat->m[1].e[3] * mat->m[2].e[0]) - mat->m[0].e[3] * (mat->m[1].e[0] * mat->m[2].e[1] - mat->m[1].e[1] * mat->m[2].e[0]);
+
+    adj.m[3].e[0] = -mat->m[1].e[0] * (mat->m[2].e[1] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[1]) + mat->m[1].e[1] * (mat->m[2].e[0] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[0]) - mat->m[1].e[2] * (mat->m[2].e[0] * mat->m[3].e[1] - mat->m[2].e[1] * mat->m[3].e[0]);
+    adj.m[3].e[1] =  mat->m[0].e[0] * (mat->m[2].e[1] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[1]) - mat->m[0].e[1] * (mat->m[2].e[0] * mat->m[3].e[2] - mat->m[2].e[2] * mat->m[3].e[0]) + mat->m[0].e[2] * (mat->m[2].e[0] * mat->m[3].e[1] - mat->m[2].e[1] * mat->m[3].e[0]);
+    adj.m[3].e[2] = -mat->m[0].e[0] * (mat->m[1].e[1] * mat->m[3].e[2] - mat->m[1].e[2] * mat->m[3].e[1]) + mat->m[0].e[1] * (mat->m[1].e[0] * mat->m[3].e[2] - mat->m[1].e[2] * mat->m[3].e[0]) - mat->m[0].e[2] * (mat->m[1].e[0] * mat->m[3].e[1] - mat->m[1].e[1] * mat->m[3].e[0]);
+    adj.m[3].e[3] =  mat->m[0].e[0] * (mat->m[1].e[1] * mat->m[2].e[2] - mat->m[1].e[2] * mat->m[2].e[1]) - mat->m[0].e[1] * (mat->m[1].e[0] * mat->m[2].e[2] - mat->m[1].e[2] * mat->m[2].e[0]) + mat->m[0].e[2] * (mat->m[1].e[0] * mat->m[2].e[1] - mat->m[1].e[1] * mat->m[2].e[0]);
+
+    return adj;
+}
+
+static inline M4 invert(M4* mat)
+{
+    f32 det = determinant_4x4(mat);
+    if (det == 0.0f) {
+        fprintf(stderr, "Matrix is singular and cannot be inverted.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    M4 adj = adjoint(mat);
+    M4 inv;
+
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            inv.m[i].e[j] = adj.m[i].e[j] / det;
+        }
+    }
+
+    return inv;
+}
+
 #define MATH_CPP
 #endif

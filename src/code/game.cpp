@@ -7,6 +7,8 @@
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     rects->count = 0;
+    Rect *tiles = (Rect *)rects->buffer.data + rects->count;
+    Rect *debug_draws = (Rect *)debug->buffer.data + debug->count;
 
     // NOTE(Fermi): Draw tile map
     const size_t map_rows = 18;
@@ -36,7 +38,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     i32 tile_width = 40;
     i32 tile_height = 40;
-    Rect *tiles = (Rect *)rects->buffer.data + rects->count;
     for(i32 row = 0; row < map_rows; row++)
     {
         for(i32 col = 0; col < map_cols; col++)
@@ -119,26 +120,52 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             // TODO(Fermin): Intrinsics
             // TODO(Fermin): Use the acutal z near value
-            f32 rot_x = tan(input_state.cursor.y/1.0);
-            f32 rot_y = tan(input_state.cursor.x/1.0);
-            M4 rotation_y = rotate(-rot_y, V3{0.0, 1.0, 0.0});
-            M4 rotation_x = rotate(rot_x, V3{1.0, 0.0, 0.0});
-            V4 front = V4{game_state->camera.front, 1.0};
-            V3 ray_direction = (rotation_x * rotation_y * front).xyz;
-            V3 origin = game_state->camera.pos;
-            //game_state->camera.front = ray_direction;
-            
-            printf("ray direction %.2f, %.2f, %.2f\n", ray_direction.x, ray_direction.y, ray_direction.z);
+            //f32 rot_x = tan(input_state.cursor.y/1.0);
+            //f32 rot_y = tan(input_state.cursor.x/1.0);
+            //M4 rotation_y = rotate(-rot_y, V3{0.0, 1.0, 0.0});
+            //M4 rotation_x = rotate(rot_x, V3{1.0, 0.0, 0.0});
+            //V4 front = V4{game_state->camera.front, 1.0};
+            //V3 ray_direction = (rotation_x * rotation_y * front).xyz;
+            V3 origin = game_state->camera.pos + V3{0.0, 0.0, 1.0}; // add z-near
+            //V3 origin = game_state->camera.pos;
             printf("ray origin %.2f, %.2f, %.2f\n", origin.x, origin.y, origin.z);
 
-            // NOTE(Fermin): This seems correct. NOTE that the coords are in
-            // camera space????
+            V4 cursor_pos_ndc = V4{
+                input_state.cursor.x,
+                input_state.cursor.y,
+                -1.0,
+                1.0
+            };
+            V3 ray_direction = normalize((game_state->proj * cursor_pos_ndc).xyz);
+            printf("ray direction %.2f, %.2f, %.2f\n", ray_direction.x, ray_direction.y, ray_direction.z);
+
             f32 ray_length = 20.0f;
             for(f32 point = 1; point < ray_length;)
             {
                 V3 point_in_ray = origin + (ray_direction * point);
-            printf("poit in ray %.2f, %.2f, %.2f\n", point_in_ray.x, point_in_ray.y, point_in_ray.z);
-                point += 0.5;
+                point += 0.1;
+
+                if (point_in_ray.z <= 0.1 && point_in_ray.z >= -0.1)
+                {
+                    printf("HIT -> ");
+                    printf("poit in ray %.2f, %.2f, %.2f\n", point_in_ray.x, point_in_ray.y, point_in_ray.z);
+
+                    Rect *rect = debug_draws + debug->count++;
+                    rect->min_p = point_in_ray * 40.0;
+                    rect->min_p.z = 0.0f;
+                    rect->max_p = point_in_ray * 40.0 + V3{2.0, 2.0, 0.0};
+                    rect->max_p.z = 0.0f;
+                    rect->color = V4{1.0, 0.0, 0.0, 1.0};
+
+                    printf("rect pos min %.2f, %.2f, max %.2f %.2f\n\n",
+                           rect->min_p.x,
+                           rect->min_p.y,
+                           rect->max_p.x,
+                           rect->max_p.y
+                   );
+
+                   break;
+                }
             }
         }
     }

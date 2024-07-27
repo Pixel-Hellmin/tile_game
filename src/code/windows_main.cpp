@@ -417,7 +417,8 @@ void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection)
     glUseProgram(prog->id);
 
     // NOTE(Fermin): I decided that 1 unit in model space is equial to:
-    f32 px_to_model_space = 50.0f;
+    //f32 px_to_model_space = 50.0f;
+    f32 px_to_model_space = 40.0f;
 
     f32 model_width = (rect->max_p.x - rect->min_p.x)/px_to_model_space;
     f32 model_height = (rect->max_p.y - rect->min_p.y)/px_to_model_space;
@@ -657,11 +658,13 @@ int main()
 
     Game_State game_state = {};
     //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
-    game_state.camera.pos = {0.0f, 0.0f, 5.0f};
+    game_state.camera.pos = {0.0f, 0.0f, 4.0f};
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
     set_flag(&game_state, game_state_flag_prints);
     
+    Render_Buffer debug_persist_rects = {};
+    debug_persist_rects.buffer = allocate_buffer(gigabytes(1));
     Render_Buffer rects = {};
     rects.buffer = allocate_buffer(gigabytes(1));
     u32 rect_cap = gigabytes(1)/sizeof(Rect);
@@ -753,22 +756,32 @@ int main()
         if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
-        game.update_and_render(&rects, &dude, &game_state);
+        f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
+        M4 projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
+
+        M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
+
+        game_state.proj = invert(&(projection * view));
+
+        game.update_and_render(&rects, &dude, &game_state, &debug_persist_rects);
 
         // NOTE(Fermin): Render buffers
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // NOTE(Fermin): Compute this once, and then only when screen dimensions change
-        f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-        M4 projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
-
-        M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
         Rect *tiles = (Rect *)rects.buffer.data;
         for(u32 tile = 0; tile < rects.count; tile++)
         {
             Rect *rect = tiles + tile;
+            draw_rectangle(&draw_rect_prog, rect, &view, &projection);
+        }
+
+        Rect *debugs = (Rect *)debug_persist_rects.buffer.data;
+        for(u32 index = 0; index < debug_persist_rects.count; index++)
+        {
+            Rect *rect = debugs + index;
             draw_rectangle(&draw_rect_prog, rect, &view, &projection);
         }
 
