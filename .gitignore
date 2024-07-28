@@ -2,4 +2,5 @@
 build/
 src/misc/assets
 *.font
+*.pdb
 
