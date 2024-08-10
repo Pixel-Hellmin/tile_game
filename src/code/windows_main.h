@@ -119,6 +119,8 @@ struct Game_State
     Camera camera;
     M4 *proj;
     M4 *view;
+    f32 tile_size_in_meters;
+    b32 initialized;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *rects, Rect *dude, Game_State *game_state, Render_Buffer *debug)

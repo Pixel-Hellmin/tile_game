@@ -413,7 +413,7 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection)
+void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection, f32 tile_size_in_meters)
 {
     // TODO(Fermin): Currently we use a dummy model of a rectangle and
     // transformations to draw the rects. Another option is to upload
@@ -421,20 +421,18 @@ void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection)
     // which is faster
     glUseProgram(prog->id);
 
-    // NOTE(Fermin): I decided that 1 unit in model space is equial to:
-    //f32 px_to_model_space = 50.0f;
-    f32 px_to_model_space = 40.0f;
+    f32 meters_to_model = 1.0f / tile_size_in_meters;
 
-    f32 model_width = (rect->max_p.x - rect->min_p.x)/px_to_model_space;
-    f32 model_height = (rect->max_p.y - rect->min_p.y)/px_to_model_space;
-    f32 half_width = model_width*0.5f;
-    f32 half_height = model_height*0.5f;
+    f32 model_width = (rect->max_p.x - rect->min_p.x) * meters_to_model;
+    f32 model_height = (rect->max_p.y - rect->min_p.y) * meters_to_model;
+    f32 half_width = model_width * 0.5f;
+    f32 half_height = model_height * 0.5f;
 
     // NOTE(Fermin): We want the origin of the rect to be its min_p, we need to
     // translate the rect by width/2 and half/2 in x and y
     M4 translation = translate(V3{
-        rect->min_p.x/px_to_model_space+half_width,
-        rect->min_p.y/px_to_model_space+half_height,
+        rect->min_p.x * meters_to_model + half_width,
+        rect->min_p.y * meters_to_model + half_height,
         0.0
     });
     M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
@@ -656,17 +654,23 @@ int main()
 
 
     // NOTE(Fermin): Game stuff start
-    Rect dude = {};
-    dude.min_p = V3{0.0f, 0.0f, 0.0f};
-    dude.max_p = V3{20.0f, 20.0f, 0.0f};
-    dude.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
-
     Game_State game_state = {};
     //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
     game_state.camera.pos = {0.0f, 0.0f, 4.0f};
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
+    game_state.tile_size_in_meters = 1.0f;
+    game_state.initialized = 0;
     set_flag(&game_state, game_state_flag_prints);
+
+    Rect dude = {};
+    dude.min_p = V3{0.0f, 0.0f, 0.0f};
+    dude.max_p = V3{
+        game_state.tile_size_in_meters/2.0f,
+        game_state.tile_size_in_meters/2.0f,
+        0.0f
+    };
+    dude.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
 
     M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
@@ -712,7 +716,7 @@ int main()
             mouse_enabled = 0;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
 
-            // TODO(Fermin): Feel like this should go in the game.
+            // TODO(Fermin): Feel like this should go in the game
             V3 camera_direction = {};
             camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
             camera_direction.y = sin(radians(camera_pitch));
@@ -780,18 +784,18 @@ int main()
         for(u32 tile = 0; tile < rects.count; tile++)
         {
             Rect *rect = tiles + tile;
-            draw_rectangle(&draw_rect_prog, rect, &view, &projection);
+            draw_rectangle(&draw_rect_prog, rect, &view, &projection, game_state.tile_size_in_meters);
         }
 
         // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
         // Or use a different Z coord for him and use the Z-buffer
-        draw_rectangle(&draw_rect_prog, &dude, &view, &projection);
+        draw_rectangle(&draw_rect_prog, &dude, &view, &projection, game_state.tile_size_in_meters);
 
         Rect *debugs = (Rect *)debug_persist_rects.buffer.data;
         for(u32 index = 0; index < debug_persist_rects.count; index++)
         {
             Rect *rect = debugs + index;
-            draw_rectangle(&draw_rect_prog, rect, &view, &projection);
+            draw_rectangle(&draw_rect_prog, rect, &view, &projection, game_state.tile_size_in_meters);
         }
 
         // NOTE(Fermin): START font render state

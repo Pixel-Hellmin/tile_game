@@ -137,6 +137,13 @@ inline V3 operator*(V3 a, f32 b)
     return result;
 }
 
+inline V3 & operator*=(V3 &a, f32 b)
+{
+    a = a * b;
+
+    return a;
+}
+
 inline V3 operator/(V3 a, f32 b)
 {
     V3 result = {};

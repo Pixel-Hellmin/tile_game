@@ -2,54 +2,88 @@
 
 #include "game.h"
 
+void world_coord_to_tile_index(V3 *world_pos, f32 tile_size_in_meters, i32 *index_x, i32 *index_y)
+{
+    // NOTE(Fermin): For now we assume the world coord is in z = 0 since that's the only plane there's world at
+    assert(tile_size_in_meters != 0.0);
+
+    f32 world_x = world_pos->x;
+    f32 world_y = world_pos->y;
+
+    *index_x = (i32)(world_x / tile_size_in_meters);
+    *index_y = (i32)floor(world_y / tile_size_in_meters); //TODO(Fermin): math.cpp/instrinsics
+}
+
+b32 get_tile(Rect *tiles, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
+{
+    b32 result = 0;
+
+    if(x >= 0 && x < cols &&
+       y >= 0 && y < rows)
+    {
+        // NOTE(Fermin): Since the order the tiles are stored in memory and 
+        // the order of the tile indexes in world are opposite from each other
+        // we need to access tiles from bottom up
+        *out = tiles + (x + (rows - 1)*cols - (y * cols));
+
+        result = 1;
+    }
+
+    return result;
+}
+
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
-    rects->count = 0;
-    Rect *tiles = (Rect *)rects->buffer.data + rects->count;
+    Rect *tiles = (Rect *)rects->buffer.data;
     Rect *debug_draws = (Rect *)debug->buffer.data + debug->count;
 
-    // NOTE(Fermi): Draw tile map
     const size_t map_rows = 18;
     const size_t map_cols = 17;
-    u32 tile_map[map_rows][map_cols] = 
+    f32 tile_size_in_meters = game_state->tile_size_in_meters;
+    if(!game_state->initialized)
     {
-            {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {0, 0, 0, 0,  0, 0, 0, 0,  0, 1, 1, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 1,  1, 1, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 1,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 1, 1, 1,  1, 1, 1, 1,  0, 1, 1, 1,  1, 1, 1, 1, 1},
-
-            {1, 1, 1, 1,  1, 1, 1, 1,  0, 1, 1, 1,  1, 1, 1, 1, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 1,  1, 0, 0, 0, 1}, 
-            {1, 0, 1, 1,  1, 0, 0, 0,  0, 0, 0, 1,  1, 0, 0, 0, 0}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
-            {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}
-    };
-
-    i32 tile_width = 40;
-    i32 tile_height = 40;
-    for(i32 row = 0; row < map_rows; row++)
-    {
-        for(i32 col = 0; col < map_cols; col++)
+        rects->count = 0;
+        u32 tile_map[map_rows][map_cols] = 
         {
-            f32 start_x = col*tile_width;
-            f32 start_y = row*(-tile_height);
+                {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {0, 0, 0, 0,  0, 0, 0, 0,  0, 1, 1, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 1,  1, 1, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 1,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 1, 1, 1,  1, 1, 1, 1,  0, 1, 1, 1,  1, 1, 1, 1, 1},
 
-            Rect *current_tile = tiles + rects->count++;
-            current_tile->min_p = V3{start_x, start_y, 0.0};
-            current_tile->max_p = V3{start_x + tile_width, start_y + tile_height, 0.0};
-            current_tile->color = V4{(f32)tile_map[row][col], 0.0, 1.0, 1.0};
+                {1, 1, 1, 1,  1, 1, 1, 1,  0, 1, 1, 1,  1, 1, 1, 1, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 1,  1, 0, 0, 0, 1}, 
+                {1, 0, 1, 1,  1, 0, 0, 0,  0, 0, 0, 1,  1, 0, 0, 0, 0}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 1}, 
+                {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}
+        };
+
+        // TODO(Fermin): Set this value in game context since it's needed in rendering too
+        for(i32 row = 0; row < map_rows; row++)
+        {
+            for(i32 col = 0; col < map_cols; col++)
+            {
+                f32 start_x = col*tile_size_in_meters;
+                f32 start_y = (map_rows - 1 - row)*tile_size_in_meters;
+
+                Rect *current_tile = tiles + rects->count++;
+                current_tile->min_p = V3{start_x, start_y, 0.0};
+                current_tile->max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
+                current_tile->color = V4{(f32)tile_map[row][col], 0.0, 1.0, 1.0};
+            }
         }
+
+        game_state->initialized = 1;
     }
     
     // NOTE(Fermin): Update dude
@@ -58,7 +92,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     Input_Keys input_state = game_state->input_state;
     Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 delta = game_state->delta;
-    f32 dude_speed = 100.0 * delta;
+    f32 dude_speed = 2.0 * delta;
     f32 camera_speed = 30.0 * delta;
     if(input_state.f1 && !last_frame_input_state.f1)
     {
@@ -139,23 +173,38 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             // this may change, be aware
             f32 plane_z = 0.0;
             f32 distance_to_end = (plane_z - origin.z) / ray_direction.z;
+
+            // NOTE(Fermin): This coords are in 'model' space.
             V3 ray_at_z_0 = V3 {origin.x + distance_to_end * ray_direction.x,
                                 origin.y + distance_to_end * ray_direction.y,
                                 0.0};
+            // NOTE(Fermin): We bring this to world coords
+            ray_at_z_0 *= tile_size_in_meters;
 
-            /*
+            i32 tile_x, tile_y;
+            world_coord_to_tile_index(&ray_at_z_0, tile_size_in_meters, &tile_x, &tile_y);
+
+            // NOTE(Fermin): I dont like having to check if we get a tile, but since this is only for the map editor maybe its ok?
+            Rect *hit;
+            if(get_tile(tiles, map_cols, map_rows, tile_x, tile_y, &hit))
+            {
+                hit->color = V4{0.0, 1.0, 1.0, 1.0};
+            }
+
+
+            /* DEBUG prints and draws
             printf("ray origin %.2f, %.2f, %.2f\n", origin.x, origin.y, origin.z);
             printf("ray direction %.2f, %.2f, %.2f\n", ray_direction.x, ray_direction.y, ray_direction.z);
             printf("ray at plane %.2f, %.2f, %.2f\n", ray_at_z_0.x, ray_at_z_0.y, ray_at_z_0.z);
-            */
 
             Rect *rect = debug_draws;
-            rect->min_p = ray_at_z_0 * 40.0 - V3{1.0, 1.0, 0.0};
+            rect->min_p = ray_at_z_0 - V3{0.05, 0.05, 0.0};
             rect->min_p.z = 0.0f;
-            rect->max_p = ray_at_z_0 * 40.0 + V3{1.0, 1.0, 0.0};
+            rect->max_p = ray_at_z_0 + V3{0.05, 0.05, 0.0};
             rect->max_p.z = 0.0f;
             rect->color = V4{1.0, 0.0, 0.0, 1.0};
             debug->count++;
+            */
         }
     }
     else
