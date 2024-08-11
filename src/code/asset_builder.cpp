@@ -1,11 +1,14 @@
 /*
 * TODO(Fermin): open_file and read_file exist in here and in main.cpp. FIX
 */
+
 #include "windows_main.h"
-#include "buffer.cpp"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 
 static long open_file(FILE **handle, char const *name)
 {
@@ -58,6 +61,7 @@ static Buffer read_file(const char *file_name)
 
     return result;
 }
+
 static void init_fonts()
 {
     Buffer tff_file = read_file("C:/windows/fonts/consola.ttf");
@@ -121,9 +125,32 @@ static void init_fonts()
     fclose(out);
 }
 
+static void generate_texture(char *path)
+{
+    FILE *out = fopen("src\\misc\\assets\\textures\\awesomeface.texture", "wb");
+
+    // NOTE(Fermin): Output expects RGBA
+    i32 width, height, nr_channels;
+    u8 *data = stbi_load(path, &width, &height, &nr_channels, 0); 
+
+    // NOTE(Fermin): File format:
+    // width(i32)height(i32)nr_channers(i32)data
+    fwrite(&width, sizeof(width), 1, out);
+    fwrite(&height, sizeof(height), 1, out);
+    fwrite(&nr_channels, sizeof(nr_channels), 1, out);
+    fwrite(data, width*height*nr_channels, 1, out);
+
+    stbi_image_free(data);
+    fclose(out);
+}
+
 int main()
 {
+    stbi_set_flip_vertically_on_load(true);
+
     init_fonts();
+
+    generate_texture("src\\misc\\assets\\textures\\raw\\awesomeface.png");
 
     return 666;
 }

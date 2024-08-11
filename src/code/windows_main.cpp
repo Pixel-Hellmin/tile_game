@@ -206,12 +206,14 @@ static u32 generate_texture(char *path, u32 format)
 {
     u32 result;
 
-    i32 width, height, nr_channels;
-    u8 *data = stbi_load(path, &width, &height, &nr_channels, 0); 
+    Buffer buffer = read_file(path);
+
+    i32 width =    *(i32 *)buffer.data;
+    i32 height =   *(((i32 *)buffer.data) + 1);
+    i32 channels = *(((i32 *)buffer.data) + 2);
+    u8 *data = buffer.data + sizeof(i32)*3;
 
     result = generate_texture(data, width, height, format);
-
-    stbi_image_free(data);
 
     return result;
 }
@@ -510,10 +512,8 @@ int main()
     // NOTE(Fermin) | End | Init window and opengl
 
     // NOTE(Fermin) | Start | Textures
-    stbi_set_flip_vertically_on_load(true);
-
-    u32 container_id = generate_texture("src\\misc\\assets\\textures\\container.jpg", GL_RGB);
-    u32 awesome_face_id = generate_texture("src\\misc\\assets\\textures\\awesomeface.png", GL_RGBA);
+    //u32 container_id = generate_texture("src\\misc\\assets\\textures\\raw\\container.jpg", GL_RGB);
+    u32 awesome_face_id = generate_texture("src\\misc\\assets\\textures\\awesomeface.texture", GL_RGBA);
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Test fonts start

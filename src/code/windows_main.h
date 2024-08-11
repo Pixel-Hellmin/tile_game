@@ -20,10 +20,6 @@
 #include <GLFW/glfw3.h>
 #include "glad.c"
 
-// NOTE(Fermin): For reading files. In this case textures
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
 typedef int32_t  i32;
 
 typedef uint8_t  u8;

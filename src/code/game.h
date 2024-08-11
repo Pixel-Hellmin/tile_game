@@ -2,6 +2,8 @@
 
 #include "windows_main.h"
 
+#define assert(expression) if(!(expression)) {*(int *)0 = 0;}
+
 inline b32 is_set(Game_State *game_state, u32 flag)
 {
     b32 result = game_state->debug_flags & flag;
