@@ -2,41 +2,11 @@
 
 #include "game.h"
 
-void world_coord_to_tile_index(V3 *world_pos, f32 tile_size_in_meters, i32 *index_x, i32 *index_y)
-{
-    // NOTE(Fermin): For now we assume the world coord is in z = 0 since that's the only plane there's world at
-    assert(tile_size_in_meters != 0.0);
-
-    f32 world_x = world_pos->x;
-    f32 world_y = world_pos->y;
-
-    *index_x = (i32)(world_x / tile_size_in_meters);
-    *index_y = (i32)floor(world_y / tile_size_in_meters); //TODO(Fermin): math.cpp/instrinsics
-}
-
-b32 get_tile(Rect *tiles, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
-{
-    b32 result = 0;
-
-    if(x >= 0 && x < cols &&
-       y >= 0 && y < rows)
-    {
-        // NOTE(Fermin): Since the order the tiles are stored in memory and 
-        // the order of the tile indexes in world are opposite from each other
-        // we need to access tiles from bottom up
-        *out = tiles + (x + (rows - 1)*cols - (y * cols));
-
-        result = 1;
-    }
-
-    return result;
-}
-
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
-    Rect *tiles = (Rect *)rects->buffer.data;
+    Rect *tiles = (Rect *)world_tiles->buffer.data;
     Rect *debug_draws = (Rect *)debug->buffer.data + debug->count;
 
     const size_t map_rows = 18;
@@ -44,7 +14,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     f32 tile_size_in_meters = game_state->tile_size_in_meters;
     if(!game_state->initialized)
     {
-        rects->count = 0;
+        world_tiles->count = 0;
         u32 tile_map[map_rows][map_cols] = 
         {
                 {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}, 
@@ -68,15 +38,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}
         };
 
+        game_state->level_rows = map_rows;
+        game_state->level_cols = map_cols;
+
         // TODO(Fermin): Set this value in game context since it's needed in rendering too
-        for(i32 row = 0; row < map_rows; row++)
+        for(i32 row = 0; row < game_state->level_rows; row++)
         {
-            for(i32 col = 0; col < map_cols; col++)
+            for(i32 col = 0; col < game_state->level_cols; col++)
             {
                 f32 start_x = col*tile_size_in_meters;
-                f32 start_y = (map_rows - 1 - row)*tile_size_in_meters;
+                f32 start_y = (game_state->level_rows - 1 - row)*tile_size_in_meters;
 
-                Rect *current_tile = tiles + rects->count++;
+                Rect *current_tile = tiles + world_tiles->count++;
                 current_tile->min_p = V3{start_x, start_y, 0.0};
                 current_tile->max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
                 current_tile->color = V4{(f32)tile_map[row][col], 0.0, 1.0, 1.0};
@@ -183,13 +156,27 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
             i32 tile_x, tile_y;
             world_coord_to_tile_index(&ray_at_z_0, tile_size_in_meters, &tile_x, &tile_y);
+            if(is_tile_index_valid(tile_x, tile_y, game_state->level_cols, game_state->level_rows))
+            {
+                game_state->editing_tile = 1;
+                game_state->editing_tile_x = tile_x;
+                game_state->editing_tile_y = tile_y;
+            }
+            else
+            {
+                game_state->editing_tile = 0;
+            }
 
+            /*
             // NOTE(Fermin): I dont like having to check if we get a tile, but since this is only for the map editor maybe its ok?
             Rect *hit;
-            if(get_tile(tiles, map_cols, map_rows, tile_x, tile_y, &hit))
+            if(get_tile(tiles,
+                        game_state->level_cols,
+                        game_state->level_rows, tile_x, tile_y, &hit))
             {
                 hit->color = V4{0.0, 1.0, 1.0, 1.0};
             }
+            */
 
 
             /* DEBUG prints and draws

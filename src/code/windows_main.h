@@ -74,6 +74,8 @@ struct Rect
 {
     // NOTE(Fermin): This are drawn as 2d rects, I'm thinking using the Z
     // coord as an indicator of the 'floor' where this rect lives
+    // NOTE(Fermin): Maybe we can just store the tile index and the 
+    // width and height instead of its points
     V3 min_p;
     V3 max_p;
     V4 color;
@@ -109,17 +111,28 @@ struct Camera
 struct Game_State
 {
     f32 delta;
+
     Input_Keys input_state;
     Input_Keys last_frame_input_state;
+
     u32 debug_flags;
+
     Camera camera;
     M4 *proj;
     M4 *view;
     f32 tile_size_in_meters;
+
+    b32 editing_tile;
+    i32 editing_tile_x;
+    i32 editing_tile_y;
+
+    i32 level_rows;
+    i32 level_cols;
+
     b32 initialized;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *rects, Rect *dude, Game_State *game_state, Render_Buffer *debug)
+#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *world_tiles, Rect *dude, Game_State *game_state, Render_Buffer *debug)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {

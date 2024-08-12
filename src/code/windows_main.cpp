@@ -443,13 +443,18 @@ void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection, f32 til
     glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
     glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
     glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
-    glUniform3f(prog->color, rect->color.r, rect->color.g, rect->color.b);
+    glUniform4f(prog->color, rect->color.r, rect->color.g, rect->color.b, rect->color.a);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
     glBindVertexArray(prog->vao);
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
     glUseProgram(0);
+
+    glDisable(GL_BLEND);
 }
 
 int main()
@@ -585,12 +590,12 @@ int main()
 
         layout (location = 0) in vec3 pos;
 
-        out vec3 out_color;
+        out vec4 out_color;
 
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 projection;
-        uniform vec3 in_color;
+        uniform vec4 in_color;
 
         void main()
         {
@@ -602,13 +607,13 @@ int main()
     char *draw_rectangle_fragment_code = R"FOO(
         #version 330 core
 
-        in vec3 out_color;
+        in vec4 out_color;
 
         out vec4 FragColor;
 
         void main()
         {
-           FragColor = vec4(out_color, 1.0f);
+           FragColor = out_color;
         }
     )FOO";
     
@@ -656,7 +661,7 @@ int main()
     // NOTE(Fermin): Game stuff start
     Game_State game_state = {};
     //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
-    game_state.camera.pos = {0.0f, 0.0f, 4.0f};
+    game_state.camera.pos = {10.0f, 10.0f, 25.0f};
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
     game_state.tile_size_in_meters = 1.0f;
@@ -679,8 +684,8 @@ int main()
     
     Render_Buffer debug_persist_rects = {};
     debug_persist_rects.buffer = allocate_buffer(gigabytes(1));
-    Render_Buffer rects = {};
-    rects.buffer = allocate_buffer(gigabytes(1));
+    Render_Buffer world_tiles = {};
+    world_tiles.buffer = allocate_buffer(gigabytes(1));
     u32 rect_cap = gigabytes(1)/sizeof(Rect);
     // NOTE(Fermin): Game stuff end
 
@@ -774,22 +779,19 @@ int main()
         // We need to see how ofter the camera state changes
         view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
-        game.update_and_render(&rects, &dude, &game_state, &debug_persist_rects);
+        game.update_and_render(&world_tiles, &dude, &game_state, &debug_persist_rects);
 
         // NOTE(Fermin): Render buffers
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        Rect *tiles = (Rect *)rects.buffer.data;
-        for(u32 tile = 0; tile < rects.count; tile++)
+        Rect *tiles = (Rect *)world_tiles.buffer.data;
+        for(u32 tile = 0; tile < world_tiles.count; tile++)
         {
             Rect *rect = tiles + tile;
             draw_rectangle(&draw_rect_prog, rect, &view, &projection, game_state.tile_size_in_meters);
         }
 
-        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
-        // Or use a different Z coord for him and use the Z-buffer
-        draw_rectangle(&draw_rect_prog, &dude, &view, &projection, game_state.tile_size_in_meters);
 
         Rect *debugs = (Rect *)debug_persist_rects.buffer.data;
         for(u32 index = 0; index < debug_persist_rects.count; index++)
@@ -797,6 +799,24 @@ int main()
             Rect *rect = debugs + index;
             draw_rectangle(&draw_rect_prog, rect, &view, &projection, game_state.tile_size_in_meters);
         }
+
+        if(game_state.editing_tile)
+        {
+            V3 tile_world_pos = tile_index_to_world_coord(game_state.editing_tile_x,
+                                                          game_state.editing_tile_y,
+                                                          game_state.tile_size_in_meters);
+
+            Rect highlight = {};
+            highlight.min_p = tile_world_pos;
+            highlight.max_p = tile_world_pos + V3{game_state.tile_size_in_meters, game_state.tile_size_in_meters, 0.0};
+            highlight.color = V4{0.3, 0.3, 0.3, 0.3};
+
+            draw_rectangle(&draw_rect_prog, &highlight, &view, &projection, game_state.tile_size_in_meters);
+        }
+        
+        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
+        // Or use a different Z coord for him and use the Z-buffer
+        draw_rectangle(&draw_rect_prog, &dude, &view, &projection, game_state.tile_size_in_meters);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -819,7 +839,7 @@ int main()
         if(is_set(&game_state, game_state_flag_prints))
         {
             // Stop passing all this buffer and program info. Globals for now? then manager
-            _snprintf_s(text_buffer, sizeof(text_buffer), "rects capacity %i/%i)", rects.count, rect_cap);
+            _snprintf_s(text_buffer, sizeof(text_buffer), "world_tiles capacity %i/%i)", world_tiles.count, rect_cap);
             print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
             //f32 dude_x = dude.min_p.x + (dude.max_p.x - dude.min_p.x)/2.0f;
@@ -829,15 +849,25 @@ int main()
             _snprintf_s(text_buffer, sizeof(text_buffer), "dude min (%.2f, %.2f)", dude_x, dude_y);
             print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
-            if(!is_set(&game_state, game_state_flag_free_cam_mode))
+            if(game_state.editing_tile)
             {
-                // NOTE(Fermin): Screen space
-                //_snprintf_s(text_buffer, sizeof(text_buffer), "cursor in cam space (%.2f, %.2f)", last_mouse_x, last_mouse_y);
-                //print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+                Rect *editing;
+                if(get_tile(tiles,
+                            game_state.level_cols,
+                            game_state.level_rows,
+                            game_state.editing_tile_x,
+                            game_state.editing_tile_y,
+                            &editing))
+                {
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
+                    print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
-                // NOTE(Fermin): camera space?
-                _snprintf_s(text_buffer, sizeof(text_buffer), "cursor space(%.4f, %.4f)", game_state.input_state.cursor.x, game_state.input_state.cursor.y);
-                print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "  x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
+                    print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "  rgba: %.2f, %.2f, %.2f, %.2f", editing->color.r, editing->color.g, editing->color.b, editing->color.a);
+                    print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
+                }
             }
         }
 
