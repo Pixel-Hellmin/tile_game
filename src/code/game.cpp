@@ -6,15 +6,15 @@
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
-    Rect *tiles = (Rect *)world_tiles->buffer.data;
-    Rect *debug_draws = (Rect *)debug->buffer.data + debug->count;
+    assert(tiles_buffer->count == tiles_buffer->cached);
 
     const size_t map_rows = 18;
     const size_t map_cols = 17;
     f32 tile_size_in_meters = game_state->tile_size_in_meters;
     if(!game_state->initialized)
     {
-        world_tiles->count = 0;
+        assert(tiles_buffer->count == 0);
+
         u32 tile_map[map_rows][map_cols] = 
         {
                 {1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1}, 
@@ -40,8 +40,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         game_state->level_rows = map_rows;
         game_state->level_cols = map_cols;
-
-        // TODO(Fermin): Set this value in game context since it's needed in rendering too
         for(i32 row = 0; row < game_state->level_rows; row++)
         {
             for(i32 col = 0; col < game_state->level_cols; col++)
@@ -49,19 +47,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 f32 start_x = col*tile_size_in_meters;
                 f32 start_y = (game_state->level_rows - 1 - row)*tile_size_in_meters;
 
-                Rect *current_tile = tiles + world_tiles->count++;
-                current_tile->min_p = V3{start_x, start_y, 0.0};
-                current_tile->max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
-                current_tile->color = V4{(f32)tile_map[row][col], 0.0, 1.0, 1.0};
+                Rect rect = {};
+                rect.min_p = V3{start_x, start_y, 0.0};
+                rect.max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
+                rect.color = V4{(f32)tile_map[row][col], 0.0, 1.0, 1.0};
+                push_rectangle(tiles_buffer, &rect);
             }
         }
 
+        tiles_buffer->cached = tiles_buffer->count;
         game_state->initialized = 1;
     }
     
     // NOTE(Fermin): Update dude
-    // TODO(Fermin): Map each key to an action and make it remapable
-    // TODO(Fermin): Use newtons laws for motion?
     Input_Keys input_state = game_state->input_state;
     Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 delta = game_state->delta;
@@ -166,32 +164,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 game_state->editing_tile = 0;
             }
-
-            /*
-            // NOTE(Fermin): I dont like having to check if we get a tile, but since this is only for the map editor maybe its ok?
-            Rect *hit;
-            if(get_tile(tiles,
-                        game_state->level_cols,
-                        game_state->level_rows, tile_x, tile_y, &hit))
-            {
-                hit->color = V4{0.0, 1.0, 1.0, 1.0};
-            }
-            */
-
-
-            /* DEBUG prints and draws
-            printf("ray origin %.2f, %.2f, %.2f\n", origin.x, origin.y, origin.z);
-            printf("ray direction %.2f, %.2f, %.2f\n", ray_direction.x, ray_direction.y, ray_direction.z);
-            printf("ray at plane %.2f, %.2f, %.2f\n", ray_at_z_0.x, ray_at_z_0.y, ray_at_z_0.z);
-
-            Rect *rect = debug_draws;
-            rect->min_p = ray_at_z_0 - V3{0.05, 0.05, 0.0};
-            rect->min_p.z = 0.0f;
-            rect->max_p = ray_at_z_0 + V3{0.05, 0.05, 0.0};
-            rect->max_p.z = 0.0f;
-            rect->color = V4{1.0, 0.0, 0.0, 1.0};
-            debug->count++;
-            */
         }
     }
     else
@@ -214,6 +186,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
     
+
+    if(game_state->editing_tile)
+    {
+        V3 tile_world_pos = tile_index_to_world_coord(game_state->editing_tile_x,
+                                                      game_state->editing_tile_y,
+                                                      tile_size_in_meters);
+
+        Rect highlight = {};
+        highlight.min_p = tile_world_pos;
+        highlight.max_p = tile_world_pos + V3{tile_size_in_meters, tile_size_in_meters, 0.0};
+        highlight.color = V4{0.3, 0.3, 0.3, 0.3};
+
+        push_rectangle(tiles_buffer, &highlight);
+    }
+    push_rectangle(tiles_buffer, dude);
 
     game_state->last_frame_input_state = input_state;
 }

@@ -1,13 +1,13 @@
 /*
  * TODO(Fermin):
+ * - dude's logic
  * - Investigate FileSystem::getPath("resources/textures/container.jpg"
  * - Global Managers?
  * - Investigate why are the boxes deformed when rotated?
- * - Recalculate projection matrices only when parameters change instead
- *   of every frame
  * - Fix font bearings
- *
  * - Get rid of vc140.pdb when building
+ * - Map each input key to an action and make it remapable
+ * -  Use newtons laws for motion?
 */
 
 #if !defined(MAIN_H)
@@ -67,6 +67,7 @@ struct Render_Buffer
     // NOTE(Fermin): May need to eventually add a type here when
     // we have more than one type of render object
     u32 count;
+    u32 cached;
     Buffer buffer;
 };
 
@@ -80,6 +81,15 @@ struct Rect
     V3 max_p;
     V4 color;
 };
+
+void push_rectangle(Render_Buffer *render_buffer, Rect *rect)
+{
+    // TODO(Fermin): Check capacity, return b32? assert?
+    Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
+    pushed_rect->min_p = rect->min_p;
+    pushed_rect->max_p = rect->max_p;
+    pushed_rect->color = rect->color;
+}
 
 struct Input_Keys
 {
@@ -132,7 +142,7 @@ struct Game_State
     b32 initialized;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *world_tiles, Rect *dude, Game_State *game_state, Render_Buffer *debug)
+#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Rect *dude, Game_State *game_state)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {

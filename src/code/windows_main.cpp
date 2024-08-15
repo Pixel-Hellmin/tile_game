@@ -415,45 +415,48 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangle(Program *prog, Rect *rect, M4 *view, M4 *projection, f32 tile_size_in_meters)
+void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters)
 {
     // TODO(Fermin): Currently we use a dummy model of a rectangle and
     // transformations to draw the rects. Another option is to upload
     // vertices directly using a dynamic buffer object. Test both and see
     // which is faster
     glUseProgram(prog->id);
-
-    f32 meters_to_model = 1.0f / tile_size_in_meters;
-
-    f32 model_width = (rect->max_p.x - rect->min_p.x) * meters_to_model;
-    f32 model_height = (rect->max_p.y - rect->min_p.y) * meters_to_model;
-    f32 half_width = model_width * 0.5f;
-    f32 half_height = model_height * 0.5f;
-
-    // NOTE(Fermin): We want the origin of the rect to be its min_p, we need to
-    // translate the rect by width/2 and half/2 in x and y
-    M4 translation = translate(V3{
-        rect->min_p.x * meters_to_model + half_width,
-        rect->min_p.y * meters_to_model + half_height,
-        0.0
-    });
-    M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
-    M4 model = translation * scale;
-
-    glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
-    glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
-    glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
-    glUniform4f(prog->color, rect->color.r, rect->color.g, rect->color.b, rect->color.a);
-
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
     glBindVertexArray(prog->vao);
 
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    f32 meters_to_model = 1.0f / tile_size_in_meters;
+    Rect *rects = (Rect *)render_buffer->buffer.data;
+    for(u32 index = 0; index < render_buffer->count; index++)
+    {
+        Rect *rect = rects + index;
+
+        f32 model_width = (rect->max_p.x - rect->min_p.x) * meters_to_model;
+        f32 model_height = (rect->max_p.y - rect->min_p.y) * meters_to_model;
+        f32 half_width = model_width * 0.5f;
+        f32 half_height = model_height * 0.5f;
+
+        // NOTE(Fermin): We want the origin of the rect to be its min_p, we need to
+        // translate the rect by width/2 and half/2 in x and y
+        M4 translation = translate(V3{
+            rect->min_p.x * meters_to_model + half_width,
+            rect->min_p.y * meters_to_model + half_height,
+            0.0
+        });
+        M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
+        M4 model = translation * scale;
+
+        glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
+        glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
+        glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
+        glUniform4f(prog->color, rect->color.r, rect->color.g, rect->color.b, rect->color.a);
+
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    }
 
     glUseProgram(0);
-
     glDisable(GL_BLEND);
 }
 
@@ -682,10 +685,8 @@ int main()
     game_state.proj = &projection;
     game_state.view = &view;
     
-    Render_Buffer debug_persist_rects = {};
-    debug_persist_rects.buffer = allocate_buffer(gigabytes(1));
-    Render_Buffer world_tiles = {};
-    world_tiles.buffer = allocate_buffer(gigabytes(1));
+    Render_Buffer tiles_buffer = {};
+    tiles_buffer.buffer = allocate_buffer(gigabytes(1));
     u32 rect_cap = gigabytes(1)/sizeof(Rect);
     // NOTE(Fermin): Game stuff end
 
@@ -695,6 +696,8 @@ int main()
     // NOTE(Fermin): Main Loop
     while(!glfwWindowShouldClose(window))
     {
+        assert(tiles_buffer.count == tiles_buffer.cached);
+
         FILETIME new_dll_write_time = get_last_write_time(src_game_code_dll_full_path);
         if(CompareFileTime(&new_dll_write_time, &game.dll_last_write_time) != 0)
         {
@@ -779,44 +782,12 @@ int main()
         // We need to see how ofter the camera state changes
         view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
-        game.update_and_render(&world_tiles, &dude, &game_state, &debug_persist_rects);
+        game.update_and_render(&tiles_buffer, &dude, &game_state);
 
-        // NOTE(Fermin): Render buffers
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        Rect *tiles = (Rect *)world_tiles.buffer.data;
-        for(u32 tile = 0; tile < world_tiles.count; tile++)
-        {
-            Rect *rect = tiles + tile;
-            draw_rectangle(&draw_rect_prog, rect, &view, &projection, game_state.tile_size_in_meters);
-        }
-
-
-        Rect *debugs = (Rect *)debug_persist_rects.buffer.data;
-        for(u32 index = 0; index < debug_persist_rects.count; index++)
-        {
-            Rect *rect = debugs + index;
-            draw_rectangle(&draw_rect_prog, rect, &view, &projection, game_state.tile_size_in_meters);
-        }
-
-        if(game_state.editing_tile)
-        {
-            V3 tile_world_pos = tile_index_to_world_coord(game_state.editing_tile_x,
-                                                          game_state.editing_tile_y,
-                                                          game_state.tile_size_in_meters);
-
-            Rect highlight = {};
-            highlight.min_p = tile_world_pos;
-            highlight.max_p = tile_world_pos + V3{game_state.tile_size_in_meters, game_state.tile_size_in_meters, 0.0};
-            highlight.color = V4{0.3, 0.3, 0.3, 0.3};
-
-            draw_rectangle(&draw_rect_prog, &highlight, &view, &projection, game_state.tile_size_in_meters);
-        }
-        
-        // NOTE(Fermin): Since we dont sort, we need to draw the dude after the tilemap.
-        // Or use a different Z coord for him and use the Z-buffer
-        draw_rectangle(&draw_rect_prog, &dude, &view, &projection, game_state.tile_size_in_meters);
+        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -839,7 +810,7 @@ int main()
         if(is_set(&game_state, game_state_flag_prints))
         {
             // Stop passing all this buffer and program info. Globals for now? then manager
-            _snprintf_s(text_buffer, sizeof(text_buffer), "world_tiles capacity %i/%i)", world_tiles.count, rect_cap);
+            _snprintf_s(text_buffer, sizeof(text_buffer), "tiles_buffer capacity %i/%i)", tiles_buffer.count, rect_cap);
             print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
             //f32 dude_x = dude.min_p.x + (dude.max_p.x - dude.min_p.x)/2.0f;
@@ -852,6 +823,7 @@ int main()
             if(game_state.editing_tile)
             {
                 Rect *editing;
+                Rect *tiles = (Rect *)tiles_buffer.buffer.data;
                 if(get_tile(tiles,
                             game_state.level_cols,
                             game_state.level_rows,
@@ -896,6 +868,8 @@ int main()
 
         glfwSwapBuffers(window);
         glfwPollEvents();    
+
+        tiles_buffer.count = tiles_buffer.cached;
     }
 
     glDeleteVertexArrays(1, &draw_rect_prog.vao);
