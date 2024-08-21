@@ -2,8 +2,6 @@
 
 #include "windows_main.h"
 
-#define assert(expression) if(!(expression)) {*(int *)0 = 0;}
-
 b32 is_tile_index_valid(i32 x, i32 y, i32 cols, i32 rows)
 {
     b32 result = (x >= 0 && x < cols && y >= 0 && y < rows);

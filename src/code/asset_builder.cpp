@@ -125,13 +125,13 @@ static void init_fonts()
     fclose(out);
 }
 
-static void generate_texture(char *path)
+static void generate_texture(char *raw_path, char *out_path)
 {
-    FILE *out = fopen("src\\misc\\assets\\textures\\awesomeface.texture", "wb");
+    FILE *out = fopen(out_path, "wb");
 
     // NOTE(Fermin): Output expects RGBA
     i32 width, height, nr_channels;
-    u8 *data = stbi_load(path, &width, &height, &nr_channels, 0); 
+    u8 *data = stbi_load(raw_path, &width, &height, &nr_channels, 0); 
 
     // NOTE(Fermin): File format:
     // width(i32)height(i32)nr_channers(i32)data
@@ -150,7 +150,8 @@ int main()
 
     init_fonts();
 
-    generate_texture("src\\misc\\assets\\textures\\raw\\awesomeface.png");
+    generate_texture("src\\misc\\assets\\textures\\raw\\awesomeface.png",
+                     "src\\misc\\assets\\textures\\awesomeface.texture");
 
     return 666;
 }

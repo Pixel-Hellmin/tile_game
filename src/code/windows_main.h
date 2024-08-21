@@ -1,6 +1,8 @@
 /*
  * TODO(Fermin):
- * - dude's logic
+ * - Store tile indices for dude and for highlighted tile in game state instead of 
+ *   what we are doing now. I guess we can follow this logic when we need a tile in the 
+ *   platform layer?
  * - Investigate FileSystem::getPath("resources/textures/container.jpg"
  * - Global Managers?
  * - Investigate why are the boxes deformed when rotated?
@@ -29,6 +31,8 @@ typedef int32_t  b32;
 
 typedef float    f32;
 typedef double   f64;
+
+#define assert(expression) if(!(expression)) {*(int *)0 = 0;}
 
 #define global_variable static
 
@@ -82,13 +86,19 @@ struct Rect
     V4 color;
 };
 
-void push_rectangle(Render_Buffer *render_buffer, Rect *rect)
+u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
 {
-    // TODO(Fermin): Check capacity, return b32? assert?
+
+    u32 result = render_buffer->count;
+
+    assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);
+
     Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
     pushed_rect->min_p = rect->min_p;
     pushed_rect->max_p = rect->max_p;
     pushed_rect->color = rect->color;
+
+    return result;
 }
 
 struct Input_Keys
@@ -132,6 +142,7 @@ struct Game_State
     M4 *view;
     f32 tile_size_in_meters;
 
+    // TODO(Fermin): Store tile index into Render_Buffer instead of this
     b32 editing_tile;
     i32 editing_tile_x;
     i32 editing_tile_y;

@@ -179,7 +179,7 @@ static GLuint build_program(char *vertex_code, char *fragment_code)
 }
 
 // OpenGL
-static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format, u32 internal = GL_RGB)
+static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format)
 {
 
     u32 result;
@@ -194,7 +194,7 @@ static u32 generate_texture(u8 *data, i32 width, i32 height, u32 format, u32 int
 
     if (data)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, internal, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         //glGenerateMipmap(GL_TEXTURE_2D);
     }
 
@@ -275,7 +275,7 @@ static void init_font(Font *font, char *source)
             }
         }
 
-        font->glyph_texture_ids[index] = generate_texture(character_buffer.data, width, height, GL_RED, GL_RED);
+        font->glyph_texture_ids[index] = generate_texture(character_buffer.data, width, height, GL_RED);
 
         free_buffer(&character_buffer);
     }
@@ -415,7 +415,7 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters)
+void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters, u32 texture_id)
 {
     // TODO(Fermin): Currently we use a dummy model of a rectangle and
     // transformations to draw the rects. Another option is to upload
@@ -425,6 +425,7 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
+    glBindTexture(GL_TEXTURE_2D, texture_id);
     glBindVertexArray(prog->vao);
 
     f32 meters_to_model = 1.0f / tile_size_in_meters;
@@ -592,8 +593,10 @@ int main()
         #version 330 core
 
         layout (location = 0) in vec3 pos;
+        layout (location = 1) in vec2 in_tex_coord;
 
         out vec4 out_color;
+        out vec2 out_tex_coord;
 
         uniform mat4 model;
         uniform mat4 view;
@@ -604,6 +607,7 @@ int main()
         {
            gl_Position = projection * view * model * vec4(pos, 1.0);
            out_color = in_color;
+           out_tex_coord = in_tex_coord;
         }
     )FOO";
 
@@ -611,12 +615,16 @@ int main()
         #version 330 core
 
         in vec4 out_color;
+        in vec2 out_tex_coord;
 
         out vec4 FragColor;
 
+        uniform sampler2D sampler;
+
         void main()
         {
-           FragColor = out_color;
+           //FragColor = out_color;
+           FragColor = texture(sampler, out_tex_coord);
         }
     )FOO";
     
@@ -630,10 +638,10 @@ int main()
     draw_rect_prog.color = glGetUniformLocation(draw_rect_prog.id, "in_color");
 
     float rectangle_vertices[] = {
-         0.5f,  0.5f, 0.0f,  // top right
-         0.5f, -0.5f, 0.0f,  // bottom right
-        -0.5f, -0.5f, 0.0f,  // bottom left
-        -0.5f,  0.5f, 0.0f   // top left 
+         0.5f,  0.5f, 0.0f, 1.0f, 1.0f,  // top right
+         0.5f, -0.5f, 0.0f, 1.0f, 0.0f,  // bottom right
+        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,  // bottom left
+        -0.5f,  0.5f, 0.0f, 0.0f, 1.0f   // top left 
     };
     unsigned int rectangle_indices[] = {  // note that we start from 0!
         0, 1, 3,  // first Triangle
@@ -653,8 +661,11 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, draw_rectangle_EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(rectangle_indices), rectangle_indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void*)0);
     glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void*)(3 * sizeof(f32)));
+    glEnableVertexAttribArray(1);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
     glBindVertexArray(0); 
@@ -787,7 +798,7 @@ int main()
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters);
+        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters, awesome_face_id);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
