@@ -147,7 +147,6 @@ struct Program
     GLuint model;
     GLuint view;
     GLuint proj;
-    GLuint color;
     GLuint vao;
 };
 // OpenGL
@@ -415,7 +414,7 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters, u32 texture_id)
+void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters)
 {
     // TODO(Fermin): Currently we use a dummy model of a rectangle and
     // transformations to draw the rects. Another option is to upload
@@ -425,7 +424,6 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
-    glBindTexture(GL_TEXTURE_2D, texture_id);
     glBindVertexArray(prog->vao);
 
     f32 meters_to_model = 1.0f / tile_size_in_meters;
@@ -452,7 +450,7 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
         glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
         glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
         glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
-        glUniform4f(prog->color, rect->color.r, rect->color.g, rect->color.b, rect->color.a);
+        glBindTexture(GL_TEXTURE_2D, rect->texture_id);
 
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     }
@@ -521,8 +519,11 @@ int main()
     // NOTE(Fermin) | End | Init window and opengl
 
     // NOTE(Fermin) | Start | Textures
-    //u32 container_id = generate_texture("src\\misc\\assets\\textures\\raw\\container.jpg", GL_RGB);
-    u32 awesome_face_id = generate_texture("src\\misc\\assets\\textures\\awesomeface.texture", GL_RGBA);
+    u32 floor_texture_id = generate_texture("src\\misc\\assets\\textures\\floor.texture", GL_RGBA);
+    u32 wall_texture_id = generate_texture("src\\misc\\assets\\textures\\wall.texture", GL_RGBA);
+    u32 roof_texture_id = generate_texture("src\\misc\\assets\\textures\\roof.texture", GL_RGBA);
+    u32 highlight_texture_id = generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
+    u32 dude_texture_id = generate_texture("src\\misc\\assets\\textures\\dude.texture", GL_RGBA);
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Test fonts start
@@ -595,18 +596,15 @@ int main()
         layout (location = 0) in vec3 pos;
         layout (location = 1) in vec2 in_tex_coord;
 
-        out vec4 out_color;
         out vec2 out_tex_coord;
 
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 projection;
-        uniform vec4 in_color;
 
         void main()
         {
            gl_Position = projection * view * model * vec4(pos, 1.0);
-           out_color = in_color;
            out_tex_coord = in_tex_coord;
         }
     )FOO";
@@ -614,7 +612,6 @@ int main()
     char *draw_rectangle_fragment_code = R"FOO(
         #version 330 core
 
-        in vec4 out_color;
         in vec2 out_tex_coord;
 
         out vec4 FragColor;
@@ -623,7 +620,6 @@ int main()
 
         void main()
         {
-           //FragColor = out_color;
            FragColor = texture(sampler, out_tex_coord);
         }
     )FOO";
@@ -635,7 +631,6 @@ int main()
     draw_rect_prog.model = glGetUniformLocation(draw_rect_prog.id, "model");
     draw_rect_prog.view = glGetUniformLocation(draw_rect_prog.id, "view");
     draw_rect_prog.proj = glGetUniformLocation(draw_rect_prog.id, "projection");
-    draw_rect_prog.color = glGetUniformLocation(draw_rect_prog.id, "in_color");
 
     float rectangle_vertices[] = {
          0.5f,  0.5f, 0.0f, 1.0f, 1.0f,  // top right
@@ -680,16 +675,20 @@ int main()
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
     game_state.tile_size_in_meters = 1.0f;
     game_state.initialized = 0;
+    game_state.floor_texture_id = floor_texture_id;
+    game_state.wall_texture_id = wall_texture_id;
+    game_state.roof_texture_id = roof_texture_id;
+    game_state.highlight_texture_id = highlight_texture_id;
     set_flag(&game_state, game_state_flag_prints);
 
     Rect dude = {};
     dude.min_p = V3{0.0f, 0.0f, 0.0f};
     dude.max_p = V3{
-        game_state.tile_size_in_meters/2.0f,
-        game_state.tile_size_in_meters/2.0f,
+        game_state.tile_size_in_meters,
+        game_state.tile_size_in_meters,
         0.0f
     };
-    dude.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
+    dude.texture_id = dude_texture_id;
 
     M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
@@ -795,10 +794,11 @@ int main()
 
         game.update_and_render(&tiles_buffer, &dude, &game_state);
 
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters, awesome_face_id);
+        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -848,7 +848,7 @@ int main()
                     _snprintf_s(text_buffer, sizeof(text_buffer), "  x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
                     print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
 
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "  rgba: %.2f, %.2f, %.2f, %.2f", editing->color.r, editing->color.g, editing->color.b, editing->color.a);
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "  texture_id: %i", editing->texture_id);
                     print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
                 }
             }

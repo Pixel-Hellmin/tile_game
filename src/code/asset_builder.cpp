@@ -150,8 +150,17 @@ int main()
 
     init_fonts();
 
-    generate_texture("src\\misc\\assets\\textures\\raw\\awesomeface.png",
-                     "src\\misc\\assets\\textures\\awesomeface.texture");
+    // TODO(Fermin): Just process every png inside this folder
+    generate_texture("src\\misc\\assets\\textures\\raw\\floor.png",
+                     "src\\misc\\assets\\textures\\floor.texture");
+    generate_texture("src\\misc\\assets\\textures\\raw\\wall.png",
+                     "src\\misc\\assets\\textures\\wall.texture");
+    generate_texture("src\\misc\\assets\\textures\\raw\\roof.png",
+                     "src\\misc\\assets\\textures\\roof.texture");
+    generate_texture("src\\misc\\assets\\textures\\raw\\highlight.png",
+                     "src\\misc\\assets\\textures\\highlight.texture");
+    generate_texture("src\\misc\\assets\\textures\\raw\\dude.png",
+                     "src\\misc\\assets\\textures\\dude.texture");
 
     return 666;
 }

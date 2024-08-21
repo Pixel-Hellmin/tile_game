@@ -10,6 +10,7 @@
  * - Get rid of vc140.pdb when building
  * - Map each input key to an action and make it remapable
  * -  Use newtons laws for motion?
+ * - Game_State struct redefinition
 */
 
 #if !defined(MAIN_H)
@@ -79,11 +80,15 @@ struct Rect
 {
     // NOTE(Fermin): This are drawn as 2d rects, I'm thinking using the Z
     // coord as an indicator of the 'floor' where this rect lives
-    // NOTE(Fermin): Maybe we can just store the tile index and the 
-    // width and height instead of its points
+    /* NOTE(Fermin): Is this better?
+    * f32 width;
+    * f32 height;
+    * V3 origin;
+    * u32 tex_id;
+    */
     V3 min_p;
     V3 max_p;
-    V4 color;
+    u32 texture_id;
 };
 
 u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
@@ -96,7 +101,7 @@ u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
     Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
     pushed_rect->min_p = rect->min_p;
     pushed_rect->max_p = rect->max_p;
-    pushed_rect->color = rect->color;
+    pushed_rect->texture_id = rect->texture_id;
 
     return result;
 }
@@ -149,6 +154,11 @@ struct Game_State
 
     i32 level_rows;
     i32 level_cols;
+
+    u32 highlight_texture_id;
+    u32 floor_texture_id;
+    u32 wall_texture_id;
+    u32 roof_texture_id;
 
     b32 initialized;
 };
