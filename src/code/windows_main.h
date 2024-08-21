@@ -86,14 +86,16 @@ struct Rect
     * V3 origin;
     * u32 tex_id;
     */
+    // NOTE(Fermin): If we update this struct remember to also update push_rectangle
     V3 min_p;
     V3 max_p;
     u32 texture_id;
+    f32 rotation;
 };
 
 u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
 {
-
+    // NOTE(Fermin): This is error prone since we have to update this function each time we change Rect struct
     u32 result = render_buffer->count;
 
     assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);
@@ -102,6 +104,7 @@ u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
     pushed_rect->min_p = rect->min_p;
     pushed_rect->max_p = rect->max_p;
     pushed_rect->texture_id = rect->texture_id;
+    pushed_rect->rotation = rect->rotation;
 
     return result;
 }

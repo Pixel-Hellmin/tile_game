@@ -51,6 +51,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 rect.min_p = V3{start_x, start_y, 0.0};
                 rect.max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
 
+                // NOTE(Fermin): Tile rotation needs to be done in this order to override previous rotations
                 if(tile_map[row][col] == 0)
                 {
                     rect.texture_id = game_state->floor_texture_id;
@@ -58,10 +59,44 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 if(tile_map[row][col] == 1)
                 {
                     rect.texture_id = game_state->wall_texture_id;
+
+                    if(row < game_state->level_rows && tile_map[row + 1][col] == 2) // Check bottom tile
+                    {
+                        rect.rotation = Pi32;
+                    }
+                    if(col < game_state->level_cols && tile_map[row][col + 1] == 2) // Check tile to the right
+                    {
+                        rect.rotation = -Pi32/2.0f;
+                    }
+                    if(col > 0 && tile_map[row][col - 1] == 2) // Check tile to the left
+                    {
+                        rect.rotation = Pi32/2.0f;
+                    }
+                    if(row > 0 && tile_map[row - 1][col] == 2) // Check upper tile
+                    {
+                        rect.rotation = 0.0;
+                    }
                 }
                 if(tile_map[row][col] == 2)
                 {
                     rect.texture_id = game_state->roof_texture_id;
+
+                    if(col < game_state->level_cols && tile_map[row][col + 1] == 1) // Check tile to the right
+                    {
+                        rect.rotation = Pi32/2.0f;
+                    }
+                    if(col > 0 && tile_map[row][col - 1] == 1) // Check tile to the left
+                    {
+                        rect.rotation = -Pi32/2.0f;
+                    }
+                    if(row > 0 && tile_map[row - 1][col] == 1) // Check upper tile
+                    {
+                        rect.rotation = Pi32;
+                    }
+                    if(row < game_state->level_rows && tile_map[row + 1][col] == 1) // Check bottom tile
+                    {
+                        rect.rotation = 0.0f;
+                    }
                 }
 
                 push_rectangle(tiles_buffer, &rect);

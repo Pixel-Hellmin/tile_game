@@ -445,7 +445,8 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
             0.0
         });
         M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
-        M4 model = translation * scale;
+        M4 rotation = rotate(rect->rotation, V3{0.0f, 0.0f, 1.0f});
+        M4 model = translation * rotation * scale;
 
         glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
         glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
