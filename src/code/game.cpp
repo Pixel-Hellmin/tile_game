@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <random>
 
 #include "game.h"
 
@@ -38,8 +39,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {2, 2, 2, 2,  2, 2, 2, 2,  2, 2, 2, 2,  2, 2, 2, 2, 2}
         };
 
-        game_state->level_rows = map_rows;
-        game_state->level_cols = map_cols;
+        u32 room_width = 8;
         for(i32 row = 0; row < game_state->level_rows; row++)
         {
             for(i32 col = 0; col < game_state->level_cols; col++)
@@ -50,7 +50,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 Rect rect = {};
                 rect.min_p = V3{start_x, start_y, 0.0};
                 rect.max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
+                if(col % room_width == 0 || row % room_width == 0)
+                {
+                    rect.texture_id = game_state->roof_texture_id;
+                }
+                else
+                {
+                    rect.texture_id = game_state->floor_texture_id;
+                }
 
+                /*
                 // NOTE(Fermin): Tile rotation needs to be done in this order to override previous rotations
                 if(tile_map[row][col] == 0)
                 {
@@ -60,11 +69,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {
                     rect.texture_id = game_state->wall_texture_id;
 
-                    if(row < game_state->level_rows && tile_map[row + 1][col] == 2) // Check bottom tile
+                    if(row < (game_state->level_rows - 1) && tile_map[row + 1][col] == 2) // Check bottom tile
                     {
                         rect.rotation = Pi32;
                     }
-                    if(col < game_state->level_cols && tile_map[row][col + 1] == 2) // Check tile to the right
+                    if(col < (game_state->level_cols - 1) && tile_map[row][col + 1] == 2) // Check tile to the right
                     {
                         rect.rotation = -Pi32/2.0f;
                     }
@@ -81,7 +90,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 {
                     rect.texture_id = game_state->roof_texture_id;
 
-                    if(col < game_state->level_cols && tile_map[row][col + 1] == 1) // Check tile to the right
+                    if(col < (game_state->level_cols - 1) && tile_map[row][col + 1] == 1) // Check tile to the right
                     {
                         rect.rotation = Pi32/2.0f;
                     }
@@ -93,13 +102,145 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     {
                         rect.rotation = Pi32;
                     }
-                    if(row < game_state->level_rows && tile_map[row + 1][col] == 1) // Check bottom tile
+                    if(row < (game_state->level_rows - 1) && tile_map[row + 1][col] == 1) // Check bottom tile
                     {
                         rect.rotation = 0.0f;
                     }
                 }
+                */
 
                 push_rectangle(tiles_buffer, &rect);
+            }
+        }
+
+        // NOTE(Fermin): DEBUG test maze gen algorithm (aldous-broder)
+        const size_t test_rows = 5;
+        const size_t test_cols = 5;
+
+        assert(test_rows == game_state->level_rows / room_width);
+        assert(test_cols == game_state->level_cols / room_width);
+
+        u32 rooms[test_rows][test_cols] = {};
+        u32 visited = 0;
+        u32 current_x = 0;
+        u32 current_y = 0;
+        std::random_device rd;
+        std::default_random_engine generator(rd()); // TODO(Fermin): Use OS RNG
+        std::uniform_int_distribution<int> distribution(0,3);
+        i32 direction = -1;
+        while (visited < test_rows*test_cols)
+        {
+            u32 *current_room = &rooms[current_y][current_x];
+            if(*current_room == 0)
+            {
+                *current_room = 1;
+                visited++;
+
+                printf("\n");
+                for(u32 r = 0; r < test_rows; r++)
+                {
+                    for(u32 c = 0; c < test_cols; c++)
+                    {
+                        printf("%i ", rooms[r][c]);
+                    }
+                    printf("\n");
+                }
+
+                if(direction != -1)
+                {
+                    switch(direction)
+                    {
+                        case(0): // Remove top wall
+                        {
+                            i32 tile_x = current_x * room_width;
+                            i32 tile_y = current_y * room_width;
+                            Rect *rect;
+                            for(u32 i = 1; i < room_width; i++)
+                            {
+                                i32 x_index = tile_x + i;
+                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, x_index, tile_y, &rect))
+                                {
+                                        rect->texture_id = game_state->floor_texture_id;
+                                }
+                            }
+                        } break;
+                        case(1): // Remove left wall
+                        {
+                            i32 tile_x = current_x * room_width;
+                            i32 tile_y = current_y * room_width;
+                            Rect *rect;
+                            for(u32 i = 1; i < room_width; i++)
+                            {
+                                i32 y_index = tile_y + i;
+                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, tile_x, y_index, &rect))
+                                {
+                                        rect->texture_id = game_state->floor_texture_id;
+                                }
+                            }
+                        } break;
+                        case(2): // Remove bottom wall
+                        {
+                            i32 tile_x = current_x * room_width;
+                            i32 tile_y = current_y * room_width + room_width;
+                            Rect *rect;
+                            for(u32 i = 1; i < room_width; i++)
+                            {
+                                i32 x_index = tile_x + i;
+                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, x_index, tile_y, &rect))
+                                {
+                                        rect->texture_id = game_state->floor_texture_id;
+                                }
+                            }
+                        } break;
+                        case(3):  // Remove right wall
+                        {
+                            i32 tile_x = current_x * room_width + room_width;
+                            i32 tile_y = current_y * room_width;
+                            Rect *rect;
+                            for(u32 i = 1; i < room_width; i++)
+                            {
+                                i32 y_index = tile_y + i;
+                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, tile_x, y_index, &rect))
+                                {
+                                        rect->texture_id = game_state->floor_texture_id;
+                                }
+                            }
+                        } break;
+                    }
+                }
+            }
+
+            direction = distribution(generator); 
+            switch(direction)
+            {
+                case(0): // Bottom
+                {
+                    if(current_y < (test_rows - 1))
+                    {
+                        current_y++;
+                    }
+                } break;
+                case(1): // Right
+                {
+                    if(current_x < (test_cols - 1))
+                    {
+                        current_x++;
+                    }
+                } break;
+                case(2): // Top
+                {
+                    if(current_y > 0)
+                    {
+                        current_y--;
+                    }
+                } break;
+                case(3):  // Left
+                {
+                    if(current_x > 0)
+                    {
+                        current_x--;
+                    }
+                } break;
             }
         }
 

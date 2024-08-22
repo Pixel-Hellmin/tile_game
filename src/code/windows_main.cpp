@@ -675,7 +675,8 @@ int main()
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
     game_state.tile_size_in_meters = 1.0f;
-    game_state.initialized = 0;
+    game_state.level_rows = 41;
+    game_state.level_cols = 41;
     game_state.floor_texture_id = floor_texture_id;
     game_state.wall_texture_id = wall_texture_id;
     game_state.roof_texture_id = roof_texture_id;
@@ -715,6 +716,11 @@ int main()
             unload_game_code(&game);
             game = load_game_code(src_game_code_dll_full_path,
                                   tmp_game_code_dll_full_path);
+
+            // NOTE(Fermin): We regenerate maze when reloading for easy testing
+            game_state.initialized = 0;
+            tiles_buffer.count = 0;
+            tiles_buffer.cached = 0;
         }
 
         f32 current_frame = glfwGetTime();
