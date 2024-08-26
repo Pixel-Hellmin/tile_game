@@ -675,8 +675,8 @@ int main()
     game_state.camera.up = {0.0f, 1.0f, 0.0f};
     game_state.camera.front = {0.0f, 0.0f, -1.0f};
     game_state.tile_size_in_meters = 1.0f;
-    game_state.level_rows = 41;
-    game_state.level_cols = 41;
+    game_state.level_rows = 8 * 8 + 1;
+    game_state.level_cols = 8 * 8 + 1;
     game_state.floor_texture_id = floor_texture_id;
     game_state.wall_texture_id = wall_texture_id;
     game_state.roof_texture_id = roof_texture_id;
@@ -841,8 +841,7 @@ int main()
             if(game_state.editing_tile)
             {
                 Rect *editing;
-                Rect *tiles = (Rect *)tiles_buffer.buffer.data;
-                if(get_tile(tiles,
+                if(get_tile(&tiles_buffer.buffer,
                             game_state.level_cols,
                             game_state.level_rows,
                             game_state.editing_tile_x,

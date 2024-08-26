@@ -3,6 +3,21 @@
 
 #include "game.h"
 
+void set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Render_Buffer *render_buffer)
+{
+    Rect *rect;
+    for(u32 x = x_start; x <= x_end; x++)
+    {
+        for(u32 y = y_start; y <= y_end; y++)
+        {
+            if(get_tile(&render_buffer->buffer, cols, rows, x, y, &rect))
+            {
+                rect->texture_id = texture_id;
+            }
+        }
+    }
+}
+
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -44,6 +59,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             for(i32 col = 0; col < game_state->level_cols; col++)
             {
+                // NOTE(Fermin): Currently this only draws a grid, which will be turned into a maze later
                 f32 start_x = col*tile_size_in_meters;
                 f32 start_y = (game_state->level_rows - 1 - row)*tile_size_in_meters;
 
@@ -59,7 +75,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     rect.texture_id = game_state->floor_texture_id;
                 }
 
-                /*
+                /* This draws the tile map
                 // NOTE(Fermin): Tile rotation needs to be done in this order to override previous rotations
                 if(tile_map[row][col] == 0)
                 {
@@ -114,133 +130,95 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         // NOTE(Fermin): DEBUG test maze gen algorithm (aldous-broder)
-        const size_t test_rows = 5;
-        const size_t test_cols = 5;
+        // Organize data in a way its coherent with the game state
+        const size_t test_rows = 8;
+        const size_t test_cols = 8;
 
         assert(test_rows == game_state->level_rows / room_width);
         assert(test_cols == game_state->level_cols / room_width);
 
+        // TODO(Fermin): Use OS RNG
+        std::random_device rd;
+        std::default_random_engine generator(rd());
+        std::uniform_int_distribution<int> distribution(0,3);
+
         u32 rooms[test_rows][test_cols] = {};
         u32 visited = 0;
-        u32 current_x = 0;
-        u32 current_y = 0;
-        std::random_device rd;
-        std::default_random_engine generator(rd()); // TODO(Fermin): Use OS RNG
-        std::uniform_int_distribution<int> distribution(0,3);
-        i32 direction = -1;
-        while (visited < test_rows*test_cols)
+        u32 current_x = test_rows / 2;
+        u32 current_y = test_cols / 2;
+        i32 direction;
+        i32 x_start;
+        i32 x_end;
+        i32 y_start;
+        i32 y_end;
+        while (visited < test_rows * test_cols)
         {
-            u32 *current_room = &rooms[current_y][current_x];
-            if(*current_room == 0)
-            {
-                *current_room = 1;
-                visited++;
-
-                printf("\n");
-                for(u32 r = 0; r < test_rows; r++)
-                {
-                    for(u32 c = 0; c < test_cols; c++)
-                    {
-                        printf("%i ", rooms[r][c]);
-                    }
-                    printf("\n");
-                }
-
-                if(direction != -1)
-                {
-                    switch(direction)
-                    {
-                        case(0): // Remove top wall
-                        {
-                            i32 tile_x = current_x * room_width;
-                            i32 tile_y = current_y * room_width;
-                            Rect *rect;
-                            for(u32 i = 1; i < room_width; i++)
-                            {
-                                i32 x_index = tile_x + i;
-                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, x_index, tile_y, &rect))
-                                {
-                                        rect->texture_id = game_state->floor_texture_id;
-                                }
-                            }
-                        } break;
-                        case(1): // Remove left wall
-                        {
-                            i32 tile_x = current_x * room_width;
-                            i32 tile_y = current_y * room_width;
-                            Rect *rect;
-                            for(u32 i = 1; i < room_width; i++)
-                            {
-                                i32 y_index = tile_y + i;
-                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, tile_x, y_index, &rect))
-                                {
-                                        rect->texture_id = game_state->floor_texture_id;
-                                }
-                            }
-                        } break;
-                        case(2): // Remove bottom wall
-                        {
-                            i32 tile_x = current_x * room_width;
-                            i32 tile_y = current_y * room_width + room_width;
-                            Rect *rect;
-                            for(u32 i = 1; i < room_width; i++)
-                            {
-                                i32 x_index = tile_x + i;
-                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, x_index, tile_y, &rect))
-                                {
-                                        rect->texture_id = game_state->floor_texture_id;
-                                }
-                            }
-                        } break;
-                        case(3):  // Remove right wall
-                        {
-                            i32 tile_x = current_x * room_width + room_width;
-                            i32 tile_y = current_y * room_width;
-                            Rect *rect;
-                            for(u32 i = 1; i < room_width; i++)
-                            {
-                                i32 y_index = tile_y + i;
-                                if(get_tile((Rect *)tiles_buffer->buffer.data, game_state->level_cols, game_state->level_rows, tile_x, y_index, &rect))
-                                {
-                                        rect->texture_id = game_state->floor_texture_id;
-                                }
-                            }
-                        } break;
-                    }
-                }
-            }
-
             direction = distribution(generator); 
             switch(direction)
             {
-                case(0): // Bottom
+                case(0): // Move bottom of current room
                 {
                     if(current_y < (test_rows - 1))
                     {
                         current_y++;
+
+                        // Remove top wall
+                        x_start = current_x * room_width + 1;
+                        x_end = x_start + room_width - 2;
+                        y_start = current_y * room_width;
+                        y_end = y_start;
                     }
                 } break;
-                case(1): // Right
+                case(1): // Move right of current room
                 {
                     if(current_x < (test_cols - 1))
                     {
                         current_x++;
+
+                        // Remove left wall
+                        x_start = current_x * room_width;
+                        x_end = x_start;
+                        y_start = current_y * room_width + 1;
+                        y_end = y_start + room_width - 2;
                     }
                 } break;
-                case(2): // Top
+                case(2): // Move top of current room
                 {
                     if(current_y > 0)
                     {
                         current_y--;
+
+                        // Remove bottom wall
+                        x_start = current_x * room_width + 1;
+                        x_end = x_start + room_width - 2;
+                        y_start = current_y * room_width + room_width;
+                        y_end = y_start;
                     }
                 } break;
-                case(3):  // Left
+                case(3):  // Move left of current room
                 {
                     if(current_x > 0)
                     {
                         current_x--;
+
+                        // Remove right wall
+                        x_start = current_x * room_width + room_width;
+                        x_end = x_start;
+                        y_start = current_y * room_width + 1;
+                        y_end = y_start + room_width - 2;
                     }
                 } break;
+            }
+
+            u32 current_room = rooms[current_y][current_x];
+            if(current_room == 0)
+            {
+                // NOTE(Fermin): If this room hasn't been visited before, remove wall
+                set_texture_to_tile_range(x_start, x_end, y_start, y_end, game_state->floor_texture_id,
+                                          game_state->level_cols, game_state->level_rows, tiles_buffer);
+
+                rooms[current_y][current_x] = 1;
+                visited++;
             }
         }
 

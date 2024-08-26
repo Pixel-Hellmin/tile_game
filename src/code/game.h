@@ -11,7 +11,7 @@ b32 is_tile_index_valid(i32 x, i32 y, i32 cols, i32 rows)
     return result;
 }
 
-b32 get_tile(Rect *tiles, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
+b32 get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
 {
     b32 result = 0;
 
@@ -24,6 +24,7 @@ b32 get_tile(Rect *tiles, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
         *out = tiles + (x + (rows - 1)*cols - (y * cols));
         */
 
+        Rect *tiles = (Rect *)buffer->data;
         *out = tiles + x + y * cols;
         result = 1;
     }
