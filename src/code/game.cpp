@@ -429,6 +429,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             game_state->camera.pos += normalize(cross(game_state->camera.front, game_state->camera.up)) * camera_speed;
         }
     }
+
+    if(!is_set(game_state, game_state_flag_free_cam_mode))
+    {
+            game_state->camera.pos = dude->min_p;
+            game_state->camera.pos.z += 15.0f;
+    }
     
 
     if(game_state->editing_tile)
