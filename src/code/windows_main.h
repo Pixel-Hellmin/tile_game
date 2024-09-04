@@ -96,6 +96,8 @@ struct Rect
 u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
 {
     // NOTE(Fermin): This is error prone since we have to update this function each time we change Rect struct
+    assert(sizeof(Rect) == 32);
+
     u32 result = render_buffer->count;
 
     assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);

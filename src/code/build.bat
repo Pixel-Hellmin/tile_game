@@ -36,7 +36,7 @@ REM delete pdbs each compilation since we make a new one each time we compile fo
 del build\*.pdb > NUL 2> NUL
 
 call cl %CommonCompilerFlags% /Febuild\asset_builder.exe src\code\asset_builder.cpp  /link %CommonLinkerFlags% 
-call cl %CommonCompilerFlags% src\code\game.cpp -LD /link /IMPLIB:build\game.lib /OUT:build\game.dll -incremental:no -opt:ref -PDB:build\game_%date:~-8,2%%date:~-5,2%%date:~-2,2%_%time:~-11,2%%time:~-8,2%%time:~-5,2%%time:~-2,2%.pdb -EXPORT:game_update_and_render
+call cl %CommonCompilerFlags% src\code\game.cpp -LD /link /IMPLIB:build\game.lib /OUT:build\game.dll -incremental:no -opt:ref -PDB:build\game_%random%.pdb -EXPORT:game_update_and_render
 call cl %CommonCompilerFlags% /Febuild\windows_main_debug.exe src\code\windows_main.cpp  /link %CommonLinkerFlags% 
 call cl -O2 %CommonCompilerFlags% /Febuild\windows_main_release.exe src\code\windows_main.cpp  /link %CommonLinkerFlags% 
 REM del lock.tmp
