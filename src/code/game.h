@@ -4,7 +4,7 @@
 
 #define array_count(array) (sizeof(array) / sizeof((array)[0]))
 
-b32 is_tile_index_valid(i32 x, i32 y, i32 cols, i32 rows)
+inline b32 is_tile_index_valid(i32 x, i32 y, i32 cols, i32 rows)
 {
     b32 result = (x >= 0 && x < cols && y >= 0 && y < rows);
 
@@ -17,7 +17,7 @@ b32 get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
 
     if(is_tile_index_valid(x, y, cols, rows))
     {
-        /*
+        /* ????????????????????
         // NOTE(Fermin): Since the order the tiles are stored in memory and 
         // the order of the tile indexes in world are opposite from each other
         // we need to access tiles from bottom up

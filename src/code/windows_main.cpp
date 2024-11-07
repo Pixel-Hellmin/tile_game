@@ -516,15 +516,14 @@ int main()
     glfwSetScrollCallback(window, scroll_callback); 
 
     glfwSwapInterval(1); // V sync (0 = off, 1 = on)
-
     // NOTE(Fermin) | End | Init window and opengl
 
     // NOTE(Fermin) | Start | Textures
-    u32 floor_texture_id = generate_texture("src\\misc\\assets\\textures\\floor.texture", GL_RGBA);
-    u32 wall_texture_id = generate_texture("src\\misc\\assets\\textures\\wall.texture", GL_RGBA);
-    u32 roof_texture_id = generate_texture("src\\misc\\assets\\textures\\roof.texture", GL_RGBA);
+    u32 floor_texture_id     = generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
+    u32 wall_texture_id      = generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
+    u32 roof_texture_id      = generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
     u32 highlight_texture_id = generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-    u32 dude_texture_id = generate_texture("src\\misc\\assets\\textures\\dude.texture", GL_RGBA);
+    u32 dude_texture_id      = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
     // NOTE(Fermin) | End | Texture
 
     // NOTE(Fermin): Test fonts start
@@ -630,8 +629,8 @@ int main()
                                       draw_rectangle_fragment_code);
 
     draw_rect_prog.model = glGetUniformLocation(draw_rect_prog.id, "model");
-    draw_rect_prog.view = glGetUniformLocation(draw_rect_prog.id, "view");
-    draw_rect_prog.proj = glGetUniformLocation(draw_rect_prog.id, "projection");
+    draw_rect_prog.view  = glGetUniformLocation(draw_rect_prog.id, "view");
+    draw_rect_prog.proj  = glGetUniformLocation(draw_rect_prog.id, "projection");
 
     float rectangle_vertices[] = {
          0.5f,  0.5f, 0.0f, 1.0f, 1.0f,  // top right
@@ -665,22 +664,30 @@ int main()
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
     glBindVertexArray(0); 
-    // NOTE(Fermin): Game things end
 
-
-    // NOTE(Fermin): Game stuff start
     Game_State game_state = {};
+
     //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
-    game_state.camera.pos = {10.0f, 10.0f, 25.0f};
-    game_state.camera.up = {0.0f, 1.0f, 0.0f};
-    game_state.camera.front = {0.0f, 0.0f, -1.0f};
+    game_state.camera.pos   = {10.0f, 10.0f, 25.0f};
+    game_state.camera.up    = { 0.0f,  1.0f,  0.0f};
+    game_state.camera.front = { 0.0f,  0.0f, -1.0f};
+
+    M4 view = look_at(game_state.camera.pos,
+                      game_state.camera.pos + game_state.camera.front,
+                      game_state.camera.up);
+
     game_state.tile_size_in_meters = 1.0f;
-    game_state.level_rows = 8 * 8 + 1;
-    game_state.level_cols = 8 * 8 + 1;
-    game_state.floor_texture_id = floor_texture_id;
-    game_state.wall_texture_id = wall_texture_id;
-    game_state.roof_texture_id = roof_texture_id;
+    game_state.level_rows = 8 * 8;
+    game_state.level_cols = 8 * 8;
+
+    game_state.floor_texture_id     = floor_texture_id;
+    game_state.wall_texture_id      = wall_texture_id;
+    game_state.roof_texture_id      = roof_texture_id;
     game_state.highlight_texture_id = highlight_texture_id;
+
+    game_state.proj = &projection;
+    game_state.view = &view;
+    
     set_flag(&game_state, game_state_flag_prints);
 
     Rect dude = {};
@@ -692,21 +699,18 @@ int main()
     };
     dude.texture_id = dude_texture_id;
 
-    M4 view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
 
-    game_state.proj = &projection;
-    game_state.view = &view;
-    
+    // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
     Render_Buffer tiles_buffer = {};
     tiles_buffer.buffer = allocate_buffer(gigabytes(1));
     u32 rect_cap = gigabytes(1)/sizeof(Rect);
-    // NOTE(Fermin): Game stuff end
+    // NOTE(Fermin): Game things end
 
     f32 delta_time = 0.0f;
     f32 last_frame = 0.0f;
 
     // NOTE(Fermin): Main Loop
-    while(!glfwWindowShouldClose(window))
+    while(!glfwWindowShouldClose(window)) //TODO(Fermin): Global: 'Running'
     {
         assert(tiles_buffer.count == tiles_buffer.cached);
 
@@ -741,7 +745,7 @@ int main()
             mouse_enabled = 0;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
 
-            // TODO(Fermin): Feel like this should go in the game
+            // TODO(Fermin): Feel like this should go in the game.
             V3 camera_direction = {};
             camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
             camera_direction.y = sin(radians(camera_pitch));
@@ -752,6 +756,7 @@ int main()
         game_state.input_state.cursor.x = last_mouse_x/screen_width + (last_mouse_x - screen_width)/screen_width;
         game_state.input_state.cursor.y = -1.0 * (last_mouse_y/screen_height + (last_mouse_y - screen_height)/screen_height);
 
+        // TODO(Fermin): No need for ifs, just assign check directly to key state?
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             game_state.input_state.w = 1;
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE)
@@ -797,7 +802,9 @@ int main()
 
         // TODO(Fermin): Where is it convinient to update this matrix?
         // We need to see how ofter the camera state changes
-        view = look_at(game_state.camera.pos, game_state.camera.pos + game_state.camera.front, game_state.camera.up);
+        view = look_at(game_state.camera.pos,
+                       game_state.camera.pos + game_state.camera.front,
+                       game_state.camera.up);
 
         game.update_and_render(&tiles_buffer, &dude, &game_state);
 
@@ -805,6 +812,7 @@ int main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // TODO(Fermin): Consider the parameters to this function and see if the current structs make sense
         draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters);
 
         // NOTE(Fermin): START font render state
@@ -815,6 +823,7 @@ int main()
 
         glUseProgram(font_program_id);
 
+        // NOTE(Fermin): We can store this matrix outside the loop and recalculate when screen dimentions change
         M4 font_projection = orthogonal(0.0f, screen_width, 0.0f, screen_height, -1.0f, 1000.0f);
         u32 font_projection_loc = glGetUniformLocation(font_program_id, "projection");
         glUniformMatrix4fv(font_projection_loc, 1, GL_FALSE, font_projection.e);
@@ -840,6 +849,7 @@ int main()
 
             if(game_state.editing_tile)
             {
+                // NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
                 Rect *editing;
                 if(get_tile(&tiles_buffer.buffer,
                             game_state.level_cols,
@@ -886,6 +896,7 @@ int main()
         glfwSwapBuffers(window);
         glfwPollEvents();    
 
+        // TODO(Fermin): Double check this assignment makes sense here. (Theres an assert at the start of the loop)
         tiles_buffer.count = tiles_buffer.cached;
     }
 

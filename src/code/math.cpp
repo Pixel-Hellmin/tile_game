@@ -39,6 +39,40 @@ union V2
     f32 e[2];
 };
 
+inline V2 operator+(V2 a, V2 b)
+{
+    V2 result = {};
+
+    result.x = a.x + b.x;
+    result.y = a.y + b.y;
+
+    return result;
+}
+
+inline V2 operator-(V2 a, V2 b)
+{
+    V2 result = {};
+
+    result.x = a.x - b.x;
+    result.y = a.y - b.y;
+
+    return result;
+}
+
+inline V2 & operator+=(V2 &a, V2 b)
+{
+    a = a + b;
+
+    return a;
+}
+
+inline V2 & operator-=(V2 &a, V2 b)
+{
+    a = a - b;
+
+    return a;
+}
+
 /*
 * V3
 */

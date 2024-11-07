@@ -61,28 +61,28 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 // NOTE(Fermin): Currently this only draws a grid, which will be turned into a maze later
                 f32 start_x = col*tile_size_in_meters;
-                f32 start_y = (game_state->level_rows - 1 - row)*tile_size_in_meters;
+                f32 start_y = row*tile_size_in_meters;
 
                 Rect rect = {};
                 rect.min_p = V3{start_x, start_y, 0.0};
                 rect.max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
 
-                // NOTE(Fermin): From left to right and up to down
+                // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
                 // TODO(Fermin): Corner textures
                 // TODO(Fermin): b32 for checks?
-                if(col % room_width == 0 || row % room_width == 0) // To build a grid before a maze
+                if(col % room_width == 0 || row % room_width == 0 || col == game_state->level_cols - 1 || row == game_state->level_rows - 1) // To build a grid before a maze
                 {
                     rect.texture_id = game_state->roof_texture_id;
 
-                    if(col % game_state->level_cols == 0) // First col
+                    if(col == 0) // First col
                     {
                         rect.rotation = Pi32/2.0f;
                     }
-                    else if(col % game_state->level_cols == game_state->level_cols - 1) // Last col
+                    else if(col == game_state->level_cols - 1) // Last col
                     {
                         rect.rotation = -Pi32/2.0f;
                     }
-                    else if(row == game_state->level_rows - 1) // Last row
+                    else if(row == 0) // First row
                     {
                         rect.rotation = Pi32;
                     }
@@ -90,18 +90,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 else if(row == 1) // Second row
                 {
                     rect.texture_id = game_state->wall_texture_id;
+                    rect.rotation = Pi32;
                 }
                 else if(row == game_state->level_rows - 2) // Second to last row
                 {
                     rect.texture_id = game_state->wall_texture_id;
-                    rect.rotation = Pi32;
                 }
-                else if(col % game_state->level_cols == 1) // Second col
+                else if(col == 1) // Second col
                 {
                     rect.texture_id = game_state->wall_texture_id;
                     rect.rotation = Pi32/2.0f;
                 }
-                else if(col % game_state->level_cols == game_state->level_cols - 2) // Second to last col
+                else if(col == game_state->level_cols - 2) // Second to last col
                 {
                     rect.texture_id = game_state->wall_texture_id;
                     rect.rotation = -Pi32/2.0f;
@@ -111,7 +111,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     rect.texture_id = game_state->floor_texture_id;
                 }
 
-                /* This draws the tile map
+                /* This draws the hardcoded tile map
                 // NOTE(Fermin): Tile rotation needs to be done in this order to override previous rotations
                 if(tile_map[row][col] == 0)
                 {
@@ -167,47 +167,49 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         // NOTE(Fermin): DEBUG test maze gen algorithm (aldous-broder)
         // Organize data in a way its coherent with the game state
-        const size_t test_rows = 8;
-        const size_t test_cols = 8;
+        // NOTE(Fermin): Are these rows/cols or ROOMS????
+        const size_t rooms_in_x = 8;
+        const size_t rooms_in_y = 8;
 
-        assert(test_rows == game_state->level_rows / room_width);
-        assert(test_cols == game_state->level_cols / room_width);
+        assert(rooms_in_x == game_state->level_rows / room_width);
+        assert(rooms_in_y == game_state->level_cols / room_width);
 
         // TODO(Fermin): Use OS RNG
         std::random_device rd;
         std::default_random_engine generator(rd());
         std::uniform_int_distribution<int> distribution(0,3);
 
-        u32 rooms[test_rows][test_cols] = {};
+        // NOTE(Fermin): Room (0, 0) is bottom left
+        u32 rooms[rooms_in_x][rooms_in_y] = {};
         u32 visited = 0;
-        u32 current_x = test_rows / 2;
-        u32 current_y = test_cols / 2;
+        u32 current_x = rooms_in_x / 2;
+        u32 current_y = rooms_in_y / 2;
         i32 direction;
         i32 x_start;
         i32 x_end;
         i32 y_start;
         i32 y_end;
-        while (visited < test_rows * test_cols)
+        while (visited < rooms_in_x * rooms_in_y)
         {
             direction = distribution(generator); 
             switch(direction)
             {
                 case(0): // Move bottom of current room
                 {
-                    if(current_y < (test_rows - 1))
+                    if(current_y > 0)
                     {
-                        current_y++;
+                        current_y--;
 
                         // Remove top wall
                         x_start = current_x * room_width + 1;
                         x_end = x_start + room_width - 2;
-                        y_start = current_y * room_width;
+                        y_start = current_y * room_width + room_width;
                         y_end = y_start;
                     }
                 } break;
                 case(1): // Move right of current room
                 {
-                    if(current_x < (test_cols - 1))
+                    if(current_x < (rooms_in_x - 1))
                     {
                         current_x++;
 
@@ -220,14 +222,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                 } break;
                 case(2): // Move top of current room
                 {
-                    if(current_y > 0)
+                    if(current_y < (rooms_in_y - 1))
                     {
-                        current_y--;
+                        current_y++;
 
                         // Remove bottom wall
                         x_start = current_x * room_width + 1;
                         x_end = x_start + room_width - 2;
-                        y_start = current_y * room_width + room_width;
+                        y_start = current_y * room_width;
                         y_end = y_start;
                     }
                 } break;
@@ -247,10 +249,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
 
             u32 current_room = rooms[current_y][current_x];
-            if(current_room == 0)
+            if(current_room == 0) // Not visited before
             {
                 // NOTE(Fermin): Place walls in gaps left by the removed roofs
-                if(x_start % game_state->level_cols == 1) // Second col
+                if(x_start == 1) // Left
                 {
                     Rect *rect;
                     if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_start, &rect))
@@ -260,33 +262,39 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                     }
                     x_start++;
                 }
-                if(x_end % game_state->level_cols == game_state->level_cols - 2) // Second to last col
+                if(x_end == game_state->level_cols - 1) // Right
                 {
+                    x_end--;
+
                     Rect *rect;
                     if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_end, y_end, &rect))
                     {
                         rect->texture_id = game_state->wall_texture_id;
                         rect->rotation = -Pi32/2.0f;
                     }
+
                     x_end--;
                 }
-                if(y_start == 1) // Second row
+                if(y_start == 1) // Bottom
                 {
                     Rect *rect;
                     if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_start, &rect))
                     {
                         rect->texture_id = game_state->wall_texture_id;
+                        rect->rotation = Pi32;
                     }
                     y_start++;
                 }
-                if(y_end == game_state->level_rows - 2) // Second to last row
+                if(y_end == game_state->level_rows - 1) // Top
                 {
+                    y_end--;
+
                     Rect *rect;
                     if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_end, &rect))
                     {
                         rect->texture_id = game_state->wall_texture_id;
-                        rect->rotation = Pi32;
                     }
+
                     y_end--;
                 }
 
@@ -299,6 +307,30 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             }
         }
 
+        // NOTE(Fermin): Set walls under roofs after we define every roof. 
+        // Can we do this without looping over again?
+        for(i32 row = 2; row <= game_state->level_rows - 2; row++)
+        {
+            for(i32 col = 2; col <= game_state->level_cols - 2; col++)
+            {
+                Rect *test_roof_rect = {};
+                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row, &test_roof_rect))
+                {
+                    if(test_roof_rect->texture_id == game_state->roof_texture_id)
+                    {
+                        Rect *wall_rect = {};
+                        if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row-1, &wall_rect))
+                        {
+                            if(wall_rect->texture_id == game_state->floor_texture_id)
+                            {
+                                wall_rect->texture_id = game_state->wall_texture_id;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         tiles_buffer->cached = tiles_buffer->count;
         game_state->initialized = 1;
     }
@@ -307,7 +339,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     Input_Keys input_state = game_state->input_state;
     Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 delta = game_state->delta;
-    f32 dude_speed = 2.0 * delta;
+    f32 dude_speed = 10.0 * delta;
     f32 camera_speed = 30.0 * delta;
     if(input_state.f1 && !last_frame_input_state.f1)
     {
@@ -432,8 +464,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(!is_set(game_state, game_state_flag_free_cam_mode))
     {
-            game_state->camera.pos = dude->min_p;
-            game_state->camera.pos.z += 15.0f;
+            game_state->camera.pos.xy = dude->min_p.xy;
+            //game_state->camera.pos.z += 15.0f;
     }
     
 
