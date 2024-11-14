@@ -146,6 +146,7 @@ struct Program
     GLuint id;
     GLuint model;
     GLuint view;
+    GLuint light_pos;
     GLuint proj;
     GLuint vao;
 };
@@ -414,7 +415,7 @@ static void cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
-void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters)
+void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters, V3 light_pos)
 {
     // TODO(Fermin): Currently we use a dummy model of a rectangle and
     // transformations to draw the rects. Another option is to upload
@@ -425,6 +426,10 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
     glBindVertexArray(prog->vao);
+
+    glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
+    glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
+    glUniform3f(prog->light_pos, light_pos.x, light_pos.y, light_pos.z);
 
     f32 meters_to_model = 1.0f / tile_size_in_meters;
     Rect *rects = (Rect *)render_buffer->buffer.data;
@@ -449,8 +454,6 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
         M4 model = translation * rotation * scale;
 
         glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
-        glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
-        glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
         glBindTexture(GL_TEXTURE_2D, rect->texture_id);
 
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -597,6 +600,7 @@ int main()
         layout (location = 1) in vec2 in_tex_coord;
 
         out vec2 out_tex_coord;
+        out vec3 out_frag_pos;
 
         uniform mat4 model;
         uniform mat4 view;
@@ -605,6 +609,7 @@ int main()
         void main()
         {
            gl_Position = projection * view * model * vec4(pos, 1.0);
+           out_frag_pos = vec3(model * vec4(pos, 1.0));
            out_tex_coord = in_tex_coord;
         }
     )FOO";
@@ -613,14 +618,24 @@ int main()
         #version 330 core
 
         in vec2 out_tex_coord;
+        in vec3 out_frag_pos;
 
         out vec4 FragColor;
 
         uniform sampler2D sampler;
+        uniform vec3 light_pos;
 
         void main()
         {
-           FragColor = texture(sampler, out_tex_coord);
+           vec3 light_color = vec3(1.0f, 1.0f, 0.7f);
+           vec3 norm = vec3(0.0f, 0.0f, -1.0f); // TODO(Fermin): Normal maps?
+           vec3 light_dir = normalize(light_pos - out_frag_pos);  
+           float diff = max(dot(norm, light_dir), 0.0);
+           vec3 diffuse = diff * light_color;
+
+           FragColor = (vec4(diffuse, 1.0)) * texture(sampler, out_tex_coord);
+
+           //FragColor = texture(sampler, out_tex_coord);
         }
     )FOO";
     
@@ -631,6 +646,7 @@ int main()
     draw_rect_prog.model = glGetUniformLocation(draw_rect_prog.id, "model");
     draw_rect_prog.view  = glGetUniformLocation(draw_rect_prog.id, "view");
     draw_rect_prog.proj  = glGetUniformLocation(draw_rect_prog.id, "projection");
+    draw_rect_prog.light_pos  = glGetUniformLocation(draw_rect_prog.id, "light_pos");
 
     float rectangle_vertices[] = {
          0.5f,  0.5f, 0.0f, 1.0f, 1.0f,  // top right
@@ -668,7 +684,7 @@ int main()
     Game_State game_state = {};
 
     //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
-    game_state.camera.pos   = {10.0f, 10.0f, 25.0f};
+    game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
     game_state.camera.up    = { 0.0f,  1.0f,  0.0f};
     game_state.camera.front = { 0.0f,  0.0f, -1.0f};
 
@@ -813,7 +829,10 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT);
 
         // TODO(Fermin): Consider the parameters to this function and see if the current structs make sense
-        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters);
+        V3 light_pos = {dude.min_p.x + game_state.tile_size_in_meters/2.0,
+                        dude.min_p.y + game_state.tile_size_in_meters/2.0,
+                        -0.5};
+        draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters, light_pos);
 
         // NOTE(Fermin): START font render state
         glClear(GL_DEPTH_BUFFER_BIT);
