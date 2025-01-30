@@ -147,6 +147,7 @@ struct Program
     GLuint model;
     GLuint view;
     GLuint light_pos;
+    GLuint color_trans;
     GLuint proj;
     GLuint vao;
 };
@@ -453,6 +454,8 @@ void draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *
         M4 rotation = rotate(rect->rotation, V3{0.0f, 0.0f, 1.0f});
         M4 model = translation * rotation * scale;
 
+        glUniform4f(prog->color_trans, rect->color.r, rect->color.g, rect->color.b, rect->color.a);
+
         glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
         glBindTexture(GL_TEXTURE_2D, rect->texture_id);
 
@@ -624,16 +627,18 @@ int main()
 
         uniform sampler2D sampler;
         uniform vec3 light_pos;
+        uniform vec4 color_trans;
 
         void main()
         {
+           float light_strength = 5.0;
            vec3 light_color = vec3(1.0f, 1.0f, 0.7f);
            vec3 norm = vec3(0.0f, 0.0f, -1.0f); // TODO(Fermin): Normal maps?
            vec3 light_dir = normalize(light_pos - out_frag_pos);  
            float diff = max(dot(norm, light_dir), 0.0);
-           vec3 diffuse = diff * light_color;
+           vec3 diffuse = light_strength * diff * light_color;
 
-           FragColor = (vec4(diffuse, 1.0)) * texture(sampler, out_tex_coord);
+           FragColor = color_trans * (vec4(diffuse, 1.0)) * texture(sampler, out_tex_coord);
 
            //FragColor = texture(sampler, out_tex_coord);
         }
@@ -643,10 +648,11 @@ int main()
     draw_rect_prog.id = build_program(draw_rectangle_vertex_code,
                                       draw_rectangle_fragment_code);
 
-    draw_rect_prog.model = glGetUniformLocation(draw_rect_prog.id, "model");
-    draw_rect_prog.view  = glGetUniformLocation(draw_rect_prog.id, "view");
-    draw_rect_prog.proj  = glGetUniformLocation(draw_rect_prog.id, "projection");
-    draw_rect_prog.light_pos  = glGetUniformLocation(draw_rect_prog.id, "light_pos");
+    draw_rect_prog.model       = glGetUniformLocation(draw_rect_prog.id, "model");
+    draw_rect_prog.view        = glGetUniformLocation(draw_rect_prog.id, "view");
+    draw_rect_prog.proj        = glGetUniformLocation(draw_rect_prog.id, "projection");
+    draw_rect_prog.color_trans = glGetUniformLocation(draw_rect_prog.id, "color_trans");
+    draw_rect_prog.light_pos   = glGetUniformLocation(draw_rect_prog.id, "light_pos");
 
     float rectangle_vertices[] = {
          0.5f,  0.5f, 0.0f, 1.0f, 1.0f,  // top right

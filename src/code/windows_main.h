@@ -1,5 +1,6 @@
 /*
  * TODO(Fermin):
+ * - RNG! search for std::random_device rd;
  * - Store tile indices for dude and for highlighted tile in game state instead of 
  *   what we are doing now. I guess we can follow this logic when we need a tile in the 
  *   platform layer?
@@ -89,14 +90,15 @@ struct Rect
     // NOTE(Fermin): If we update this struct remember to also update push_rectangle
     V3 min_p;
     V3 max_p;
+    V4 color;
     u32 texture_id;
     f32 rotation;
 };
 
-u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
+u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect, V4 color = {1.0, 1.0, 1.0, 1.0})
 {
     // NOTE(Fermin): This is error prone since we have to update this function each time we change Rect struct
-    assert(sizeof(Rect) == 32);
+    static_assert(sizeof(Rect) == 48, "Pushing out of date Rect");
 
     u32 result = render_buffer->count;
 
@@ -105,6 +107,7 @@ u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect)
     Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
     pushed_rect->min_p = rect->min_p;
     pushed_rect->max_p = rect->max_p;
+    pushed_rect->color = color;
     pushed_rect->texture_id = rect->texture_id;
     pushed_rect->rotation = rect->rotation;
 
@@ -138,6 +141,14 @@ struct Camera
     V3 front;
 };
 
+struct Particle
+{
+    V3 p;
+    V3 d_p;
+    V4 color;
+    V4 d_color;
+};
+
 struct Game_State
 {
     f32 delta;
@@ -166,6 +177,10 @@ struct Game_State
     u32 roof_texture_id;
 
     b32 initialized;
+
+    // NOTE(Fermin): Testing particle system stuff. Move this to where it makes sense
+    u32 next_particle;
+    Particle particles[64];
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Rect *dude, Game_State *game_state)

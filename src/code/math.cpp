@@ -6,6 +6,28 @@ static inline f32 square_root(f32 a)
     return result;
 }
 // NOTE(Fermin): THis is the end of the intrinsics file
+static inline f32 clamp(f32 min, f32 value, f32 max)
+{
+    f32 result = value;
+    
+    if(result < min)
+    {
+        result = min;
+    }
+    else if(result > max)
+    {
+        result = max;
+    }
+
+    return result;
+}
+
+static inline f32 clamp01(f32 value)
+{
+    f32 result = clamp(0.0f, value, 1.0f);
+
+    return result;
+}
 
 static inline f32 degrees(f32 radians)
 {
@@ -279,6 +301,49 @@ union V4
     };
     f32 e[4];
 };
+
+inline V4 operator*(f32 b, V4 a)
+{
+    V4 result = {};
+
+    result.x = a.x * b;
+    result.y = a.y * b;
+    result.z = a.z * b;
+    result.w = a.w * b;
+
+    return result;
+}
+
+inline V4 operator*(V4 a, f32 b)
+{
+    V4 result = {};
+
+    result.x = a.x * b;
+    result.y = a.y * b;
+    result.z = a.z * b;
+    result.w = a.w * b;
+
+    return result;
+}
+
+inline V4 operator+(V4 a, V4 b)
+{
+    V4 result = {};
+
+    result.x = a.x + b.x;
+    result.y = a.y + b.y;
+    result.z = a.z + b.z;
+    result.w = a.w + b.w;
+
+    return result;
+}
+
+inline V4 & operator+=(V4 &a, V4 b)
+{
+    a = a + b;
+
+    return a;
+}
 
 /*
 * M4

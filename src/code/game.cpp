@@ -467,6 +467,57 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             game_state->camera.pos.xy = dude->min_p.xy;
             //game_state->camera.pos.z += 15.0f;
     }
+
+    // NOTE(Fermin): Experimental particle system logic
+    std::random_device rd;
+    std::default_random_engine generator(rd());
+    std::uniform_int_distribution<int> distribution(1,4);
+
+    for(u32 particle_spawn_index = 0;
+        particle_spawn_index < 1;
+        ++particle_spawn_index)
+    {
+        Particle *particle = game_state->particles + game_state->next_particle++;
+
+        if(game_state->next_particle >= array_count(game_state->particles))
+        {
+            game_state->next_particle = 0;
+        }
+
+
+        particle->p = dude->min_p;
+        particle->d_p = {
+            (f32)distribution(generator),
+            (f32)distribution(generator),
+            0.0f
+        };
+        particle->color = {1.0f, 1.0f, 1.0f, 1.0f};
+        particle->d_color = {0.0f, 0.0f, 0.0f, -0.9f};
+    }
+
+    for(u32 particle_index = 0;
+        particle_index < array_count(game_state->particles);
+        ++particle_index)
+    {
+        Particle *particle = game_state->particles + particle_index;
+
+        // NOTE(Fermin): Simulate particles forward in time
+        particle->p += game_state->delta * particle->d_p;
+        particle->color += game_state->delta * particle->d_color;
+
+        Rect part = {};
+        part.min_p = particle->p;
+        part.max_p = particle->p + V3{0.6, 0.6, 0.6};
+        part.texture_id = game_state->highlight_texture_id;
+
+        V4 color_trans;
+        color_trans.r = clamp01(particle->color.r);
+        color_trans.g = clamp01(particle->color.g);
+        color_trans.b = clamp01(particle->color.b);
+        color_trans.a = clamp01(particle->color.a);
+
+        push_rectangle(tiles_buffer, &part, color_trans);
+    }
     
 
     if(game_state->editing_tile)

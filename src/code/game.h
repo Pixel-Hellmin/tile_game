@@ -13,6 +13,9 @@ inline b32 is_tile_index_valid(i32 x, i32 y, i32 cols, i32 rows)
 
 b32 get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
 {
+    // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
+    // have null pointers and can instead check on that pointer instead of 
+    // returning a success/fail result.
     b32 result = 0;
 
     if(is_tile_index_valid(x, y, cols, rows))
