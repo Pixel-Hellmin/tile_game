@@ -1,5 +1,4 @@
 #include <cstdio>
-#include <random>
 
 #include "game.h"
 
@@ -174,11 +173,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         assert(rooms_in_x == game_state->level_rows / room_width);
         assert(rooms_in_y == game_state->level_cols / room_width);
 
-        // TODO(Fermin): Use OS RNG
-        std::random_device rd;
-        std::default_random_engine generator(rd());
-        std::uniform_int_distribution<int> distribution(0,3);
-
         // NOTE(Fermin): Room (0, 0) is bottom left
         u32 rooms[rooms_in_x][rooms_in_y] = {};
         u32 visited = 0;
@@ -191,7 +185,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         i32 y_end;
         while (visited < rooms_in_x * rooms_in_y)
         {
-            direction = distribution(generator); 
+            direction = random_between(&game_state->entropy, 0, 3); 
             switch(direction)
             {
                 case(0): // Move bottom of current room
@@ -469,10 +463,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     // NOTE(Fermin): Experimental particle system logic
-    std::random_device rd;
-    std::default_random_engine generator(rd());
-    std::uniform_int_distribution<int> distribution(1,4);
-
     for(u32 particle_spawn_index = 0;
         particle_spawn_index < 1;
         ++particle_spawn_index)
@@ -485,14 +475,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
 
-        particle->p = dude->min_p;
+        particle->p = dude->min_p + V3{random_unilateral(&game_state->entropy), 0.0f, 0.0f};
         particle->d_p = {
-            (f32)distribution(generator),
-            (f32)distribution(generator),
+            random_between(&game_state->entropy, -2.0f, 2.0f),
+            random_between(&game_state->entropy, 1.0f, 3.0f),
             0.0f
         };
         particle->color = {1.0f, 1.0f, 1.0f, 1.0f};
-        particle->d_color = {0.0f, 0.0f, 0.0f, -0.9f};
+        particle->d_color = {random_between(&game_state->entropy, -10.0f, 1.0f), 0.0f, 0.0f, -0.9f};
     }
 
     for(u32 particle_index = 0;
