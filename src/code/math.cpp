@@ -6,6 +6,13 @@ static inline f32 square_root(f32 a)
     return result;
 }
 // NOTE(Fermin): THis is the end of the intrinsics file
+inline f32 lerp(f32 a, f32 t, f32 b)
+{
+    f32 result = (1.0f - t) * a + t * b;
+
+    return result;
+}
+
 static inline f32 clamp(f32 min, f32 value, f32 max)
 {
     f32 result = value;

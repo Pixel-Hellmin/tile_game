@@ -689,6 +689,8 @@ int main()
 
     Game_State game_state = {};
 
+    game_state.entropy.index = 666;
+
     //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
     game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
     game_state.camera.up    = { 0.0f,  1.0f,  0.0f};

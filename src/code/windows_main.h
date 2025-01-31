@@ -42,6 +42,7 @@ typedef double   f64;
 #define kilobytes(value) ((value)*1024LL)
 #define megabytes(value) (kilobytes(value)*1024LL)
 #define gigabytes(value) (megabytes(value)*1024LL)
+#define U32Max ((u32) - 1)
 
 global_variable f32 debug_print_line = 0.0f;
 global_variable const f32 font_point_size = 64.0f;
@@ -51,6 +52,7 @@ global_variable const u32 font_character_count = font_last_character - font_firs
 
 #include "math.cpp"
 #include "buffer.cpp"
+#include "random.h"
 
 struct Glyph_Metadata
 {
@@ -152,6 +154,7 @@ struct Particle
 struct Game_State
 {
     f32 delta;
+    Random_Series entropy;
 
     Input_Keys input_state;
     Input_Keys last_frame_input_state;
