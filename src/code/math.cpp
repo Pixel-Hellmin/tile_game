@@ -44,6 +44,19 @@ static inline f32 degrees(f32 radians)
     return result;
 }
 
+static inline f32 clamp01_map_to_range(f32 min, f32 t, f32 max)
+{
+    f32 result = 0.0f;
+
+    f32 range = max - min;
+    if(range != 0.0f)
+    {
+        result = clamp01((t - min) / range);
+    }
+
+    return result;
+}
+
 static inline f32 radians(f32 degrees)
 {
     f32 result;

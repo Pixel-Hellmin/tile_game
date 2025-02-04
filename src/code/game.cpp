@@ -462,7 +462,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             //game_state->camera.pos.z += 15.0f;
     }
 
-    // NOTE(Fermin): Experimental particle system logic
+    // NOTE(Fermin): Experimental particle system logic START
     for(u32 particle_spawn_index = 0;
         particle_spawn_index < 1;
         ++particle_spawn_index)
@@ -474,15 +474,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             game_state->next_particle = 0;
         }
 
-
-        particle->p = dude->min_p + V3{random_unilateral(&game_state->entropy), 0.0f, 0.0f};
+        //particle->p = dude->min_p + V3{random_unilateral(&game_state->entropy), 0.0f, 0.0f};
+        particle->p = V3{5.0f, 5.0f, 0.0f};
         particle->d_p = {
-            random_between(&game_state->entropy, -2.0f, 2.0f),
-            random_between(&game_state->entropy, 1.0f, 3.0f),
+            random_between(&game_state->entropy, -1.0f, 1.0f),
+            random_between(&game_state->entropy, 0.5f, 3.0f),
             0.0f
         };
-        particle->color = {1.0f, 1.0f, 1.0f, 1.0f};
-        particle->d_color = {random_between(&game_state->entropy, -10.0f, 1.0f), 0.0f, 0.0f, -0.9f};
+        particle->color_trans = {1.0f, 1.0f, 1.0f, 1.0f};
+        //particle->d_color = {random_between(&game_state->entropy, -2.0f, -1.0f), 0.5f, -1.0f, -0.7f};
+        particle->d_color = {0.3f, 0.5f, -1.0f, -1.0f};
+        particle->d_rotation = random_between(&game_state->entropy, -5.0f, 5.0f);
+        particle->rotation = random_between(&game_state->entropy, 0.0f, Pi32*2);
     }
 
     for(u32 particle_index = 0;
@@ -493,21 +496,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         // NOTE(Fermin): Simulate particles forward in time
         particle->p += game_state->delta * particle->d_p;
-        particle->color += game_state->delta * particle->d_color;
+        particle->color_trans += game_state->delta * particle->d_color;
+
+        V4 color_trans;
+        color_trans.r = clamp01(particle->color_trans.r);
+        color_trans.g = clamp01(particle->color_trans.g);
+        color_trans.b = clamp01(particle->color_trans.b);
+        color_trans.a = clamp01(particle->color_trans.a);
+
+        // NOTE(Fermin): This is to avoid particles spawning with full alpha.
+        // Instead the they are spawned with 0.0f alpha and builds up to ~1.0f
+        // before decreasing again
+        if(color_trans.a > 0.9f)
+        {
+            // NOTE(Fermin): Passing a higher min and lower max is the equivalent of
+            // passing a low min and high max and then (1.0f - result)
+            color_trans.a = 0.9f * clamp01_map_to_range(1.0f, color_trans.a, 0.9f);
+        }
+
+        particle->rotation += game_state->delta * particle->d_rotation;
 
         Rect part = {};
         part.min_p = particle->p;
-        part.max_p = particle->p + V3{0.6, 0.6, 0.6};
-        part.texture_id = game_state->highlight_texture_id;
-
-        V4 color_trans;
-        color_trans.r = clamp01(particle->color.r);
-        color_trans.g = clamp01(particle->color.g);
-        color_trans.b = clamp01(particle->color.b);
-        color_trans.a = clamp01(particle->color.a);
+        part.max_p = particle->p + V3{0.4, 0.4, 0.4};
+        part.rotation = particle->rotation;
+        part.texture_id = game_state->wall_texture_id;
 
         push_rectangle(tiles_buffer, &part, color_trans);
     }
+    // NOTE(Fermin): Experimental particle system logic END
     
 
     if(game_state->editing_tile)

@@ -147,8 +147,10 @@ struct Particle
 {
     V3 p;
     V3 d_p;
-    V4 color;
+    V4 color_trans;
     V4 d_color;
+    f32 rotation;
+    f32 d_rotation;
 };
 
 struct Game_State
