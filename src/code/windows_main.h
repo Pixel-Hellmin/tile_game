@@ -1,4 +1,6 @@
 /*
+ * COMBACK:
+ * - Catch up: 358w, 359w, 360, 361, 362, 363?, 364
  * TODO(Fermin):
  * - RNG! search for std::random_device rd;
  * - Store tile indices for dude and for highlighted tile in game state instead of 
@@ -18,23 +20,28 @@
 
 #include <cstdio>
 #include <cmath>
+#include <cstdint>
 
 // NOTE(Fermin): Include glad before glfw3
+#if 0
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "glad.c"
+#endif
 
-typedef int32_t  i32;
+typedef int32_t    i32;
 
-typedef uint8_t  u8;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int32_t  b32;
+typedef uint8_t    u8;
+typedef uint32_t   u32;
+typedef uint64_t   u64;
+typedef int32_t    b32;
+typedef uintptr_t  umm;
 
-typedef float    f32;
-typedef double   f64;
+typedef float      f32;
+typedef double     f64;
 
 #define assert(expression) if(!(expression)) {*(int *)0 = 0;}
+#define invalid_code_path assert(!"invalid_code_path")
 
 #define global_variable static
 
@@ -43,6 +50,12 @@ typedef double   f64;
 #define megabytes(value) (kilobytes(value)*1024LL)
 #define gigabytes(value) (megabytes(value)*1024LL)
 #define U32Max ((u32) - 1)
+
+// NOTE(Fermin): This is used to store u32 as a (void *) type.
+// Not actual pointers, useful when using u32 and pointers as
+// handles.
+#define u32_from_pointer(pointer) ((u32)(size_t)(pointer))
+#define pointer_from_u32(type, value) (type *)((size_t)value)
 
 global_variable f32 debug_print_line = 0.0f;
 global_variable const f32 font_point_size = 64.0f;
