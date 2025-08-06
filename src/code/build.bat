@@ -16,8 +16,10 @@ if "%Platform%" neq "x64" (
 )
 
 REM TODO(Fermin): Test by moving glfw lib to the project
-set CommonCompilerFlags= -nologo -Zi /EHsc /I src\include /Fobuild\ 
-set CommonLinkerFlags= /NODEFAULTLIB:MSVCRTD /NODEFAULTLIB:LIBCMT -incremental:no -opt:ref libs\glfw3.lib opengl32.lib msvcrt.lib Gdi32.lib User32.lib shell32.lib
+REM set CommonCompilerFlags= -nologo -Zi /EHsc /I src\include /Fobuild\ 
+set CommonCompilerFlags= -nologo -Zi /EHsc /Fobuild\ 
+set CommonLinkerFlags= /NODEFAULTLIB:MSVCRTD /NODEFAULTLIB:LIBCMT -incremental:no -opt:ref opengl32.lib msvcrt.lib Gdi32.lib User32.lib shell32.lib
+REM set CommonLinkerFlags= /NODEFAULTLIB:MSVCRTD /NODEFAULTLIB:LIBCMT -incremental:no -opt:ref libs\glfw3.lib opengl32.lib msvcrt.lib Gdi32.lib User32.lib shell32.lib
 
 if not exist .\build mkdir .\build
 REM pushd build

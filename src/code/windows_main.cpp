@@ -15,6 +15,14 @@ global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
+// TODO(Fermin): This goes in opengl header
+struct Opengl {
+    GLuint program;
+    GLuint transform_id;
+    GLuint texture_sampler_id;
+};
+global_variable Opengl opengl = {};
+// END(Fermin): This goes in opengl header
 
 
 // NOTE(Fermin): | Start | win32 stuff
@@ -50,8 +58,10 @@ global_variable GLuint opengl_default_internal_texture_format;
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
 #define GL_SRGB8_ALPHA8                   0x8C43
 #define GL_SHADING_LANGUAGE_VERSION       0x8B8C
-#define GL_VERTEX_SHADER                  0x8B30
-#define GL_FRAGMENT_SHADER                0x8B31
+#define GL_VERTEX_SHADER                  0x8B31
+#define GL_FRAGMENT_SHADER                0x8B30
+#define GL_COMPILE_STATUS                 0x8B81
+#define GL_LINK_STATUS                    0x8B82
 #define GL_VALIDATE_STATUS                0x8B83
 
 typedef char GLchar;
@@ -66,6 +76,10 @@ typedef void Gl_Validate_Program(GLuint program);
 typedef void Gl_Get_Programiv(GLuint program, GLenum pname, GLint *params);
 typedef void Gl_Get_Shader_Info_Log(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
 typedef void Gl_Get_Program_Info_Log(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
+typedef GLint Gl_Get_Uniform_Location(GLuint program, const GLchar *name);
+typedef void Gl_Uniform_Matrix_4vf(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+typedef void Gl_Uniform_1i(GLint location, GLint v0);
+
 //typedef void Gl_Bind_Attrib_Location(GLuint program, GLuint index, const GLchar *name);
 
 global_variable Gl_Attach_Shader *glAttachShader;
@@ -79,6 +93,9 @@ global_variable Gl_Validate_Program *glValidateProgram;
 global_variable Gl_Get_Programiv *glGetProgramiv;
 global_variable Gl_Get_Shader_Info_Log *glGetShaderInfoLog;
 global_variable Gl_Get_Program_Info_Log *glGetProgramInfoLog;
+global_variable Gl_Get_Uniform_Location *glGetUniformLocation;
+global_variable Gl_Uniform_Matrix_4vf *glUniformMatrix4fv;
+global_variable Gl_Uniform_1i *glUniform1i;
  
 
 // NOTE(Fermin): Windows specific
@@ -189,8 +206,8 @@ opengl_create_program(char *header_code, char *vertex_code, char *fragment_code)
     GLuint vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
     GLchar *vertex_shader_code[] =
     {
-            header_code,
-            vertex_code,
+        header_code,
+        vertex_code,
     };
     glShaderSource(vertex_shader_id, array_count(vertex_shader_code),
                    vertex_shader_code, 0);
@@ -199,9 +216,9 @@ opengl_create_program(char *header_code, char *vertex_code, char *fragment_code)
     GLuint fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
     GLchar *fragment_shader_code[] =
     {
-                    header_code,
-                    fragment_code,
-            };
+        header_code,
+        fragment_code,
+    };
     glShaderSource(fragment_shader_id, array_count(fragment_shader_code),
                    fragment_shader_code, 0);
     glCompileShader(fragment_shader_id);
@@ -212,9 +229,9 @@ opengl_create_program(char *header_code, char *vertex_code, char *fragment_code)
     glLinkProgram(program_id);
 
     glValidateProgram(program_id);
-    GLint validated = false;
-    glGetProgramiv(program_id, GL_VALIDATE_STATUS, &validated);
-    if(validated)
+    GLint linked = false;
+    glGetProgramiv(program_id, GL_LINK_STATUS, &linked);
+    if(!linked)
     {
         GLsizei ignored;
         char vertex_errors[4096];
@@ -246,21 +263,43 @@ opengl_init(Opengl_Info info)
         glEnable(GL_FRAMEBUFFER_SRGB);
     }
 
-    char *header_code = 
-        "// Header code"
-        ""
-        "";
-    GLuint id = opengl_create_program(
-        header_code, 
+    char *header_code = R"FOO(
+    #version 130
+    // Header code
+    )FOO";
 
-        "// Vertex code"
-        ""
-        "", 
+    char *vertex_code = R"FOO(
+    // Vertex code
+    uniform mat4x4 transform;
+    //in vec2 in_uv;
+    //in vec4 in_color;
+    smooth out vec2 frag_uv;
+    smooth out vec4 frag_color;
+    void main(void)
+    {
+        gl_Position = transform*gl_Vertex;
 
-        "// Fragment code"
-        ""
-        ""
-    );
+        frag_uv = gl_MultiTexCoord0.xy; //in_uv;
+        frag_color = gl_Color; //in_color;
+    }
+    )FOO";
+
+    char *fragment_code = R"FOO(
+    // Fragment code
+    uniform sampler2D texture_sampler;
+    smooth in vec2 frag_uv;
+    smooth in vec4 frag_color;
+    out vec4 result_color;
+    void main(void)
+    {
+        vec4 tex_sample = texture(texture_sampler, frag_uv);
+        result_color = frag_color*tex_sample;
+    }
+    )FOO";
+
+    opengl.program = opengl_create_program(header_code, vertex_code, fragment_code);
+    opengl.transform_id = glGetUniformLocation(opengl.program, "transform");
+    opengl.texture_sampler_id = glGetUniformLocation(opengl.program, "texture_sampler");
 }
 
 static void
@@ -336,6 +375,10 @@ win32_init_opengl(HWND window)
         glGetProgramiv = (Gl_Get_Programiv *)wglGetProcAddress("glGetProgramiv");
         glGetShaderInfoLog = (Gl_Get_Shader_Info_Log *)wglGetProcAddress("glGetShaderInfoLog");
         glGetProgramInfoLog = (Gl_Get_Program_Info_Log *)wglGetProcAddress("glGetProgramInfoLog");
+
+        glGetUniformLocation = (Gl_Get_Uniform_Location *)wglGetProcAddress("glGetUniformLocation");
+        glUniformMatrix4fv = (Gl_Uniform_Matrix_4vf *)wglGetProcAddress("glUniformMatrix4fv");
+        glUniform1i = (Gl_Uniform_1i *)wglGetProcAddress("glUniform1i");
 
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
@@ -415,6 +458,12 @@ win32_resize_DIB_section(Win32_Offscreen_Buffer *buffer, i32 width,
 inline void
 opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
 {
+    // NOTE(Fermin): Not sure where this should go atm
+    glUseProgram(opengl.program);
+    //glBindProgram(opengl.program);
+    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, m4_ident().e);
+    glUniform1i(opengl.texture_sampler_id, 0); //TODO
+
     glBegin(GL_TRIANGLES);
 
     glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
@@ -440,6 +489,7 @@ opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, V2 min_uv = {0, 0}, V2 ma
     glVertex2f(min_p.x, max_p.x);
 
     glEnd();
+    glUseProgram(0);
 }
 
 static void //internal void *
