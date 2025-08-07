@@ -15,11 +15,14 @@ global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
+global_variable u32 dude_texture_id;
 // TODO(Fermin): This goes in opengl header
 struct Opengl {
     GLuint program;
     GLuint transform_id;
     GLuint texture_sampler_id;
+    GLuint default_internal_texture_format;
+    GLint max_multisample_count;
 };
 global_variable Opengl opengl = {};
 // END(Fermin): This goes in opengl header
@@ -52,8 +55,6 @@ global_variable Wgl_Swap_Interval_Ext *wgl_swap_interval;
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context,
                                                     const int *attrib_list);
 
-global_variable GLuint opengl_default_internal_texture_format;
-
 // NOTE(Fermin): Got these from https://registry.khronos.org/OpenGL/api/GL/glcorearb.h
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
 #define GL_SRGB8_ALPHA8                   0x8C43
@@ -63,6 +64,9 @@ global_variable GLuint opengl_default_internal_texture_format;
 #define GL_COMPILE_STATUS                 0x8B81
 #define GL_LINK_STATUS                    0x8B82
 #define GL_VALIDATE_STATUS                0x8B83
+#define GL_MAX_COLOR_TEXTURE_SAMPLES      0x910E
+#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
+
 
 typedef char GLchar;
 typedef void Gl_Attach_Shader(GLuint program, GLuint shader);
@@ -79,7 +83,7 @@ typedef void Gl_Get_Program_Info_Log(GLuint program, GLsizei bufSize, GLsizei *l
 typedef GLint Gl_Get_Uniform_Location(GLuint program, const GLchar *name);
 typedef void Gl_Uniform_Matrix_4vf(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void Gl_Uniform_1i(GLint location, GLint v0);
-
+typedef void Gl_Tex_Image_2D_Multisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
 //typedef void Gl_Bind_Attrib_Location(GLuint program, GLuint index, const GLchar *name);
 
 global_variable Gl_Attach_Shader *glAttachShader;
@@ -96,6 +100,7 @@ global_variable Gl_Get_Program_Info_Log *glGetProgramInfoLog;
 global_variable Gl_Get_Uniform_Location *glGetUniformLocation;
 global_variable Gl_Uniform_Matrix_4vf *glUniformMatrix4fv;
 global_variable Gl_Uniform_1i *glUniform1i;
+global_variable Gl_Tex_Image_2D_Multisample *glTexImage2DMultisample;
  
 
 // NOTE(Fermin): Windows specific
@@ -201,11 +206,12 @@ opengl_get_info(b32 modern_context)
 }
 
 static GLuint
-opengl_create_program(char *header_code, char *vertex_code, char *fragment_code)
+opengl_create_program(char *defines, char *header_code, char *vertex_code, char *fragment_code)
 {
     GLuint vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
     GLchar *vertex_shader_code[] =
     {
+        defines,
         header_code,
         vertex_code,
     };
@@ -216,6 +222,7 @@ opengl_create_program(char *header_code, char *vertex_code, char *fragment_code)
     GLuint fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
     GLchar *fragment_shader_code[] =
     {
+        defines,
         header_code,
         fragment_code,
     };
@@ -250,21 +257,52 @@ opengl_create_program(char *header_code, char *vertex_code, char *fragment_code)
 static void
 opengl_init(Opengl_Info info)
 {
-    opengl_default_internal_texture_format = GL_RGBA8;
+    opengl.default_internal_texture_format = GL_RGBA8;
     if(info.GL_EXT_texture_sRGB)
     {
-        opengl_default_internal_texture_format = GL_SRGB8_ALPHA8;
+        opengl.default_internal_texture_format = GL_SRGB8_ALPHA8;
+    }
+
+    // NOTE(Fermin): Not using this check atm. This is for frame buffer texture format
+    if(info.GL_EXT_framebuffer_sRGB)
+    {
+        glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &opengl.max_multisample_count);
+        if(opengl.max_multisample_count > 16)
+        {
+            opengl.max_multisample_count = 16;
+        }
+
+        GLuint test_texture;
+        glGenTextures(1, &test_texture);
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, test_texture);
+        glGetError(); // Clear the error
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE,
+                                opengl.max_multisample_count,
+                                GL_SRGB8_ALPHA8,
+                                1920, 1080,
+                                GL_FALSE);
+
+        if(glGetError() == GL_NO_ERROR)
+        {
+            glEnable(GL_FRAMEBUFFER_SRGB);
+            //opengl.default_frame_buffer_texture_format = GL_SRGB8_ALPHA8;
+        }
+        glDeleteTextures(1, &test_texture);
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
     }
 
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-    if(info.GL_EXT_framebuffer_sRGB)
+    char *defines = "#version 130\n";
+    if(false)
     {
-        glEnable(GL_FRAMEBUFFER_SRGB);
+        defines = R"FOO(
+        #version 130
+        #define example 1
+        )FOO";
     }
 
     char *header_code = R"FOO(
-    #version 130
     // Header code
     )FOO";
 
@@ -297,7 +335,7 @@ opengl_init(Opengl_Info info)
     }
     )FOO";
 
-    opengl.program = opengl_create_program(header_code, vertex_code, fragment_code);
+    opengl.program = opengl_create_program(defines, header_code, vertex_code, fragment_code);
     opengl.transform_id = glGetUniformLocation(opengl.program, "transform");
     opengl.texture_sampler_id = glGetUniformLocation(opengl.program, "texture_sampler");
 }
@@ -375,14 +413,15 @@ win32_init_opengl(HWND window)
         glGetProgramiv = (Gl_Get_Programiv *)wglGetProcAddress("glGetProgramiv");
         glGetShaderInfoLog = (Gl_Get_Shader_Info_Log *)wglGetProcAddress("glGetShaderInfoLog");
         glGetProgramInfoLog = (Gl_Get_Program_Info_Log *)wglGetProcAddress("glGetProgramInfoLog");
-
         glGetUniformLocation = (Gl_Get_Uniform_Location *)wglGetProcAddress("glGetUniformLocation");
         glUniformMatrix4fv = (Gl_Uniform_Matrix_4vf *)wglGetProcAddress("glUniformMatrix4fv");
         glUniform1i = (Gl_Uniform_1i *)wglGetProcAddress("glUniform1i");
+        glTexImage2DMultisample = (Gl_Tex_Image_2D_Multisample  *)wglGetProcAddress("glTexImage2DMultisample");
 
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
         {
+            // NOTE(Fermin): V-Sync
             wgl_swap_interval(1);
         }
 
@@ -432,8 +471,7 @@ render_gradient(Win32_Offscreen_Buffer buffer)
 }
 
 static void
-win32_resize_DIB_section(Win32_Offscreen_Buffer *buffer, i32 width,
-                         i32 height)
+win32_resize_DIB_section(Win32_Offscreen_Buffer *buffer, i32 width, i32 height)
 {
     if(buffer->memory)
     {
@@ -456,13 +494,16 @@ win32_resize_DIB_section(Win32_Offscreen_Buffer *buffer, i32 width,
 }
 
 inline void
-opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
+opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, M4* mat, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
 {
     // NOTE(Fermin): Not sure where this should go atm
     glUseProgram(opengl.program);
     //glBindProgram(opengl.program);
-    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, m4_ident().e);
-    glUniform1i(opengl.texture_sampler_id, 0); //TODO
+    
+    glBindTexture(GL_TEXTURE_2D, dude_texture_id);
+    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, mat->e);
+    //glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, m4_ident().e);
+    glUniform1i(opengl.texture_sampler_id, 0);
 
     glBegin(GL_TRIANGLES);
 
@@ -486,7 +527,7 @@ opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, V2 min_uv = {0, 0}, V2 ma
     glVertex2f(max_p.x, max_p.y);
 
     glTexCoord2f(min_uv.x, max_uv.y);
-    glVertex2f(min_p.x, max_p.x);
+    glVertex2f(min_p.x, max_p.y);
 
     glEnd();
     glUseProgram(0);
@@ -499,7 +540,7 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
     GLuint handle;
     glGenTextures(1, &handle);
     glBindTexture(GL_TEXTURE_2D, handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, opengl_default_internal_texture_format,
+    glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
                  width, height, 0, GL_BGRA_EXT,
                  GL_UNSIGNED_BYTE, data);
 
@@ -521,7 +562,7 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
     */
 
     glBindTexture(GL_TEXTURE_2D, texture_handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, opengl_default_internal_texture_format,
+    glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
                  width, height, 0, GL_BGRA_EXT,
                  GL_UNSIGNED_BYTE, data);
 
@@ -558,24 +599,42 @@ win32_display_buffer_in_window(HDC device_context,
     glEnable(GL_TEXTURE_2D);
     //glEnable(GL_DEPTH_TEST);
     glEnable(GL_SCISSOR_TEST);
-    //glEnable(GL_BLEND);
+    glEnable(GL_BLEND);
     //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
  
+
+
     glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glMatrixMode(GL_TEXTURE);
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-
     // NOTE(Fermin): Should change this to 3d eventually
+    /*
     V2 min_p = {-1.0f, -1.0f};
     V2 max_p = { 1.0f,  1.0f};
     V4 pre_mul_color = {1.0f,  1.0f, 1.0f, 1.0f};
     opengl_rectangle(min_p, max_p, pre_mul_color);
+    */
+
+    /*  Orthogonal
+
+        | 2/width      0         0         0 |
+        |    0     2/height      0         0 |
+        |    0         0         1         0 |
+        |   -1        -1         0         1 |
+    */
+    M4 ortho = {};
+    ortho.m[0].e[0] =  2.0f/(f32)window_width;
+    ortho.m[1].e[1] =  2.0f/(f32)window_height;
+    ortho.m[2].e[2] =  1.0f;
+    ortho.m[3].e[3] =  1.0f;
+    ortho.m[3].e[0] = -1.0f;
+    ortho.m[3].e[1] = -1.0f;
+
+    V2 min_p = {10.0f, 10.0f};
+    V2 max_p = {120.0f, 120.0f};
+    V4 pre_mul_color = {1.0f,  1.0f, 1.0f, 1.0f};
+    opengl_rectangle(min_p, max_p, pre_mul_color, &ortho);
 
     SwapBuffers(device_context);
 }
@@ -1186,7 +1245,7 @@ int main()
             u32 wall_texture_id      = generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
             u32 roof_texture_id      = generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
             u32 highlight_texture_id = generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-            u32 dude_texture_id      = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
+            dude_texture_id          = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
             // NOTE(Fermin): Test fonts start
