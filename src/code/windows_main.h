@@ -179,7 +179,7 @@ struct Game_State
     Camera camera;
     M4 *proj;
     M4 *view;
-    f32 tile_size_in_meters;
+    f32 tile_size;
 
     // TODO(Fermin): Store tile index into Render_Buffer instead of this
     b32 editing_tile;

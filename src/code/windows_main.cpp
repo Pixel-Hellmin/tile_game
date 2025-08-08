@@ -16,6 +16,8 @@ global_variable f32 camera_yaw = -90.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
 global_variable u32 dude_texture_id;
+global_variable Render_Buffer tiles_buffer = {};
+
 // TODO(Fermin): This goes in opengl header
 struct Opengl {
     GLuint program;
@@ -31,6 +33,8 @@ global_variable Opengl opengl = {};
 // NOTE(Fermin): | Start | win32 stuff
 struct Win32_Offscreen_Buffer
 {
+    // NOTE(Fermin): What part does this back buffer plays when rendering with
+    // OpenGL? Is the memory still needed if we never write to it?
     BITMAPINFO info;
     void *memory;
     i32 width;
@@ -494,20 +498,12 @@ win32_resize_DIB_section(Win32_Offscreen_Buffer *buffer, i32 width, i32 height)
 }
 
 inline void
-opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, M4* mat, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
+opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
 {
-    // NOTE(Fermin): Not sure where this should go atm
-    glUseProgram(opengl.program);
-    //glBindProgram(opengl.program);
-    
-    glBindTexture(GL_TEXTURE_2D, dude_texture_id);
-    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, mat->e);
-    //glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, m4_ident().e);
-    glUniform1i(opengl.texture_sampler_id, 0);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
 
     glBegin(GL_TRIANGLES);
-
-    glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
 
     // NOTE(Fermin): Lower triangle
     glTexCoord2f(min_uv.x, min_uv.y);
@@ -530,7 +526,6 @@ opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, M4* mat, V2 min_uv = {0, 
     glVertex2f(min_p.x, max_p.y);
 
     glEnd();
-    glUseProgram(0);
 }
 
 static void //internal void *
@@ -575,49 +570,14 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
 static void
 win32_display_buffer_in_window(HDC device_context,
                                i32 window_width, i32 window_height,
-                               Win32_Offscreen_Buffer buffer)
+                               Render_Buffer* render_buffer)
 {
-#if 0
-    StretchDIBits(device_context,
-                  /*
-                  x, y, width, height,
-                  x, y, width, height,
-                  */
-                  0, 0, window_width, window_height,
-                  0, 0, buffer.width, buffer.height,
-                  buffer.memory,
-                  &buffer.info,
-                  DIB_RGB_COLORS, SRCCOPY);
-#endif
-    glViewport(0, 0, window_width, window_height);
+    /*  
+     *  OpenGL "Normalized device coordinates" go from
+     *  Bottom left {-1, -1}
+     *  Top Right   { 1,  1}
 
-    opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
-
-    glDepthMask(GL_TRUE);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-    glEnable(GL_TEXTURE_2D);
-    //glEnable(GL_DEPTH_TEST);
-    glEnable(GL_SCISSOR_TEST);
-    glEnable(GL_BLEND);
-    //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
- 
-
-
-    glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    // NOTE(Fermin): Should change this to 3d eventually
-    /*
-    V2 min_p = {-1.0f, -1.0f};
-    V2 max_p = { 1.0f,  1.0f};
-    V4 pre_mul_color = {1.0f,  1.0f, 1.0f, 1.0f};
-    opengl_rectangle(min_p, max_p, pre_mul_color);
-    */
-
-    /*  Orthogonal
-
+        Orthogonal (UI)
         | 2/width      0         0         0 |
         |    0     2/height      0         0 |
         |    0         0         1         0 |
@@ -631,10 +591,31 @@ win32_display_buffer_in_window(HDC device_context,
     ortho.m[3].e[0] = -1.0f;
     ortho.m[3].e[1] = -1.0f;
 
-    V2 min_p = {10.0f, 10.0f};
-    V2 max_p = {120.0f, 120.0f};
-    V4 pre_mul_color = {1.0f,  1.0f, 1.0f, 1.0f};
-    opengl_rectangle(min_p, max_p, pre_mul_color, &ortho);
+    glViewport(0, 0, window_width, window_height);
+    //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
+    glDepthMask(GL_TRUE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glEnable(GL_TEXTURE_2D);
+    //glEnable(GL_DEPTH_TEST);
+    glEnable(GL_SCISSOR_TEST);
+    glEnable(GL_BLEND);
+    //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+    glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(opengl.program);
+    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
+    glUniform1i(opengl.texture_sampler_id, 0);
+
+    f32 tile_width_in_px = 64.0f;
+    Rect *rects = (Rect *)render_buffer->buffer.data;
+    for(u32 index = 0; index < render_buffer->count; index++)
+    {
+        Rect *rect = rects + index;
+        opengl_rectangle(rect->min_p.xy*tile_width_in_px, rect->max_p.xy*tile_width_in_px, rect->color, rect->texture_id);
+    }
+
+    glUseProgram(0);
 
     SwapBuffers(device_context);
 }
@@ -661,6 +642,17 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             printf("WM_ACTIVATEAPP\n");
         } break;
 
+#if 0
+        // NOTE(Fermin): Enable this when we handle input
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        {
+            assert(!"Keyboard input came in through a non-dispatch message!");
+        } break;
+#endif
+
         case WM_DESTROY:
         {
             win32_running = 0;
@@ -673,7 +665,7 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
             win32_display_buffer_in_window(device_context,
                                            dimension.width, dimension.height,
-                                           global_back_buffer);
+                                           &tiles_buffer);
             EndPaint(window, &paint);
         } break;
 
@@ -1092,6 +1084,7 @@ generate_texture(u8 *data, i32 width, i32 height, u32 format)
 static u32
 generate_texture(char *path, u32 format)
 {
+    // TODO(Fermin): Maybe use opengl.default_internal_texture_format here?
     u32 result;
 
     Buffer buffer = read_file(path);
@@ -1413,7 +1406,7 @@ int main()
             game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
             game_state.camera.up    = { 0.0f,  1.0f,  0.0f};
             game_state.camera.front = { 0.0f,  0.0f, -1.0f};
-            game_state.tile_size_in_meters = 1.0f;
+            game_state.tile_size = 1.0f;
             game_state.level_rows = 8 * 8;
             game_state.level_cols = 8 * 8;
             game_state.floor_texture_id     = floor_texture_id;
@@ -1433,14 +1426,13 @@ int main()
             Rect dude = {};
             dude.min_p = V3{0.0f, 0.0f, 0.0f};
             dude.max_p = V3{
-                game_state.tile_size_in_meters,
-                game_state.tile_size_in_meters,
+                game_state.tile_size,
+                game_state.tile_size,
                 0.0f
             };
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
-            Render_Buffer tiles_buffer = {};
             tiles_buffer.buffer = allocate_buffer(gigabytes(1));
             u32 rect_cap = gigabytes(1)/sizeof(Rect);
             // NOTE(Fermin): Game things end
@@ -1659,15 +1651,18 @@ int main()
                 tiles_buffer.count = tiles_buffer.cached;
 #endif
 
-                render_gradient(global_back_buffer);
+
+                game.update_and_render(&tiles_buffer, &dude, &game_state);
+                //render_gradient(global_back_buffer);
 
                 HDC device_context = GetDC(window);
                 Win32_Window_Dimension dimension = win32_get_window_dimension(window);
                 win32_display_buffer_in_window(device_context,
                                                dimension.width,
                                                dimension.height,
-                                               global_back_buffer);
+                                               &tiles_buffer);
                 ReleaseDC(window, device_context);
+                tiles_buffer.count = tiles_buffer.cached;
             }
         }
         else

@@ -115,6 +115,16 @@ inline V2 & operator-=(V2 &a, V2 b)
     return a;
 }
 
+inline V2 operator*(V2 a, f32 b)
+{
+    V2 result = {};
+
+    result.x = a.x * b;
+    result.y = a.y * b;
+
+    return result;
+}
+
 /*
 * V3
 */

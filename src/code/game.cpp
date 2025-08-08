@@ -25,7 +25,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     const size_t map_rows = 18;
     const size_t map_cols = 17;
-    f32 tile_size_in_meters = game_state->tile_size_in_meters;
+    f32 tile_size = game_state->tile_size;
     if(!game_state->initialized)
     {
         assert(tiles_buffer->count == 0);
@@ -59,12 +59,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             for(i32 col = 0; col < game_state->level_cols; col++)
             {
                 // NOTE(Fermin): Currently this only draws a grid, which will be turned into a maze later
-                f32 start_x = col*tile_size_in_meters;
-                f32 start_y = row*tile_size_in_meters;
+                f32 start_x = col*tile_size;
+                f32 start_y = row*tile_size;
 
                 Rect rect = {};
                 rect.min_p = V3{start_x, start_y, 0.0};
-                rect.max_p = V3{start_x + tile_size_in_meters, start_y + tile_size_in_meters, 0.0};
+                rect.max_p = V3{start_x + tile_size, start_y + tile_size, 0.0};
 
                 // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
                 // TODO(Fermin): Corner textures
@@ -420,10 +420,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
                                 origin.y + distance_to_end * ray_direction.y,
                                 0.0};
             // NOTE(Fermin): We bring this to world coords
-            ray_at_z_0 *= tile_size_in_meters;
+            ray_at_z_0 *= tile_size;
 
             i32 tile_x, tile_y;
-            world_coord_to_tile_index(&ray_at_z_0, tile_size_in_meters, &tile_x, &tile_y);
+            world_coord_to_tile_index(&ray_at_z_0, tile_size, &tile_x, &tile_y);
             if(is_tile_index_valid(tile_x, tile_y, game_state->level_cols, game_state->level_rows))
             {
                 game_state->editing_tile = 1;
@@ -531,11 +531,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         V3 tile_world_pos = tile_index_to_world_coord(game_state->editing_tile_x,
                                                       game_state->editing_tile_y,
-                                                      tile_size_in_meters);
+                                                      tile_size);
 
         Rect highlight = {};
         highlight.min_p = tile_world_pos;
-        highlight.max_p = tile_world_pos + V3{tile_size_in_meters, tile_size_in_meters, 0.0};
+        highlight.max_p = tile_world_pos + V3{tile_size, tile_size, 0.0};
         highlight.texture_id = game_state->highlight_texture_id;
 
         push_rectangle(tiles_buffer, &highlight);
