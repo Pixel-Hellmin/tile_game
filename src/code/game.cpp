@@ -333,7 +333,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     Input_Keys input_state = game_state->input_state;
     Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 delta = game_state->delta;
-    f32 dude_speed = 10.0 * delta;
+    f32 dude_speed = 10.0 * delta /* debug while we get delta */ + 1.0f;
     f32 camera_speed = 30.0 * delta;
     if(input_state.f1 && !last_frame_input_state.f1)
     {

@@ -642,8 +642,6 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             printf("WM_ACTIVATEAPP\n");
         } break;
 
-#if 0
-        // NOTE(Fermin): Enable this when we handle input
         case WM_SYSKEYDOWN:
         case WM_SYSKEYUP:
         case WM_KEYDOWN:
@@ -651,7 +649,6 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
         {
             assert(!"Keyboard input came in through a non-dispatch message!");
         } break;
-#endif
 
         case WM_DESTROY:
         {
@@ -1153,6 +1150,133 @@ win32_unload_game_code(Game_Code *game_code)
     game_code->update_and_render = game_update_and_render_stub;
 }
 
+static void
+win32_process_keyboard_message(b32 *button_state, b32 is_down)
+{
+    // TODO(Fermin): Transition states
+    *button_state = is_down;
+}
+
+static void
+win32_process_pending_messages(Game_State *game_state)
+{
+    MSG message;
+    while(PeekMessage(&message, 0, 0, 0, PM_REMOVE))
+    {
+        switch(message.message)
+        {
+            case WM_QUIT:
+            {
+                win32_running = false;
+            } break;
+
+            case WM_SYSKEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYDOWN:
+            case WM_KEYUP:
+            {
+                u32 vk_code = (u32)message.wParam;
+                b32 alt_key_was_down = (message.lParam & (1 << 29));
+
+                // NOTE: Since we are comparing was_down to is_down,
+                // we MUST use == and != to convert these bit tests to actual
+                // 0 or 1 values.
+                b32 was_down = ((message.lParam & (1 << 30)) != 0);
+                b32 is_down = ((message.lParam & (1 << 31)) == 0);
+                if(was_down != is_down)
+                {
+                    if(vk_code == 'W')
+                    {
+                        //win32_process_keyboard_message(&KeyboardController->MoveUp, is_down);
+                        win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == 'A')
+                    {
+                        win32_process_keyboard_message(&game_state->input_state.a, is_down);
+                    }
+                    else if(vk_code == 'S')
+                    {
+                        win32_process_keyboard_message(&game_state->input_state.s, is_down);
+                    }
+                    else if(vk_code == 'D')
+                    {
+                        win32_process_keyboard_message(&game_state->input_state.d, is_down);
+                    }
+                    else if(vk_code == 'Q')
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == 'E')
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == VK_UP)
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == VK_LEFT)
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == VK_DOWN)
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == VK_RIGHT)
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == VK_ESCAPE)
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == VK_SPACE)
+                    {
+                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                    }
+                    else if(vk_code == 'P')
+                    {
+                        if(is_down)
+                        {
+                        }
+                    }
+                    else if(vk_code == 'L')
+                    {
+                        if(is_down)
+                        {
+                        }
+                    }
+                    if(is_down)
+                    {
+                        if((vk_code == VK_F4) && alt_key_was_down)
+                        {
+                            win32_running = false;
+                        }
+                        if(vk_code == VK_ESCAPE)
+                        {
+                            win32_running = false;
+                        }
+                        if((vk_code == VK_RETURN) && alt_key_was_down)
+                        {
+                            if(message.hwnd)
+                            {
+                                //ToggleFullscreen(message.hwnd);
+                            }
+                        }
+                    }
+                }
+            } break;
+
+            default:
+            {
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+            }
+        }
+
+    }
+}
+
 int main()
 {
     // NOTE(Fermin): Never use MAX_PATH in code that is user-facing since that is not the max size anymore
@@ -1458,19 +1582,7 @@ int main()
                     tiles_buffer.cached = 0;
                 }
 
-                // TODO(Fermin): Handle input with x input here and move to 
-                // a function for ease of reading
-                MSG message;
-                while(PeekMessage(&message, 0, 0, 0, PM_REMOVE))
-                {
-                    if(message.message == WM_QUIT)
-                    {
-                        win32_running = false;
-                    }
-
-                    TranslateMessage(&message);
-                    DispatchMessageA(&message);
-                }
+                win32_process_pending_messages(&game_state);
 
 #if 0
                 f32 current_frame = glfwGetTime();
@@ -1502,27 +1614,6 @@ int main()
                 game_state.input_state.cursor.x = last_mouse_x/screen_width + (last_mouse_x - screen_width)/screen_width;
                 game_state.input_state.cursor.y = -1.0 * (last_mouse_y/screen_height + (last_mouse_y - screen_height)/screen_height);
 
-                // TODO(Fermin): No need for ifs, just assign check directly to key state?
-                if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                    game_state.input_state.w = 1;
-                if(glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE)
-                    game_state.input_state.w = 0;
-
-                if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                    game_state.input_state.s = 1;
-                if(glfwGetKey(window, GLFW_KEY_S) == GLFW_RELEASE)
-                    game_state.input_state.s = 0;
-
-                if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                    game_state.input_state.a = 1;
-                if(glfwGetKey(window, GLFW_KEY_A) == GLFW_RELEASE)
-                    game_state.input_state.a = 0;
-
-                if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                    game_state.input_state.d = 1;
-                if(glfwGetKey(window, GLFW_KEY_D) == GLFW_RELEASE)
-                    game_state.input_state.d = 0;
-
                 if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
                     game_state.input_state.left_mouse = 1;
                 if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
@@ -1542,9 +1633,6 @@ int main()
                     game_state.input_state.f3 = 1;
                 if(glfwGetKey(window, GLFW_KEY_F3) == GLFW_RELEASE)
                     game_state.input_state.f3 = 0;
-
-                if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-                    glfwSetWindowShouldClose(window, true);
 
                 // TODO(Fermin): Where is it convinient to update this matrix?
                 // We need to see how ofter the camera state changes
