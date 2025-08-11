@@ -17,7 +17,7 @@ global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
 global_variable Render_Buffer tiles_buffer = {};
 global_variable Game_State game_state = {};
-
+global_variable f32 global_perf_count_frequency;
 // TODO(Fermin): This goes in opengl header
 struct Opengl {
     GLuint program;
@@ -1298,9 +1298,21 @@ win32_get_wallclock(void)
     return(result);
 }
 
+static f32
+win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+{
+    f32 result = ((f32)(end.QuadPart - start.QuadPart) /
+                  (f32)global_perf_count_frequency);
+
+    return result;
+}
 
 int main()
 {
+    LARGE_INTEGER perf_count_frequency_result;
+    QueryPerformanceFrequency(&perf_count_frequency_result);
+    global_perf_count_frequency = perf_count_frequency_result.QuadPart;
+
     // NOTE(Fermin): Never use MAX_PATH in code that is user-facing since that is not the max size anymore
     char exe_file_name[MAX_PATH];
     DWORD size_of_file_name = GetModuleFileNameA(0, exe_file_name,
@@ -1365,14 +1377,20 @@ int main()
         {
             win32_init_opengl(window);
 
-            /* CHECK THIS
-            //glViewport(0, 0, screen_width, screen_height);
+            i32 monitor_refresh_hz = 60;
+            HDC refresh_dc = GetDC(window);
+            i32 win32_refresh_rate = GetDeviceCaps(refresh_dc, VREFRESH);
+            ReleaseDC(window, refresh_dc);
+            if(win32_refresh_rate > 1)
+            {
+                monitor_refresh_hz = win32_refresh_rate;
+            }
+            f32 game_update_hz = (f32)(monitor_refresh_hz);
 
+            /* CHECK THIS
             glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  
             glfwSetCursorPosCallback(window, mouse_callback);  
             glfwSetScrollCallback(window, scroll_callback); 
-
-            glfwSwapInterval(1); // V sync (0 = off, 1 = on)
             */
 
             win32_running = 1;
@@ -1553,7 +1571,6 @@ int main()
             game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
             game_state.camera.up    = { 0.0f,  1.0f,  0.0f};
             game_state.camera.front = { 0.0f,  0.0f, -1.0f};
-            game_state.tile_size = 1.0f;
             game_state.level_rows = 8 * 8;
             game_state.level_cols = 8 * 8;
             game_state.floor_texture_id     = floor_texture_id;
@@ -1572,7 +1589,7 @@ int main()
 
             Rect dude = {};
             dude.world_index = V3{0.0f, 0.0f, 0.0f};
-            dude.dim_in_tiles = V2{2.0f, 1.0f};
+            dude.dim_in_tiles = V2{2.0f, 2.0f};
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
@@ -1580,12 +1597,15 @@ int main()
             u32 rect_cap = gigabytes(1)/sizeof(Rect);
             // NOTE(Fermin): Game things end
 
-            f32 delta_time = 0.0f;
-            f32 last_frame = 0.0f;
-
+            u32 expected_frames_per_update = 1;
+            LARGE_INTEGER last_counter = win32_get_wallclock();
+            f32 target_seconds_per_frame = (f32)expected_frames_per_update / (f32)game_update_hz;
             // NOTE(Fermin): This is the main loop
             while(win32_running)
             {
+
+                game_state.dt_in_seconds = target_seconds_per_frame;
+
                 assert(tiles_buffer.count == tiles_buffer.cached);
 
                 FILETIME new_dll_write_time = win32_get_last_write_time(src_game_code_dll_full_path);
@@ -1602,13 +1622,6 @@ int main()
                 }
 
                 win32_process_pending_messages(&game_state);
-
-                /* WIP nocheckin
-                f32 current_frame = win32_get_wallclock();
-                delta_time = current_frame - last_frame;
-                last_frame = current_frame;
-                game_state.delta = delta_time;
-                */
 
 #if 0
 
@@ -1774,6 +1787,11 @@ int main()
                                                &game_state.camera);
                 ReleaseDC(window, device_context);
                 tiles_buffer.count = tiles_buffer.cached;
+
+                LARGE_INTEGER end_counter = win32_get_wallclock();
+                f32 measured_seconds_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
+                target_seconds_per_frame = measured_seconds_for_frame;
+                last_counter = end_counter;
             }
         }
         else

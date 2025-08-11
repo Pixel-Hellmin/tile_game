@@ -30,6 +30,7 @@
 #endif
 
 typedef int32_t    i32;
+typedef int64_t    i64;
 
 typedef uint8_t    u8;
 typedef uint32_t   u32;
@@ -172,7 +173,7 @@ struct Particle
 
 struct Game_State
 {
-    f32 delta;
+    f32 dt_in_seconds;
     Random_Series entropy;
 
     Input_Keys input_state;
@@ -183,7 +184,6 @@ struct Game_State
     Camera camera;
     M4 *proj;
     M4 *view;
-    f32 tile_size;
 
     // TODO(Fermin): Store tile index into Render_Buffer instead of this
     b32 editing_tile;

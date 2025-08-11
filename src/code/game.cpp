@@ -328,9 +328,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     // NOTE(Fermin): Update dude
     Input_Keys input_state = game_state->input_state;
     Input_Keys last_frame_input_state = game_state->last_frame_input_state;
-    f32 delta = game_state->delta;
-    f32 dude_speed = 10.0 * delta /* debug while we get delta */ + 0.1f;
-    f32 camera_speed = 30.0 * delta;
+    f32 dt_in_seconds = game_state->dt_in_seconds;
+    f32 dude_speed = 10.0 * dt_in_seconds;
+    f32 camera_speed = 30.0 * dt_in_seconds;
     if(input_state.f1 && !last_frame_input_state.f1)
     {
         if(is_set(game_state, game_state_flag_prints))
@@ -490,8 +490,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         Particle *particle = game_state->particles + particle_index;
 
         // NOTE(Fermin): Simulate particles forward in time
-        particle->p += game_state->delta * particle->d_p;
-        particle->color_trans += game_state->delta * particle->d_color;
+        particle->p += game_state->dt_in_seconds * particle->d_p;
+        particle->color_trans += game_state->dt_in_seconds * particle->d_color;
 
         V4 color_trans;
         color_trans.r = clamp01(particle->color_trans.r);
@@ -509,7 +509,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             color_trans.a = 0.9f * clamp01_map_to_range(1.0f, color_trans.a, 0.9f);
         }
 
-        particle->rotation += game_state->delta * particle->d_rotation;
+        particle->rotation += game_state->dt_in_seconds * particle->d_rotation;
 
         Rect part = {};
         part.world_index = particle->p;
