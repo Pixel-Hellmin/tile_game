@@ -620,8 +620,9 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
     {
         Rect *rect = rects + index;
         // NOTE(Fermin): Set the dude in the center of the screen and move the world
-        V3 min_p = (rect->min_p - camera->pos) * tile_width_in_px + half_window;
-        V3 max_p = (rect->max_p - camera->pos) * tile_width_in_px + half_window;
+        V3 min_p = (rect->world_index - camera->pos) * tile_width_in_px + half_window;
+        V3 max_p = {};
+        max_p.xy = min_p.xy + (rect->dim_in_tiles * tile_width_in_px); //(rect->max_p - camera->pos) * tile_width_in_px + half_window;
         opengl_rectangle(min_p.xy, max_p.xy, rect->color, rect->texture_id);
     }
 
@@ -1289,6 +1290,15 @@ win32_process_pending_messages(Game_State *game_state)
     }
 }
 
+static LARGE_INTEGER
+win32_get_wallclock(void)
+{
+    LARGE_INTEGER result;
+    QueryPerformanceCounter(&result);
+    return(result);
+}
+
+
 int main()
 {
     // NOTE(Fermin): Never use MAX_PATH in code that is user-facing since that is not the max size anymore
@@ -1561,12 +1571,8 @@ int main()
             set_flag(&game_state, game_state_flag_prints);
 
             Rect dude = {};
-            dude.min_p = V3{0.0f, 0.0f, 0.0f};
-            dude.max_p = V3{
-                game_state.tile_size,
-                game_state.tile_size,
-                0.0f
-            };
+            dude.world_index = V3{0.0f, 0.0f, 0.0f};
+            dude.dim_in_tiles = V2{2.0f, 1.0f};
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
@@ -1597,11 +1603,14 @@ int main()
 
                 win32_process_pending_messages(&game_state);
 
-#if 0
-                f32 current_frame = glfwGetTime();
+                /* WIP nocheckin
+                f32 current_frame = win32_get_wallclock();
                 delta_time = current_frame - last_frame;
                 last_frame = current_frame;
                 game_state.delta = delta_time;
+                */
+
+#if 0
 
                 debug_print_line = 0.0f;
 

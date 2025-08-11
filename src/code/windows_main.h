@@ -103,12 +103,12 @@ struct Rect
     * u32 tex_id;
     */
     // NOTE(Fermin): If we update this struct remember to also update push_rectangle
+    /*
     V3 min_p;
     V3 max_p;
-    /*
+    */
     V3 world_index;
     V2 dim_in_tiles;
-    */
     V4 color;
     u32 texture_id;
     f32 rotation;
@@ -117,15 +117,15 @@ struct Rect
 u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect, V4 color = {1.0, 1.0, 1.0, 1.0})
 {
     // NOTE(Fermin): This is error prone since we have to update this function each time we change Rect struct
-    static_assert(sizeof(Rect) == 48, "Pushing out of date Rect");
+    static_assert(sizeof(Rect) == 44, "Pushing out of date Rect");
 
     u32 result = render_buffer->count;
 
     assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);
 
     Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
-    pushed_rect->min_p = rect->min_p;
-    pushed_rect->max_p = rect->max_p;
+    pushed_rect->world_index = rect->world_index;
+    pushed_rect->dim_in_tiles = rect->dim_in_tiles;
     pushed_rect->color = color;
     pushed_rect->texture_id = rect->texture_id;
     pushed_rect->rotation = rect->rotation;

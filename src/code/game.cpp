@@ -25,7 +25,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     const size_t map_rows = 18;
     const size_t map_cols = 17;
-    f32 tile_size = game_state->tile_size;
     if(!game_state->initialized)
     {
         assert(tiles_buffer->count == 0);
@@ -59,12 +58,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             for(i32 col = 0; col < game_state->level_cols; col++)
             {
                 // NOTE(Fermin): Currently this only draws a grid, which will be turned into a maze later
-                f32 start_x = col*tile_size;
-                f32 start_y = row*tile_size;
-
                 Rect rect = {};
-                rect.min_p = V3{start_x, start_y, 0.0};
-                rect.max_p = V3{start_x + tile_size, start_y + tile_size, 0.0};
+                rect.world_index = V3{(f32)col, (f32)row, 0.0}; // TODO(Fermin): Maybe Vi3???
+                rect.dim_in_tiles = V2{1.0f, 1.0f};
 
                 // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
                 // TODO(Fermin): Corner textures
@@ -333,7 +329,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     Input_Keys input_state = game_state->input_state;
     Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 delta = game_state->delta;
-    f32 dude_speed = 10.0 * delta /* debug while we get delta */ + 1.0f;
+    f32 dude_speed = 10.0 * delta /* debug while we get delta */ + 0.1f;
     f32 camera_speed = 30.0 * delta;
     if(input_state.f1 && !last_frame_input_state.f1)
     {
@@ -372,26 +368,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         if(input_state.w)
         {
-            dude->min_p.y += dude_speed; 
-            dude->max_p.y += dude_speed; 
+            dude->world_index.y += dude_speed; 
         }
         if(input_state.s)
         {
-            dude->min_p.y -= dude_speed; 
-            dude->max_p.y -= dude_speed; 
+            dude->world_index.y -= dude_speed; 
         }
         if(input_state.a)
         {
-            dude->min_p.x -= dude_speed; 
-            dude->max_p.x -= dude_speed; 
+            dude->world_index.x -= dude_speed; 
         }
         if(input_state.d)
         {
-            dude->min_p.x += dude_speed; 
-            dude->max_p.x += dude_speed; 
+            dude->world_index.x += dude_speed; 
         }
         if(input_state.left_mouse && !last_frame_input_state.left_mouse)
         {
+#if 0
             // NOTE(Fermin): Raycasting
             // TODO(Fermin): Intrinsics
             V3 origin = game_state->camera.pos;
@@ -434,11 +427,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 game_state->editing_tile = 0;
             }
+#endif
         }
     }
     else
     {
-        /* Testing 2D
         if(input_state.w)
         {
             game_state->camera.pos += camera_speed * game_state->camera.front;
@@ -455,13 +448,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             game_state->camera.pos += normalize(cross(game_state->camera.front, game_state->camera.up)) * camera_speed;
         }
-        */
     }
-    game_state->camera.pos = dude->min_p; // NOTE(Fermin): Testing
+    game_state->camera.pos = dude->world_index; // NOTE(Fermin): Testing
 
     if(!is_set(game_state, game_state_flag_free_cam_mode))
     {
-            game_state->camera.pos.xy = dude->min_p.xy;
+            //game_state->camera.pos.xy = dude->min_p.xy;
             //game_state->camera.pos.z += 15.0f;
     }
 
@@ -520,8 +512,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         particle->rotation += game_state->delta * particle->d_rotation;
 
         Rect part = {};
-        part.min_p = particle->p;
-        part.max_p = particle->p + V3{0.4, 0.4, 0.4};
+        part.world_index = particle->p;
+        part.dim_in_tiles = V2{0.4, 0.4};
         part.rotation = particle->rotation;
         part.texture_id = game_state->wall_texture_id;
 
@@ -532,6 +524,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(game_state->editing_tile)
     {
+#if 0
         V3 tile_world_pos = tile_index_to_world_coord(game_state->editing_tile_x,
                                                       game_state->editing_tile_y,
                                                       tile_size);
@@ -542,6 +535,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         highlight.texture_id = game_state->highlight_texture_id;
 
         push_rectangle(tiles_buffer, &highlight);
+#endif
     }
     push_rectangle(tiles_buffer, dude);
 
