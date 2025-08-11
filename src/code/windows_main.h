@@ -105,6 +105,10 @@ struct Rect
     // NOTE(Fermin): If we update this struct remember to also update push_rectangle
     V3 min_p;
     V3 max_p;
+    /*
+    V3 world_index;
+    V2 dim_in_tiles;
+    */
     V4 color;
     u32 texture_id;
     f32 rotation;

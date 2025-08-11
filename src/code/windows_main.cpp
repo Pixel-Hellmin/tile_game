@@ -15,8 +15,8 @@ global_variable f32 camera_pitch = 0.0f;
 global_variable f32 camera_yaw = -90.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
-global_variable u32 dude_texture_id;
 global_variable Render_Buffer tiles_buffer = {};
+global_variable Game_State game_state = {};
 
 // TODO(Fermin): This goes in opengl header
 struct Opengl {
@@ -475,26 +475,26 @@ render_gradient(Win32_Offscreen_Buffer buffer)
 }
 
 static void
-win32_resize_DIB_section(Win32_Offscreen_Buffer *buffer, i32 width, i32 height)
+win32_resize_DIB_section(i32 width, i32 height)
 {
-    if(buffer->memory)
+    if(global_back_buffer.memory)
     {
-        VirtualFree(buffer->memory, 0, MEM_RELEASE);
+        VirtualFree(global_back_buffer.memory, 0, MEM_RELEASE);
     }
 
-    buffer->width = width;
-    buffer->height = height;
-    buffer->bytes_per_pixel = 4;
-    buffer->pitch = width * buffer->bytes_per_pixel;
-    buffer->info.bmiHeader.biSize = sizeof(buffer->info.bmiHeader);
-    buffer->info.bmiHeader.biWidth = buffer->width;
-    buffer->info.bmiHeader.biHeight = -buffer->height;
-    buffer->info.bmiHeader.biPlanes = 1;
-    buffer->info.bmiHeader.biBitCount = 32;
-    buffer->info.bmiHeader.biCompression = BI_RGB;
+    global_back_buffer.width = width;
+    global_back_buffer.height = height;
+    global_back_buffer.bytes_per_pixel = 4;
+    global_back_buffer.pitch = width * global_back_buffer.bytes_per_pixel;
+    global_back_buffer.info.bmiHeader.biSize = sizeof(global_back_buffer.info.bmiHeader);
+    global_back_buffer.info.bmiHeader.biWidth = global_back_buffer.width;
+    global_back_buffer.info.bmiHeader.biHeight = -global_back_buffer.height;
+    global_back_buffer.info.bmiHeader.biPlanes = 1;
+    global_back_buffer.info.bmiHeader.biBitCount = 32;
+    global_back_buffer.info.bmiHeader.biCompression = BI_RGB;
 
-    i32 bitmap_memory_size = (buffer->width * buffer->height) * buffer->bytes_per_pixel;
-    buffer->memory = VirtualAlloc(0, bitmap_memory_size, MEM_COMMIT, PAGE_READWRITE);
+    i32 bitmap_memory_size = (global_back_buffer.width * global_back_buffer.height) * global_back_buffer.bytes_per_pixel;
+    global_back_buffer.memory = VirtualAlloc(0, bitmap_memory_size, MEM_COMMIT, PAGE_READWRITE);
 }
 
 inline void
@@ -568,28 +568,28 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
 }
 
 static void
-win32_display_buffer_in_window(HDC device_context,
+win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
                                i32 window_width, i32 window_height,
-                               Render_Buffer* render_buffer)
+                               Camera* camera)
 {
     /*  
      *  OpenGL "Normalized device coordinates" go from
      *  Bottom left {-1, -1}
      *  Top Right   { 1,  1}
 
-        Orthogonal (UI)
+        Orthogonal (UI) - Row Mayor
         | 2/width      0         0         0 |
         |    0     2/height      0         0 |
         |    0         0         1         0 |
         |   -1        -1         0         1 |
     */
     M4 ortho = {};
-    ortho.m[0].e[0] =  2.0f/(f32)window_width;
-    ortho.m[1].e[1] =  2.0f/(f32)window_height;
-    ortho.m[2].e[2] =  1.0f;
-    ortho.m[3].e[3] =  1.0f;
-    ortho.m[3].e[0] = -1.0f;
-    ortho.m[3].e[1] = -1.0f;
+    ortho.m[0].x =  2.0f/(f32)window_width;
+    ortho.m[1].y =  2.0f/(f32)window_height;
+    ortho.m[2].z =  1.0f;
+    ortho.m[3].w =  1.0f;
+    ortho.m[3].x = -1.0f;
+    ortho.m[3].y = -1.0f;
 
     glViewport(0, 0, window_width, window_height);
     //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
@@ -607,12 +607,22 @@ win32_display_buffer_in_window(HDC device_context,
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
     glUniform1i(opengl.texture_sampler_id, 0);
 
+    // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles
+    V3 half_window =
+    {
+        (f32)(window_width / 2),
+        (f32)(window_height / 2),
+        0
+    };
     f32 tile_width_in_px = 64.0f;
     Rect *rects = (Rect *)render_buffer->buffer.data;
     for(u32 index = 0; index < render_buffer->count; index++)
     {
         Rect *rect = rects + index;
-        opengl_rectangle(rect->min_p.xy*tile_width_in_px, rect->max_p.xy*tile_width_in_px, rect->color, rect->texture_id);
+        // NOTE(Fermin): Set the dude in the center of the screen and move the world
+        V3 min_p = (rect->min_p - camera->pos) * tile_width_in_px + half_window;
+        V3 max_p = (rect->max_p - camera->pos) * tile_width_in_px + half_window;
+        opengl_rectangle(min_p.xy, max_p.xy, rect->color, rect->texture_id);
     }
 
     glUseProgram(0);
@@ -661,8 +671,10 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             HDC device_context = BeginPaint(window, &paint);
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
             win32_display_buffer_in_window(device_context,
-                                           dimension.width, dimension.height,
-                                           &tiles_buffer);
+                                           &tiles_buffer,
+                                           dimension.width,
+                                           dimension.height,
+                                           &game_state.camera);
             EndPaint(window, &paint);
         } break;
 
@@ -686,7 +698,7 @@ framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
     aspect_ratio = ((f32)screen_width)/((f32)screen_height);
     projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
 
-    glViewport(0, 0, width, height);
+    //glViewport(0, 0, width, height);
 }  
 
 // OpenGL
@@ -1312,7 +1324,8 @@ int main()
                 sizeof(tmp_game_code_dll_full_path) - 1,
                 tmp_game_code_dll_full_path);
 
-    win32_resize_DIB_section(&global_back_buffer, 1280, 720);
+    //win32_resize_DIB_section(960, 540);
+    win32_resize_DIB_section(1920, 1080);
 
     WNDCLASS window_class = {};
     window_class.style = CS_HREDRAW|CS_VREDRAW;
@@ -1343,7 +1356,7 @@ int main()
             win32_init_opengl(window);
 
             /* CHECK THIS
-            glViewport(0, 0, screen_width, screen_height);
+            //glViewport(0, 0, screen_width, screen_height);
 
             glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  
             glfwSetCursorPosCallback(window, mouse_callback);  
@@ -1358,11 +1371,12 @@ int main()
             glGenTextures(1, &texture_handle);
 
             // NOTE(Fermin) | Start | Textures
+            // TODO(Fermin): Check the textures' color format and match the default set on init
             u32 floor_texture_id     = generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
             u32 wall_texture_id      = generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
             u32 roof_texture_id      = generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
             u32 highlight_texture_id = generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-            dude_texture_id          = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
+            u32 dude_texture_id      = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
             // NOTE(Fermin): Test fonts start
@@ -1524,7 +1538,6 @@ int main()
             glBindVertexArray(0); 
 #endif
 
-            Game_State game_state = {};
             game_state.entropy.index = 666;
             //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
             game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
@@ -1746,9 +1759,10 @@ int main()
                 HDC device_context = GetDC(window);
                 Win32_Window_Dimension dimension = win32_get_window_dimension(window);
                 win32_display_buffer_in_window(device_context,
+                                               &tiles_buffer,
                                                dimension.width,
                                                dimension.height,
-                                               &tiles_buffer);
+                                               &game_state.camera);
                 ReleaseDC(window, device_context);
                 tiles_buffer.count = tiles_buffer.cached;
             }
