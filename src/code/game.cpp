@@ -384,50 +384,22 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if(input_state.left_mouse && !last_frame_input_state.left_mouse)
         {
-#if 0
-            // NOTE(Fermin): Raycasting
             // TODO(Fermin): Intrinsics
-            V3 origin = game_state->camera.pos;
+            V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, -1.0, 1.0};
+            M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
+            V2 world_index = (invert(&ortho) * cursor_pos_ndc).xy / 64.0f; // TODO(Fermin): Tile size!
+            world_index += dude->world_index.xy;
 
-            V4 cursor_pos_ndc = V4{input_state.cursor.x,
-                                   input_state.cursor.y,
-                                   -1.0,
-                                   1.0};
-
-            // NOTE(Fermin): Speed. Calculate the inverse when proj changes?
-            V4 ray_eye = invert(game_state->proj) * cursor_pos_ndc;
-            ray_eye.z = -1.0;
-            ray_eye.w = 0.0;
-
-            V3 ray_world = (invert(game_state->view) * ray_eye).xyz;
-            V3 ray_direction = normalize(ray_world);
-
-            // NOTE(Fermin): Ray equation
-            // NOTE(Fermin): We know the plane we are trying to draw to is on z = 0.0
-            // this may change, be aware
-            f32 plane_z = 0.0;
-            f32 distance_to_end = (plane_z - origin.z) / ray_direction.z;
-
-            // NOTE(Fermin): This coords are in 'model' space.
-            V3 ray_at_z_0 = V3 {origin.x + distance_to_end * ray_direction.x,
-                                origin.y + distance_to_end * ray_direction.y,
-                                0.0};
-            // NOTE(Fermin): We bring this to world coords
-            ray_at_z_0 *= tile_size;
-
-            i32 tile_x, tile_y;
-            world_coord_to_tile_index(&ray_at_z_0, tile_size, &tile_x, &tile_y);
-            if(is_tile_index_valid(tile_x, tile_y, game_state->level_cols, game_state->level_rows))
+            if(is_tile_index_valid(world_index.x, world_index.y, game_state->level_cols, game_state->level_rows))
             {
                 game_state->editing_tile = 1;
-                game_state->editing_tile_x = tile_x;
-                game_state->editing_tile_y = tile_y;
+                game_state->editing_tile_x = (i32)world_index.x;
+                game_state->editing_tile_y = (i32)world_index.y;
             }
             else
             {
                 game_state->editing_tile = 0;
             }
-#endif
         }
     }
     else
@@ -524,19 +496,15 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(game_state->editing_tile)
     {
-#if 0
-        V3 tile_world_pos = tile_index_to_world_coord(game_state->editing_tile_x,
-                                                      game_state->editing_tile_y,
-                                                      tile_size);
-
+        // NOTE(Fermin): We can avoid doing this if we use the z coord
         Rect highlight = {};
-        highlight.min_p = tile_world_pos;
-        highlight.max_p = tile_world_pos + V3{tile_size, tile_size, 0.0};
+        highlight.world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, 0.0f};
+        highlight.dim_in_tiles = V2{1.0f, 1.0f};
         highlight.texture_id = game_state->highlight_texture_id;
 
-        push_rectangle(tiles_buffer, &highlight);
-#endif
+        push_rectangle(tiles_buffer, &highlight, V4{0.0f, 1.0f, 0.0f, 1.0f});
     }
+
     push_rectangle(tiles_buffer, dude);
 
     game_state->last_frame_input_state = input_state;

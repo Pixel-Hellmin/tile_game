@@ -185,6 +185,9 @@ struct Game_State
     M4 *proj;
     M4 *view;
 
+    i32 window_width;
+    i32 window_height;
+
     // TODO(Fermin): Store tile index into Render_Buffer instead of this
     b32 editing_tile;
     i32 editing_tile_x;

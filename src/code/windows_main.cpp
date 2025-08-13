@@ -571,24 +571,8 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
                                i32 window_width, i32 window_height,
                                Camera* camera)
 {
-    /*  
-     *  OpenGL "Normalized device coordinates" go from
-     *  Bottom left {-1, -1}
-     *  Top Right   { 1,  1}
-
-        Orthogonal (UI) - Row Mayor
-        | 2/width      0         0         0 |
-        |    0     2/height      0         0 |
-        |    0         0         1         0 |
-        |   -1        -1         0         1 |
-    */
     M4 ortho = {};
-    ortho.m[0].x =  2.0f/(f32)window_width;
-    ortho.m[1].y =  2.0f/(f32)window_height;
-    ortho.m[2].z =  1.0f;
-    ortho.m[3].w =  1.0f;
-    ortho.m[3].x = -1.0f;
-    ortho.m[3].y = -1.0f;
+    ortho = orthogonal((f32)window_width, (f32)window_height);
 
     glViewport(0, 0, window_width, window_height);
     //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
@@ -664,6 +648,13 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
         {
             win32_running = 0;
         } break;
+
+            /*
+        case WM_SETCURSOR:
+        {
+            result = DefWindowProcA(window, message, w_param, l_param);
+        } break;
+            */
 
         case WM_PAINT:
         {
@@ -1200,7 +1191,6 @@ win32_process_pending_messages(Game_State *game_state)
                 {
                     if(vk_code == 'W')
                     {
-                        //win32_process_keyboard_message(&KeyboardController->MoveUp, is_down);
                         win32_process_keyboard_message(&game_state->input_state.w, is_down);
                     }
                     else if(vk_code == 'A')
@@ -1621,38 +1611,36 @@ int main()
                     tiles_buffer.cached = 0;
                 }
 
+                Win32_Window_Dimension dimension = win32_get_window_dimension(window);
+                game_state.window_width = dimension.width;
+                game_state.window_height = dimension.height;
                 win32_process_pending_messages(&game_state);
 
-#if 0
-
-                debug_print_line = 0.0f;
-
-                // NOTE(Fermin): Hide and capture cursor
                 if(!is_set(&game_state, game_state_flag_free_cam_mode))
                 {
                     mouse_enabled = 1;
-                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);  
+
+                    POINT mouse_p;
+                    GetCursorPos(&mouse_p);
+                    ScreenToClient(window, &mouse_p);
+                    f32 mouse_y = (f32)(dimension.height  - mouse_p.y);
+                    f32 mouse_x = (f32)mouse_p.x;
+
+                    // NOTE(Fermin): Map from screen coords to normalize device coords (-1, 1)
+                    game_state.input_state.cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
+                    game_state.input_state.cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
+
+                    win32_process_keyboard_message(&game_state.input_state.left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
                 }
                 else
                 {
                     mouse_enabled = 0;
-                    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
-
-                    // TODO(Fermin): Feel like this should go in the game.
-                    V3 camera_direction = {};
-                    camera_direction.x = cos(radians(camera_yaw)) * cos(radians(camera_pitch));
-                    camera_direction.y = sin(radians(camera_pitch));
-                    camera_direction.z = sin(radians(camera_yaw)) * cos(radians(camera_pitch));
-                    game_state.camera.front = normalize(camera_direction);
+                    SetCursor(0);
                 }
 
-                game_state.input_state.cursor.x = last_mouse_x/screen_width + (last_mouse_x - screen_width)/screen_width;
-                game_state.input_state.cursor.y = -1.0 * (last_mouse_y/screen_height + (last_mouse_y - screen_height)/screen_height);
+#if 0
 
-                if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-                    game_state.input_state.left_mouse = 1;
-                if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
-                    game_state.input_state.left_mouse = 0;
+                debug_print_line = 0.0f;
 
                 if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
                     game_state.input_state.f1 = 1;
@@ -1779,7 +1767,6 @@ int main()
                 //render_gradient(global_back_buffer);
 
                 HDC device_context = GetDC(window);
-                Win32_Window_Dimension dimension = win32_get_window_dimension(window);
                 win32_display_buffer_in_window(device_context,
                                                &tiles_buffer,
                                                dimension.width,
