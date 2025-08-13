@@ -267,7 +267,6 @@ opengl_init(Opengl_Info info)
         opengl.default_internal_texture_format = GL_SRGB8_ALPHA8;
     }
 
-    // NOTE(Fermin): Not using this check atm. This is for frame buffer texture format
     if(info.GL_EXT_framebuffer_sRGB)
     {
         glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &opengl.max_multisample_count);
@@ -1083,7 +1082,8 @@ generate_texture(u8 *data, i32 width, i32 height, u32 format)
 
     if (data)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
+                     width, height, 0, format, GL_UNSIGNED_BYTE, data);
         //glGenerateMipmap(GL_TEXTURE_2D);
     }
 
@@ -1589,7 +1589,7 @@ int main()
 
             Rect dude = {};
             dude.world_index = V3{0.0f, 0.0f, 0.0f};
-            dude.dim_in_tiles = V2{2.0f, 2.0f};
+            dude.dim_in_tiles = V2{1.0f, 1.0f};
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
