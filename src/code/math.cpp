@@ -1,19 +1,29 @@
 #if !defined(MATH_CPP)
 // NOTE(Fermin): This is the start of the code that should go in an intrinsics file
-static inline f32 square_root(f32 a)
+static inline
+f32 square_root(f32 a)
 {
     f32 result = sqrtf(a);
     return result;
 }
+
+static inline
+i32 round_f32_to_i32(f32 float32)
+{
+    i32 result = (i32)(float32 + 0.5f);
+    return result;
+}
 // NOTE(Fermin): THis is the end of the intrinsics file
-inline f32 lerp(f32 a, f32 t, f32 b)
+inline f32
+lerp(f32 a, f32 t, f32 b)
 {
     f32 result = (1.0f - t) * a + t * b;
 
     return result;
 }
 
-static inline f32 clamp(f32 min, f32 value, f32 max)
+static inline
+f32 clamp(f32 min, f32 value, f32 max)
 {
     f32 result = value;
     
@@ -29,14 +39,16 @@ static inline f32 clamp(f32 min, f32 value, f32 max)
     return result;
 }
 
-static inline f32 clamp01(f32 value)
+static inline
+f32 clamp01(f32 value)
 {
     f32 result = clamp(0.0f, value, 1.0f);
 
     return result;
 }
 
-static inline f32 degrees(f32 radians)
+static inline
+f32 degrees(f32 radians)
 {
     f32 result;
     result = radians * (180.0f / Pi32);
@@ -44,7 +56,8 @@ static inline f32 degrees(f32 radians)
     return result;
 }
 
-static inline f32 clamp01_map_to_range(f32 min, f32 t, f32 max)
+static inline
+f32 clamp01_map_to_range(f32 min, f32 t, f32 max)
 {
     f32 result = 0.0f;
 
@@ -57,7 +70,8 @@ static inline f32 clamp01_map_to_range(f32 min, f32 t, f32 max)
     return result;
 }
 
-static inline f32 radians(f32 degrees)
+static inline
+f32 radians(f32 degrees)
 {
     f32 result;
     result = degrees * (Pi32 / 180.0f);
@@ -287,6 +301,18 @@ static inline V3 normalize(V3 a)
 {
     V3 result = a * (1.0f / length(a));
 
+    return result;
+}
+
+// NOTE(Fermin): Maybe we should consider V3i instead. So its explicit when we are working with 
+// ints instead of reals
+static inline
+V3 round_f32_to_i32(V3 vec)
+{
+    V3 result = {};
+    result.x = round_f32_to_i32(vec.x);
+    result.y = round_f32_to_i32(vec.y);
+    result.z = round_f32_to_i32(vec.z);
     return result;
 }
 

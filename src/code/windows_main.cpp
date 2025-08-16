@@ -590,7 +590,8 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
     glUniform1i(opengl.texture_sampler_id, 0);
 
-    // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles
+    // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles.
+    // Should we truncate? round? Not sure
     V3 half_window =
     {
         (f32)(window_width / 2),
@@ -602,10 +603,11 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
     for(u32 index = 0; index < render_buffer->count; index++)
     {
         Rect *rect = rects + index;
-        // NOTE(Fermin): Set the dude in the center of the screen and move the world
-        V3 min_p = (rect->world_index - camera->pos) * tile_width_in_px + half_window;
+        // NOTE(Fermin): Set the dude in the center of the screen and move the world.
+        // Still not certain about the rounding
+        V3 min_p = round_f32_to_i32((rect->world_index - camera->pos) * tile_width_in_px + half_window);
         V3 max_p = {};
-        max_p.xy = min_p.xy + (rect->dim_in_tiles * tile_width_in_px); //(rect->max_p - camera->pos) * tile_width_in_px + half_window;
+        max_p.xy = min_p.xy + (rect->dim_in_tiles * tile_width_in_px);
         opengl_rectangle(min_p.xy, max_p.xy, rect->color, rect->texture_id);
     }
 
