@@ -565,7 +565,8 @@ static inline M4 orthogonal(f32 left, f32 right, f32 bottom, f32 top, f32 z_near
 // NOTE(Fermin): From right to left order of operations for m4 transforms:
 // scale -> rotate -> translate
 // M4 transform = translate * rotate * scale;
-static inline M4 scale_m4(V3 scale)
+static inline
+M4 scale_m4(V3 scale)
 {
     // TODO(Fermin): Make the function name 'scale' work
 
@@ -578,7 +579,8 @@ static inline M4 scale_m4(V3 scale)
     return result;
 }
 
-static inline M4 rotate(f32 radians, V3 axis)
+static inline
+M4 rotate(f32 radians, V3 axis)
 {
     // NOTE(Fermin): angle must be a unit vector
 
@@ -607,7 +609,8 @@ static inline M4 rotate(f32 radians, V3 axis)
     return result;
 }
 
-static inline M4 translate(V3 translation)
+static inline
+M4 translate(V3 translation)
 {
     M4 result = m4_ident();
 

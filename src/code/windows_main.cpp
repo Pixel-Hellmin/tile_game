@@ -318,7 +318,9 @@ opengl_init(Opengl_Info info)
     smooth out vec4 frag_color;
     void main(void)
     {
-        gl_Position = transform*gl_Vertex;
+        // NOTE(Fermin): This rounding still doesn't fix the gaps between
+        // tiles when they are small. That is when their z is high.
+        gl_Position = transform*round(gl_Vertex);
 
         frag_uv = gl_MultiTexCoord0.xy; //in_uv;
         frag_color = gl_Color; //in_color;
@@ -355,8 +357,10 @@ win32_init_opengl(HWND window)
     desired_pixel_format.dwFlags = PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW|PFD_DOUBLEBUFFER;
     desired_pixel_format.cColorBits = 32;
     desired_pixel_format.cAlphaBits = 8;
+    desired_pixel_format.cDepthBits = 24;
     desired_pixel_format.iLayerType = PFD_MAIN_PLANE;
     
+    // TODO(Fermin): ChoosePixelFormatARB logic. Ep 364 min 27
     i32 suggested_pixel_format_index = ChoosePixelFormat(window_dc, &desired_pixel_format);
     PIXELFORMATDESCRIPTOR suggested_pixel_format;
     DescribePixelFormat(window_dc, suggested_pixel_format_index,
@@ -497,8 +501,10 @@ win32_resize_DIB_section(i32 width, i32 height)
 }
 
 inline void
-opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
+opengl_rectangle(V3 min_p, V3 max_p, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
 {
+    f32 z = min_p.z;
+
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
 
@@ -506,23 +512,23 @@ opengl_rectangle(V2 min_p, V2 max_p, V4 pre_mul_color, u32 texture_id, V2 min_uv
 
     // NOTE(Fermin): Lower triangle
     glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex2f(min_p.x, min_p.y);
+    glVertex3f(min_p.x, min_p.y, z);
 
     glTexCoord2f(max_uv.x, min_uv.y);
-    glVertex2f(max_p.x, min_p.y);
+    glVertex3f(max_p.x, min_p.y, z);
 
     glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex2f(max_p.x, max_p.y);
+    glVertex3f(max_p.x, max_p.y, z);
 
     // NOTE(Fermin): Upper triangle
     glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex2f(min_p.x, min_p.y);
+    glVertex3f(min_p.x, min_p.y, z);
 
     glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex2f(max_p.x, max_p.y);
+    glVertex3f(max_p.x, max_p.y, z);
 
     glTexCoord2f(min_uv.x, max_uv.y);
-    glVertex2f(min_p.x, max_p.y);
+    glVertex3f(min_p.x, max_p.y, z);
 
     glEnd();
 }
@@ -569,24 +575,32 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
 static void
 win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
                                i32 window_width, i32 window_height,
-                               Camera* camera)
+                               Game_State* game_state)
 {
     M4 ortho = {};
     ortho = orthogonal((f32)window_width, (f32)window_height);
 
     glViewport(0, 0, window_width, window_height);
+
     //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
+
+    glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    //glDepthFunc(GL_LESS);
+    glDepthFunc(GL_LEQUAL);
+
     glEnable(GL_TEXTURE_2D);
-    //glEnable(GL_DEPTH_TEST);
     glEnable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
-    //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
     glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
+
     glUseProgram(opengl.program);
+        
+    ortho.m[2].w = 1.0f; // NOTE(Fermin): Enables perspective divide by z
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
     glUniform1i(opengl.texture_sampler_id, 0);
 
@@ -598,17 +612,20 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
         (f32)(window_height / 2),
         0
     };
-    f32 tile_width_in_px = 64.0f;
+
+    f32 tile_size_in_px = game_state->tile_size_in_px;
     Rect *rects = (Rect *)render_buffer->buffer.data;
     for(u32 index = 0; index < render_buffer->count; index++)
     {
         Rect *rect = rects + index;
+
         // NOTE(Fermin): Set the dude in the center of the screen and move the world.
-        // Still not certain about the rounding
-        V3 min_p = round_f32_to_i32((rect->world_index - camera->pos) * tile_width_in_px + half_window);
-        V3 max_p = {};
-        max_p.xy = min_p.xy + (rect->dim_in_tiles * tile_width_in_px);
-        opengl_rectangle(min_p.xy, max_p.xy, rect->color, rect->texture_id);
+        V3 min_p = (rect->world_index - game_state->camera.pos) * tile_size_in_px + half_window;
+        min_p.z = rect->world_index.z;
+        V3 max_p = min_p;
+        max_p.xy += (rect->dim_in_tiles * tile_size_in_px);
+
+        opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
     }
 
     glUseProgram(0);
@@ -667,7 +684,7 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
                                            &tiles_buffer,
                                            dimension.width,
                                            dimension.height,
-                                           &game_state.camera);
+                                           &game_state);
             EndPaint(window, &paint);
         } break;
 
@@ -1569,6 +1586,7 @@ int main()
             game_state.wall_texture_id      = wall_texture_id;
             game_state.roof_texture_id      = roof_texture_id;
             game_state.highlight_texture_id = highlight_texture_id;
+            game_state.tile_size_in_px = 64.0f;
 
             M4 view = look_at(game_state.camera.pos,
                               game_state.camera.pos + game_state.camera.front,
@@ -1773,7 +1791,7 @@ int main()
                                                &tiles_buffer,
                                                dimension.width,
                                                dimension.height,
-                                               &game_state.camera);
+                                               &game_state);
                 ReleaseDC(window, device_context);
                 tiles_buffer.count = tiles_buffer.cached;
 

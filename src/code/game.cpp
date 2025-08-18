@@ -23,6 +23,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
     assert(tiles_buffer->count == tiles_buffer->cached);
 
+    // TODO(Fermin): Where should this be?
+    // Also we should have separate z-buffer values
+    f32 dude_z = 0.0f;
+    f32 map_z = 0.0f;
+    f32 camera_z = 0.0f;
+
     const size_t map_rows = 18;
     const size_t map_cols = 17;
     if(!game_state->initialized)
@@ -59,7 +65,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             {
                 // NOTE(Fermin): Currently this only draws a grid, which will be turned into a maze later
                 Rect rect = {};
-                rect.world_index = V3{(f32)col, (f32)row, 0.0}; // TODO(Fermin): Maybe Vi3???
+                rect.world_index = V3{(f32)col, (f32)row, map_z}; // TODO(Fermin): Maybe Vi3???
                 rect.dim_in_tiles = V2{1.0f, 1.0f};
 
                 // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
@@ -387,11 +393,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             // TODO(Fermin): Intrinsics
             V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, -1.0, 1.0};
             M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
-            V2 world_index = (invert(&ortho) * cursor_pos_ndc).xy / 64.0f; // TODO(Fermin): Tile size!
+            V2 world_index = (invert(&ortho) * cursor_pos_ndc).xy / (game_state->tile_size_in_px / map_z);
             world_index += dude->world_index.xy;
 
             if(is_tile_index_valid(world_index.x, world_index.y, game_state->level_cols, game_state->level_rows))
             {
+                // TODO(Fermin): This logic is broken, highligh is drawn on top of dude alwasys
                 game_state->editing_tile = 1;
                 game_state->editing_tile_x = (i32)world_index.x;
                 game_state->editing_tile_y = (i32)world_index.y;
@@ -421,7 +428,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             game_state->camera.pos += normalize(cross(game_state->camera.front, game_state->camera.up)) * camera_speed;
         }
     }
+    dude->world_index.z = dude_z;
     game_state->camera.pos = dude->world_index; // NOTE(Fermin): Testing
+    game_state->camera.pos.z = camera_z;
 
     if(!is_set(game_state, game_state_flag_free_cam_mode))
     {
@@ -498,7 +507,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         // NOTE(Fermin): We can avoid doing this if we use the z coord
         Rect highlight = {};
-        highlight.world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, 0.0f};
+        highlight.world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, map_z};
         highlight.dim_in_tiles = V2{1.0f, 1.0f};
         highlight.texture_id = game_state->highlight_texture_id;
 

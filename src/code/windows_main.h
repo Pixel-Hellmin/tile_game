@@ -180,6 +180,7 @@ struct Game_State
     Input_Keys last_frame_input_state;
 
     u32 debug_flags;
+    f32 tile_size_in_px;
 
     Camera camera;
     M4 *proj;
