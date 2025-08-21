@@ -390,18 +390,21 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if(input_state.left_mouse && !last_frame_input_state.left_mouse)
         {
-            // TODO(Fermin): Intrinsics
-            V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, -1.0, 1.0};
+            // TODO(Fermin): Intrinsics.
+            // Store ortho somewhere and only update when screen size changes.
             M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
-            V2 world_index = (invert(&ortho) * cursor_pos_ndc).xy / (game_state->tile_size_in_px / map_z);
-            world_index += dude->world_index.xy;
+            V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, 0.0, 1.0};
+            V4 cursor_pos_in_px = invert(&ortho) * cursor_pos_ndc;
+            f32 map_tile_size_in_px_with_perspective = safe_ratio_n(game_state->tile_size_in_px, (map_z + 1.0f), game_state->tile_size_in_px);
+            V2 cursor_pos_in_tiles = (cursor_pos_in_px).xy / map_tile_size_in_px_with_perspective;
+            V2 cursor_pos_in_world_index = cursor_pos_in_tiles + dude->world_index.xy;
 
-            if(is_tile_index_valid(world_index.x, world_index.y, game_state->level_cols, game_state->level_rows))
+            if(is_tile_index_valid(cursor_pos_in_world_index.x, cursor_pos_in_world_index.y, game_state->level_cols, game_state->level_rows))
             {
                 // TODO(Fermin): This logic is broken, highligh is drawn on top of dude alwasys
                 game_state->editing_tile = 1;
-                game_state->editing_tile_x = (i32)world_index.x;
-                game_state->editing_tile_y = (i32)world_index.y;
+                game_state->editing_tile_x = (i32)cursor_pos_in_world_index.x;
+                game_state->editing_tile_y = (i32)cursor_pos_in_world_index.y;
             }
             else
             {

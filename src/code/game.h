@@ -4,7 +4,7 @@
 
 #define array_count(array) (sizeof(array) / sizeof((array)[0]))
 
-inline b32 is_tile_index_valid(i32 x, i32 y, i32 cols, i32 rows)
+inline b32 is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
 {
     b32 result = (x >= 0 && x < cols && y >= 0 && y < rows);
 

@@ -79,6 +79,19 @@ f32 radians(f32 degrees)
     return result;
 }
 
+static f32
+safe_ratio_n(f32 numerator, f32 divisor, f32 n)
+{
+    f32 result = n;
+
+    if(divisor != 0.0f)
+    {
+        result = numerator / divisor;
+    }
+
+    return result;
+}
+
 /*
 * V2
 */
