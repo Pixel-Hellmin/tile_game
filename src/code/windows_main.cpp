@@ -831,61 +831,6 @@ get_character_metadata(char character, Glyph_Metadata *out)
     out->y_offset = character_info.y_offset;
     out->advance = character_info.advance;
 }
-
-static void
-init_font(Font *font, char *source)
-{
-    Buffer data = read_file(source);
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-    Glyph_Metadata *src = (Glyph_Metadata *)(data.data);
-    for(char character = font_first_character;
-        character <= font_last_character;
-        character++)
-    {
-        u32 index     = character - font_first_character;
-        size_t offset = src->offset; 
-        i32 width     = src->width;
-        i32 height    = src->height;
-        i32 y_offset  = src->y_offset;
-        i32 advance   = src->advance;
-        src++;
-
-        Glyph_Metadata *dest_metadata = &font->metadata[index];
-        dest_metadata->offset   = offset;
-        dest_metadata->width    = width;
-        dest_metadata->height   = height;
-        dest_metadata->y_offset = y_offset;
-        dest_metadata->advance  = advance;
-        
-        u32 font_bytes_per_pixel = 1;
-        u32 character_bitmap_size = width * font_bytes_per_pixel * height;
-
-        // TODO(Fermin): How can I avoid using a buffer here? Reuse the same one for every character?
-        Buffer character_buffer = {};
-        character_buffer = allocate_buffer(character_bitmap_size);
-
-        u8 *bitmap_source = data.data + sizeof(Glyph_Metadata) * font_character_count + offset;
-        u8 *bitmap_dest = character_buffer.data;
-        for(u32 y = 0; y < height; y++)
-        {
-            for(u32 x = 0; x < width; x++)
-            {
-                u8 result = *bitmap_source++;
-                *bitmap_dest++ = result;
-            }
-        }
-
-        font->glyph_texture_ids[index] = generate_texture(character_buffer.data, width, height, GL_RED);
-
-        free_buffer(&character_buffer);
-    }
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-
-    free_buffer(&data);
-}
 static void
 print_debug_text(char *string, Font *font, u32 VBO, u32 program_id)
 {
@@ -1256,6 +1201,18 @@ win32_process_pending_messages(Game_State *game_state)
                     {
                         //win32_process_keyboard_message(&game_state->input_state.w, is_down);
                     }
+                    else if(vk_code == VK_F1)
+                    {
+                        win32_process_keyboard_message(&game_state->input_state.f1, is_down);
+                    }
+                    else if(vk_code == VK_F2)
+                    {
+                        win32_process_keyboard_message(&game_state->input_state.f2, is_down);
+                    }
+                    else if(vk_code == VK_F3)
+                    {
+                        win32_process_keyboard_message(&game_state->input_state.f3, is_down);
+                    }
                     else if(vk_code == 'P')
                     {
                         if(is_down)
@@ -1314,6 +1271,89 @@ win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
                   (f32)global_perf_count_frequency);
 
     return result;
+}
+
+static void
+init_font(Font *font, char *source)
+{
+    Buffer data = read_file(source);
+
+    Glyph_Metadata *src = (Glyph_Metadata *)(data.data);
+    for(char character = font_first_character;
+        character <= font_last_character;
+        character++)
+    {
+        u32 index     = character - font_first_character;
+        size_t offset = src->offset; 
+        i32 width     = src->width;
+        i32 height    = src->height;
+        i32 y_offset  = src->y_offset;
+        i32 advance   = src->advance;
+        src++;
+
+        Glyph_Metadata *dest_metadata = &font->metadata[index];
+        dest_metadata->offset   = offset;
+        dest_metadata->width    = width;
+        dest_metadata->height   = height;
+        dest_metadata->y_offset = y_offset;
+        dest_metadata->advance  = advance;
+        
+        //u32 font_bytes_per_pixel = 1;
+        u32 font_bytes_per_pixel = 4;
+        u32 character_bitmap_size = width * font_bytes_per_pixel * height;
+
+        // TODO(Fermin): How can I avoid using a buffer here? Reuse the same one for every character?
+        Buffer character_buffer = {};
+        character_buffer = allocate_buffer(character_bitmap_size);
+
+        u8 *bitmap_source = data.data + sizeof(Glyph_Metadata) * font_character_count + offset;
+        u8 *bitmap_dest = character_buffer.data;
+        for(u32 y = 0; y < height; y++)
+        {
+            for(u32 x = 0; x < width; x++)
+            {
+                // NOTE(Fermin): Font files store mono bitmaps, which we expand to 4 channels here
+                u8 result = *bitmap_source++;
+                *bitmap_dest++ = result;
+                *bitmap_dest++ = result;
+                *bitmap_dest++ = result;
+                *bitmap_dest++ = result;
+            }
+        }
+
+        font->glyph_texture_ids[index] = generate_texture(character_buffer.data, width, height, GL_RGBA);
+
+        free_buffer(&character_buffer);
+    }
+
+    free_buffer(&data);
+}
+
+static void
+print_debug_text(Render_Buffer *tiles_buffer, char *string, Font *font)
+{
+    f32 w_index = 0.0f;
+    for(char *c = string; *c; c++)
+    {
+        if(*c != ' ')
+        {
+            Rect glyph = {};
+            glyph.world_index = V3{w_index++, (f32)0, 0};
+            glyph.dim_in_tiles = V2{1.0f, 1.0f};
+            glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
+
+            push_rectangle(tiles_buffer, &glyph, V4{0.0f, 1.0f, 0.0f, 1.0f});
+        }
+        else
+        {
+            w_index++;
+        }
+
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    debug_print_line++;
 }
 
 int main()
@@ -1396,19 +1436,12 @@ int main()
             }
             f32 game_update_hz = (f32)(monitor_refresh_hz);
 
-            /* CHECK THIS
-            glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  
-            glfwSetCursorPosCallback(window, mouse_callback);  
-            glfwSetScrollCallback(window, scroll_callback); 
-            */
-
             win32_running = 1;
 
             // TODO(Fermin): We'll need some sort of asset streaming
             glGenTextures(1, &texture_handle);
 
             // NOTE(Fermin) | Start | Textures
-            // TODO(Fermin): Check the textures' color format and match the default set on init
             u32 floor_texture_id     = generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
             u32 wall_texture_id      = generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
             u32 roof_texture_id      = generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
@@ -1478,102 +1511,12 @@ int main()
 #endif
             // NOTE(Fermin): Test fonts end
 
+            // nocheckin
+            init_font(&consola, "src\\misc\\assets\\consola.font");
+
             // NOTE(Fermin): Game things start
             Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
                                                   tmp_game_code_dll_full_path);
-
-#if 0
-            char *draw_rectangle_vertex_code = R"FOO(
-                #version 330 core
-
-                layout (location = 0) in vec3 pos;
-                layout (location = 1) in vec2 in_tex_coord;
-
-                out vec2 out_tex_coord;
-                out vec3 out_frag_pos;
-
-                uniform mat4 model;
-                uniform mat4 view;
-                uniform mat4 projection;
-
-                void main()
-                {
-                   gl_Position = projection * view * model * vec4(pos, 1.0);
-                   out_frag_pos = vec3(model * vec4(pos, 1.0));
-                   out_tex_coord = in_tex_coord;
-                }
-            )FOO";
-
-            char *draw_rectangle_fragment_code = R"FOO(
-                #version 330 core
-
-                in vec2 out_tex_coord;
-                in vec3 out_frag_pos;
-
-                out vec4 FragColor;
-
-                uniform sampler2D sampler;
-                uniform vec3 light_pos;
-                uniform vec4 color_trans;
-
-                void main()
-                {
-                   float light_strength = 5.0;
-                   vec3 light_color = vec3(1.0f, 1.0f, 0.7f);
-                   vec3 norm = vec3(0.0f, 0.0f, -1.0f); // TODO(Fermin): Normal maps?
-                   vec3 light_dir = normalize(light_pos - out_frag_pos);  
-                   float diff = max(dot(norm, light_dir), 0.0);
-                   vec3 diffuse = light_strength * diff * light_color;
-
-                   FragColor = color_trans * (vec4(diffuse, 1.0)) * texture(sampler, out_tex_coord);
-
-                   //FragColor = texture(sampler, out_tex_coord);
-                }
-            )FOO";
-            
-            Program draw_rect_prog = {};
-            draw_rect_prog.id = build_program(draw_rectangle_vertex_code,
-                                              draw_rectangle_fragment_code);
-
-            draw_rect_prog.model       = glGetUniformLocation(draw_rect_prog.id, "model");
-            draw_rect_prog.view        = glGetUniformLocation(draw_rect_prog.id, "view");
-            draw_rect_prog.proj        = glGetUniformLocation(draw_rect_prog.id, "projection");
-            draw_rect_prog.color_trans = glGetUniformLocation(draw_rect_prog.id, "color_trans");
-            draw_rect_prog.light_pos   = glGetUniformLocation(draw_rect_prog.id, "light_pos");
-
-            float rectangle_vertices[] = {
-                 0.5f,  0.5f, 0.0f, 1.0f, 1.0f,  // top right
-                 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,  // bottom right
-                -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,  // bottom left
-                -0.5f,  0.5f, 0.0f, 0.0f, 1.0f   // top left 
-            };
-            unsigned int rectangle_indices[] = {  // note that we start from 0!
-                0, 1, 3,  // first Triangle
-                1, 2, 3   // second Triangle
-            };
-
-            unsigned int draw_rectangle_VBO, draw_rectangle_EBO;
-            glGenVertexArrays(1, &draw_rect_prog.vao);
-            glGenBuffers(1, &draw_rectangle_VBO);
-            glGenBuffers(1, &draw_rectangle_EBO);
-            // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-            glBindVertexArray(draw_rect_prog.vao);
-
-            glBindBuffer(GL_ARRAY_BUFFER, draw_rectangle_VBO);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(rectangle_vertices), rectangle_vertices, GL_STATIC_DRAW);
-
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, draw_rectangle_EBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(rectangle_indices), rectangle_indices, GL_STATIC_DRAW);
-
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void*)0);
-            glEnableVertexAttribArray(0);
-
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void*)(3 * sizeof(f32)));
-            glEnableVertexAttribArray(1);
-
-            glBindBuffer(GL_ARRAY_BUFFER, 0); 
-            glBindVertexArray(0); 
-#endif
 
             game_state.entropy.index = 666;
             //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
@@ -1657,45 +1600,9 @@ int main()
                     mouse_enabled = 0;
                     SetCursor(0);
                 }
-
+                
 #if 0
-
                 debug_print_line = 0.0f;
-
-                if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
-                    game_state.input_state.f1 = 1;
-                if(glfwGetKey(window, GLFW_KEY_F1) == GLFW_RELEASE)
-                    game_state.input_state.f1 = 0;
-
-                if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_PRESS)
-                    game_state.input_state.f2 = 1;
-                if(glfwGetKey(window, GLFW_KEY_F2) == GLFW_RELEASE)
-                    game_state.input_state.f2 = 0;
-
-                if(glfwGetKey(window, GLFW_KEY_F3) == GLFW_PRESS)
-                    game_state.input_state.f3 = 1;
-                if(glfwGetKey(window, GLFW_KEY_F3) == GLFW_RELEASE)
-                    game_state.input_state.f3 = 0;
-
-                // TODO(Fermin): Where is it convinient to update this matrix?
-                // We need to see how ofter the camera state changes
-                view = look_at(game_state.camera.pos,
-                               game_state.camera.pos + game_state.camera.front,
-                               game_state.camera.up);
-
-                game.update_and_render(&tiles_buffer, &dude, &game_state);
-
-                //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT);
-
-                // TODO(Fermin): Consider the parameters to this function and see if the current structs make sense
-                V3 light_pos = {dude.min_p.x + game_state.tile_size_in_meters/2.0f,
-                                dude.min_p.y + game_state.tile_size_in_meters/2.0f,
-                                -0.5f};
-                // TODO(Fermin): Instead of draw_rectangles "draw_buffer_to_output()" makes more sense. We would take the render
-                // buffer with the rects AND the text to render and switch on the type of render object.
-                draw_rectangles(&draw_rect_prog, &tiles_buffer, &view, &projection, game_state.tile_size_in_meters, light_pos);
 
                 // NOTE(Fermin): START font render state
                 glClear(GL_DEPTH_BUFFER_BIT);
@@ -1758,7 +1665,6 @@ int main()
 
                 if(is_set(&game_state, game_state_flag_wireframe_mode))
                 {
-#if 0
                     // TODO(Fermin): We need a different color for the wireframe
                     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -1770,7 +1676,6 @@ int main()
                     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
                     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-#endif
                 }
 
                 glBindVertexArray(0);
@@ -1784,7 +1689,12 @@ int main()
 
 
                 game.update_and_render(&tiles_buffer, &dude, &game_state);
-                //render_gradient(global_back_buffer);
+
+                // nocheckin
+                char text_buffer[256];
+                _snprintf_s(text_buffer, sizeof(text_buffer), "rate: %.4fms/f %.4ff/s", target_seconds_per_frame*1000.0f, 1.0f/target_seconds_per_frame);
+                print_debug_text(&tiles_buffer, text_buffer, &consola);
+
 
                 HDC device_context = GetDC(window);
                 win32_display_buffer_in_window(device_context,
@@ -1803,10 +1713,14 @@ int main()
         }
         else
         {
+            // TODO
+            invalid_code_path
         }
     }
     else
     {
+        // TODO
+        invalid_code_path
     }
 
 #if 0
