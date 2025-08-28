@@ -182,21 +182,21 @@ union V3
     struct
     {
         V2 xy;
-        f32 Ignored0_;
+        f32 ignored0_;
     };
     struct
     {
-        f32 Ignored1_;
+        f32 ignored1_;
         V2 yz;
     };
     struct
     {
         V2 uv;
-        f32 Ignored2_;
+        f32 ignored2_;
     };
     struct
     {
-        f32 Ignored3_;
+        f32 ignored3_;
         V2 vw;
     };
     f32 e[3];
@@ -363,19 +363,19 @@ union V4
     struct
     {
         V2 xy;
-        f32 Ignored0_;
-        f32 Ignored1_;
+        f32 ignored0_;
+        f32 ignored1_;
     };
     struct
     {
-        f32 Ignored2_;
+        f32 ignored2_;
         V2 yz;
-        f32 Ignored3_;
+        f32 ignored3_;
     };
     struct
     {
-        f32 Ignored4_;
-        f32 Ignored5_;
+        f32 ignored4_;
+        f32 ignored5_;
         V2 zw;
     };
     f32 e[4];

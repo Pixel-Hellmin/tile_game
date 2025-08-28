@@ -93,7 +93,7 @@ struct Render_Buffer
     Buffer buffer;
 };
 
-struct Rect
+union Rect
 {
     // NOTE(Fermin): This are drawn as 2d rects, I'm thinking using the Z
     // coord as an indicator of the 'floor' where this rect lives
@@ -108,11 +108,21 @@ struct Rect
     V3 min_p;
     V3 max_p;
     */
-    V3 world_index;
-    V2 dim_in_tiles;
-    V4 color;
-    u32 texture_id;
-    f32 rotation;
+    // TODO(Fermin): Union world_index -> screen_coords
+    struct {
+        V3 world_index;
+        V2 dim_in_tiles;
+        V4 color;
+        u32 texture_id;
+        f32 rotation;
+    };
+    struct {
+        V3 pos_in_screen;
+        V2 dim_in_px;
+        V4 color;
+        u32 texture_id;
+        f32 rotation;
+    };
 };
 
 u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect, V4 color = {1.0, 1.0, 1.0, 1.0})

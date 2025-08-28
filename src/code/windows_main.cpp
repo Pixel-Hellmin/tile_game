@@ -16,6 +16,7 @@ global_variable f32 camera_yaw = -90.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable Font consola = {};
 global_variable Render_Buffer tiles_buffer = {};
+global_variable Render_Buffer ui_buffer = {};
 global_variable Game_State game_state = {};
 global_variable f32 global_perf_count_frequency;
 // TODO(Fermin): This goes in opengl header
@@ -456,28 +457,6 @@ win32_get_window_dimension(HWND window)
 }
 
 static void
-render_gradient(Win32_Offscreen_Buffer buffer)
-{
-    u8 *row = (u8 *)buffer.memory;
-    for(i32 y = 0;
-        y < buffer.height;
-        y++)
-    {
-        u32 *pixel = (u32 *)row;
-        for(i32 x = 0;
-            x < buffer.width;
-            x++)
-        {
-            u8 blue = x;
-            u8 green = y;
-
-            *pixel++ = (green << 8) | blue;
-        }
-        row += buffer.pitch;
-    }
-}
-
-static void
 win32_resize_DIB_section(i32 width, i32 height)
 {
     if(global_back_buffer.memory)
@@ -600,8 +579,6 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
 
     glUseProgram(opengl.program);
         
-    ortho.m[2].w = 1.0f; // NOTE(Fermin): Enables perspective divide by z
-    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
     glUniform1i(opengl.texture_sampler_id, 0);
 
     // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles.
@@ -612,6 +589,10 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
         (f32)(window_height / 2),
         0
     };
+
+    // NOTE(Fermin): Renders the world tiles
+    ortho.m[2].w = 1.0f; // NOTE(Fermin): Enables perspective divide by z
+    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
 
     f32 tile_size_in_px = game_state->tile_size_in_px;
     Rect *rects = (Rect *)render_buffer->buffer.data;
@@ -624,6 +605,22 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
         min_p.z = rect->world_index.z;
         V3 max_p = min_p;
         max_p.xy += (rect->dim_in_tiles * tile_size_in_px);
+
+        opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
+    }
+
+    // NOTE(Fermin): Renders the UI
+    ortho.m[2].w = 0.0f; // NOTE(Fermin): Disables perspective divide by z
+    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
+
+    Rect *ui_rects = (Rect *)ui_buffer.buffer.data;
+    for(u32 index = 0; index < ui_buffer.count; index++)
+    {
+        Rect *rect = ui_rects + index;
+
+        V3 min_p = rect->pos_in_screen;
+        V3 max_p = min_p;
+        max_p.xy += rect->dim_in_px;
 
         opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
     }
@@ -756,192 +753,6 @@ scroll_callback(GLFWwindow* window, double x_offset, double y_offset)
         fov = 1.0f;
     if(fov > 45.0f)
         fov = 45.0f;
-}
-
-// OpenGL
-static u32
-compile_shader(i32 type, char* source)
-{
-    u32 id = glCreateShader(type);
-    glShaderSource(id, 1, &source, NULL);
-    glCompileShader(id);
-
-    i32 success;
-    char infoLog[512];
-    glGetShaderiv(id, GL_COMPILE_STATUS, &success);
-    if(!success)
-    {
-        glGetShaderInfoLog(id, 512, NULL, infoLog);
-        fprintf(stderr, "ERROR::SHADER::%s::COMPILATION_FAILED\n%s", type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT", infoLog);
-        assert(!"Program validation failed");
-    }
-
-    return id;
-}
-
-struct Program
-{
-    GLuint id;
-    GLuint model;
-    GLuint view;
-    GLuint light_pos;
-    GLuint color_trans;
-    GLuint proj;
-    GLuint vao;
-};
-// OpenGL
-static GLuint
-build_program(char *vertex_code, char *fragment_code)
-{
-    u32 vertex_shader_id = compile_shader(GL_VERTEX_SHADER, vertex_code);
-    u32 fragment_shader_id = compile_shader(GL_FRAGMENT_SHADER, fragment_code);
-
-    GLuint program_id = glCreateProgram();
-    glAttachShader(program_id, vertex_shader_id);
-    glAttachShader(program_id, fragment_shader_id);
-    glLinkProgram(program_id);
-
-    i32 success;
-    char infoLog[512];
-    glGetProgramiv(program_id, GL_LINK_STATUS, &success);
-    if(!success)
-    {
-        glGetProgramInfoLog(program_id, 512, NULL, infoLog);
-        fprintf(stderr, "ERROR::SHADER::LINKING_FAILED\n%s", infoLog);
-        assert(!"Program validation failed");
-    } 
-    glUseProgram(program_id);
-
-    glDeleteShader(vertex_shader_id);
-    glDeleteShader(fragment_shader_id); 
-
-    return program_id;
-}
-
-static void
-get_character_metadata(char character, Glyph_Metadata *out)
-{
-    // TODO(Fermin): Pass Font so it works when we add more fonts
-    size_t index = character - font_first_character;
-    Glyph_Metadata character_info = consola.metadata[index];
-
-    out->width = character_info.width;
-    out->height = character_info.height;
-    out->offset = character_info.offset;
-    out->y_offset = character_info.y_offset;
-    out->advance = character_info.advance;
-}
-static void
-print_debug_text(char *string, Font *font, u32 VBO, u32 program_id)
-{
-    glActiveTexture(GL_TEXTURE0);
-
-    f32 x = 10.0f;
-    f32 font_size = 25.0f;
-    f32 base_y = screen_height - font_size - debug_print_line * 27.0f - 4.0f;
-    f32 char_size = font_size;
-    f32 max_scale = char_size / font_point_size;
-
-    for(char *c = string; *c; c++)
-    {
-        if(*c != ' ')
-        {
-            Glyph_Metadata glyph_info = {};
-            get_character_metadata(*c, &glyph_info);
-
-            f32 y_scale = glyph_info.height/font_point_size;
-            f32 x_scale = glyph_info.width/font_point_size;
-            f32 h = char_size * y_scale;
-            f32 w = char_size * x_scale;
-            f32 y = base_y - glyph_info.y_offset * max_scale;
-            f32 advance = glyph_info.advance*max_scale;
-
-            float font_vertices[] = {
-                x,     y + h, 0.0f, 1.0f,            
-                x,     y,     0.0f, 0.0f,
-                x + w, y,     1.0f, 0.0f,
-
-                x,     y + h, 0.0f, 1.0f,
-                x + w, y,     1.0f, 0.0f,
-                x + w, y + h, 1.0f, 1.0f           
-            };
-
-            glBindTexture(GL_TEXTURE_2D, font->glyph_texture_ids[*c - font_first_character]);
-            // TODO(Fermin)-IMPORTANT: Figure a way to transform the glyphs without
-            // uploading new data each character. Using uniforms and
-            // matrices? This is too slow, probably.
-            glBindBuffer(GL_ARRAY_BUFFER, VBO);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(font_vertices), font_vertices); 
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-
-            x += advance + 1;
-        }
-        else
-        {
-            // NOTE(Fermin): space
-            x += 8.0f;
-        }
-
-    }
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    debug_print_line++;
-}
-
-void
-draw_rectangles(Program *prog, Render_Buffer *render_buffer, M4 *view, M4 *projection, f32 tile_size_in_meters, V3 light_pos)
-{
-    // TODO(Fermin): Currently we use a dummy model of a rectangle and
-    // transformations to draw the rects. Another option is to upload
-    // vertices directly using a dynamic buffer object. Test both and see
-    // which is faster
-    glUseProgram(prog->id);
-    glEnable(GL_BLEND);
-    // TODO(Fermin): This is handmade heros blend func, test it
-    // glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
-
-    glBindVertexArray(prog->vao);
-
-    glUniformMatrix4fv(prog->view, 1, GL_TRUE, view->e);
-    glUniformMatrix4fv(prog->proj, 1, GL_TRUE, projection->e);
-    glUniform3f(prog->light_pos, light_pos.x, light_pos.y, light_pos.z);
-
-    f32 meters_to_model = 1.0f / tile_size_in_meters;
-    Rect *rects = (Rect *)render_buffer->buffer.data;
-    for(u32 index = 0; index < render_buffer->count; index++)
-    {
-        Rect *rect = rects + index;
-
-        f32 model_width = (rect->max_p.x - rect->min_p.x) * meters_to_model;
-        f32 model_height = (rect->max_p.y - rect->min_p.y) * meters_to_model;
-        f32 half_width = model_width * 0.5f;
-        f32 half_height = model_height * 0.5f;
-
-        // NOTE(Fermin): We want the origin of the rect to be its min_p, we need to
-        // translate the rect by width/2 and half/2 in x and y
-        M4 translation = translate(V3{
-            rect->min_p.x * meters_to_model + half_width,
-            rect->min_p.y * meters_to_model + half_height,
-            0.0
-        });
-        M4 scale = scale_m4(V3{model_width, model_height, 1.0f});
-        M4 rotation = rotate(rect->rotation, V3{0.0f, 0.0f, 1.0f});
-        M4 model = translation * rotation * scale;
-
-        glUniform4f(prog->color_trans, rect->color.r, rect->color.g, rect->color.b, rect->color.a);
-
-        glUniformMatrix4fv(prog->model, 1, GL_TRUE, model.e);
-        glBindTexture(GL_TEXTURE_2D, rect->texture_id);
-
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    }
-
-    glUseProgram(0);
-    glDisable(GL_BLEND);
 }
 #endif
 
@@ -1330,30 +1141,61 @@ init_font(Font *font, char *source)
 }
 
 static void
-print_debug_text(Render_Buffer *tiles_buffer, char *string, Font *font)
+get_character_metadata(char character, Glyph_Metadata *out)
 {
-    f32 w_index = 0.0f;
+    // TODO(Fermin): Pass Font so it works when we add more fonts
+    size_t index = character - font_first_character;
+    Glyph_Metadata character_info = consola.metadata[index];
+
+    out->width = character_info.width;
+    out->height = character_info.height;
+    out->offset = character_info.offset;
+    out->y_offset = character_info.y_offset;
+    out->advance = character_info.advance;
+}
+
+static void
+print_debug_text(char *string, Font *font)
+{
+    f32 print_font_size = 24.0f;
+    debug_print_line -= print_font_size;
+
+    f32 x = 10.0f;
+    f32 line_y = debug_print_line;
+    f32 max_scale = print_font_size / font_point_size;
+    f32 space_width = font_point_size / 2.0f * max_scale;
+
     for(char *c = string; *c; c++)
     {
         if(*c != ' ')
         {
+            Glyph_Metadata glyph_info = {};
+            get_character_metadata(*c, &glyph_info);
+
+            f32 y_scale = glyph_info.height / font_point_size;
+            f32 x_scale = glyph_info.width / font_point_size;
+            f32 h = print_font_size * y_scale;
+            f32 w = print_font_size * x_scale;
+            f32 y = line_y - glyph_info.y_offset * max_scale;
+            f32 advance = glyph_info.advance * max_scale;
+
+
             Rect glyph = {};
-            glyph.world_index = V3{w_index++, (f32)0, 0};
-            glyph.dim_in_tiles = V2{1.0f, 1.0f};
+            glyph.pos_in_screen.xy = V2{x, y};
+            glyph.dim_in_px = V2{w, h};
+            glyph.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
             glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
 
-            push_rectangle(tiles_buffer, &glyph, V4{0.0f, 1.0f, 0.0f, 1.0f});
+            push_rectangle(&ui_buffer, &glyph, glyph.color);
+
+            x += advance;
         }
         else
         {
-            w_index++;
+            x += space_width;
         }
 
     }
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    debug_print_line++;
 }
 
 int main()
@@ -1449,69 +1291,6 @@ int main()
             u32 dude_texture_id      = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
-            // NOTE(Fermin): Test fonts start
-#if 0
-            char *font_vertex_code = R"FOO(
-                #version 330 core
-
-                layout (location = 0) in vec2 aPos;
-                layout (location = 1) in vec2 aTexCoord;
-
-                out vec2 TexCoord;
-
-                uniform mat4 projection;
-
-                void main()
-                {
-                    gl_Position = projection * vec4(aPos.x, aPos.y , 0.0, 1.0);
-                    TexCoord = aTexCoord;
-                }
-            )FOO";
-
-            char *font_fragment_code = R"FOO(
-                #version 330 core
-
-                in vec2 TexCoord;
-
-                out vec4 FragColor;
-
-                uniform sampler2D sampler;
-                uniform vec3 textColor;
-
-                void main()
-                {
-                    vec4 sampled = vec4(1.0, 1.0, 1.0, texture(sampler, TexCoord).r);
-                    FragColor = vec4(textColor, 1.0) * sampled;
-                }
-            )FOO";
-
-            u32 font_program_id = build_program(font_vertex_code, font_fragment_code);
-
-            u32 font_VBO, font_VAO;
-            glGenVertexArrays(1, &font_VAO);  
-            glGenBuffers(1, &font_VBO); 
-
-            glBindVertexArray(font_VAO);
-
-            glBindBuffer(GL_ARRAY_BUFFER, font_VBO);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(f32)*4*6, NULL, GL_DYNAMIC_DRAW);
-
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2*sizeof(float)));
-            glEnableVertexAttribArray(1);
-
-            // NOTE(Fermin) THis unbinds the vbo and vao
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-            glBindVertexArray(0);
-
-            glUniform1i(glGetUniformLocation(font_program_id, "sampler"), 0);
-
-            init_font(&consola, "src\\misc\\assets\\consola.font");
-#endif
-            // NOTE(Fermin): Test fonts end
-
-            // nocheckin
             init_font(&consola, "src\\misc\\assets\\consola.font");
 
             // NOTE(Fermin): Game things start
@@ -1548,6 +1327,8 @@ int main()
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             tiles_buffer.buffer = allocate_buffer(gigabytes(1));
             u32 rect_cap = gigabytes(1)/sizeof(Rect);
+
+            ui_buffer.buffer = allocate_buffer(gigabytes(1));
             // NOTE(Fermin): Game things end
 
             u32 expected_frames_per_update = 1;
@@ -1602,27 +1383,7 @@ int main()
                 }
                 
 #if 0
-                debug_print_line = 0.0f;
-
-                // NOTE(Fermin): START font render state
-                glClear(GL_DEPTH_BUFFER_BIT);
-                glEnable(GL_CULL_FACE);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
-
-                glUseProgram(font_program_id);
-
-                // NOTE(Fermin): We can store this matrix outside the loop and recalculate when screen dimentions change
-                M4 font_projection = orthogonal(0.0f, screen_width, 0.0f, screen_height, -1.0f, 1000.0f);
-                u32 font_projection_loc = glGetUniformLocation(font_program_id, "projection");
-                glUniformMatrix4fv(font_projection_loc, 1, GL_FALSE, font_projection.e);
-                glUniform3f(glGetUniformLocation(font_program_id, "textColor"), 1.0f, 0.5f, 0.0f);
-
-                glBindVertexArray(font_VAO);
-
                 char text_buffer[256];
-                _snprintf_s(text_buffer, sizeof(text_buffer), "rate: %.4fms/f %.4ff/s", delta_time*1000.0f, 1.0f/delta_time);
-                print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
                 if(is_set(&game_state, game_state_flag_prints))
                 {
                     // Stop passing all this buffer and program info. Globals for now? then manager
@@ -1658,9 +1419,6 @@ int main()
                         }
                     }
                 }
-
-                glDisable(GL_BLEND);
-                glDisable(GL_CULL_FACE);
                 // NOTE(Fermin): END font render state
 
                 if(is_set(&game_state, game_state_flag_wireframe_mode))
@@ -1690,10 +1448,14 @@ int main()
 
                 game.update_and_render(&tiles_buffer, &dude, &game_state);
 
-                // nocheckin
+                debug_print_line = dimension.height;
                 char text_buffer[256];
-                _snprintf_s(text_buffer, sizeof(text_buffer), "rate: %.4fms/f %.4ff/s", target_seconds_per_frame*1000.0f, 1.0f/target_seconds_per_frame);
-                print_debug_text(&tiles_buffer, text_buffer, &consola);
+
+                _snprintf_s(text_buffer, sizeof(text_buffer), "[f]   [ms]");
+                print_debug_text(text_buffer, &consola);
+
+                _snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/target_seconds_per_frame), target_seconds_per_frame*1000.0f);
+                print_debug_text(text_buffer, &consola);
 
 
                 HDC device_context = GetDC(window);
@@ -1704,6 +1466,7 @@ int main()
                                                &game_state);
                 ReleaseDC(window, device_context);
                 tiles_buffer.count = tiles_buffer.cached;
+                ui_buffer.count = 0;
 
                 LARGE_INTEGER end_counter = win32_get_wallclock();
                 f32 measured_seconds_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
