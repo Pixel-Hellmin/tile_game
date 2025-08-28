@@ -4,14 +4,16 @@
 
 #define array_count(array) (sizeof(array) / sizeof((array)[0]))
 
-inline b32 is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
+inline b32
+is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
 {
     b32 result = (x >= 0 && x < cols && y >= 0 && y < rows);
 
     return result;
 }
 
-b32 get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
+b32
+get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
 {
     // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
     // have null pointers and can instead check on that pointer instead of 
@@ -35,24 +37,34 @@ b32 get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
     return result;
 }
 
-inline b32 is_set(Game_State *game_state, u32 flag)
+inline b32
+is_set(Game_State *game_state, u32 flag)
 {
     b32 result = game_state->debug_flags & flag;
     
     return result;
 }
 
-inline void set_flag(Game_State *game_state, u32 flag)
+inline void
+set_flag(Game_State *game_state, u32 flag)
 {
     game_state->debug_flags |= flag;
 }
 
-inline void unset_flag(Game_State *game_state, u32 flag)
+inline void
+unset_flag(Game_State *game_state, u32 flag)
 {
     game_state->debug_flags &= ~flag;
 }
 
-V3 tile_index_to_world_coord(i32 x, i32 y, f32 tile_size_in_meters)
+inline void
+toggle_flag(Game_State *game_state, u32 flag)
+{
+    game_state->debug_flags ^= flag;
+}
+
+V3
+tile_index_to_world_coord(i32 x, i32 y, f32 tile_size_in_meters)
 {
     // NOTE(Fermin): For now we assume the world coord is in z = 0 since that's the only plane there's world at
     V3 result = {};
@@ -63,7 +75,8 @@ V3 tile_index_to_world_coord(i32 x, i32 y, f32 tile_size_in_meters)
     return result;
 }
 
-void world_coord_to_tile_index(V3 *world_pos, f32 tile_size_in_meters, i32 *index_x, i32 *index_y)
+void
+world_coord_to_tile_index(V3 *world_pos, f32 tile_size_in_meters, i32 *index_x, i32 *index_y)
 {
     // NOTE(Fermin): For now we assume the world coord is in z = 0 since that's the only plane there's world at
     assert(tile_size_in_meters != 0.0);

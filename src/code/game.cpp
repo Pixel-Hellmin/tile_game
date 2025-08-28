@@ -25,9 +25,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     // TODO(Fermin): Where should this be?
     // Also we should have separate z-buffer values
-    f32 dude_z = 0.0f;
-    f32 map_z = 0.0f;
-    f32 camera_z = 0.0f;
+    // Also we should set a z level for the actual level and dude that is > than 0 so the camera can zoom out
+    f32 dude_z = 2.0f;
+    f32 map_z = 2.0f;
+    f32 camera_z = 2.0f;
 
     const size_t map_rows = 18;
     const size_t map_cols = 17;
@@ -339,106 +340,72 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     f32 camera_speed = 30.0 * dt_in_seconds;
     if(input_state.f1 && !last_frame_input_state.f1)
     {
-        if(is_set(game_state, game_state_flag_prints))
-        {
-            unset_flag(game_state, game_state_flag_prints);
-        }
-        else
-        {
-            set_flag(game_state, game_state_flag_prints);
-        }
+        toggle_flag(game_state, game_state_flag_prints);
     }
     if(input_state.f2 && !last_frame_input_state.f2)
     {
-        if(is_set(game_state, game_state_flag_prints))
-        {
-            unset_flag(game_state, game_state_flag_wireframe_mode);
-        }
-        else
-        {
-            set_flag(game_state, game_state_flag_wireframe_mode);
-        }
+        toggle_flag(game_state, game_state_flag_wireframe_mode);
     }
     if(input_state.f3 && !last_frame_input_state.f3)
     {
-        if(is_set(game_state, game_state_flag_free_cam_mode))
-        {
-            unset_flag(game_state, game_state_flag_free_cam_mode);
-        }
-        else
-        {
-            set_flag(game_state, game_state_flag_free_cam_mode);
-        }
+        toggle_flag(game_state, game_state_flag_free_cam_mode);
     }
+
+    V3 d_pos = {};
+    if(input_state.w)
+    {
+        d_pos.y = 1.0f; 
+    }
+    if(input_state.s)
+    {
+        d_pos.y = -1.0f; 
+    }
+    if(input_state.a)
+    {
+        d_pos.x = -1.0f; 
+    }
+    if(input_state.d)
+    {
+        d_pos.x = 1.0f; 
+    }
+
     if(!is_set(game_state, game_state_flag_free_cam_mode))
     {
-        if(input_state.w)
-        {
-            dude->world_index.y += dude_speed; 
-        }
-        if(input_state.s)
-        {
-            dude->world_index.y -= dude_speed; 
-        }
-        if(input_state.a)
-        {
-            dude->world_index.x -= dude_speed; 
-        }
-        if(input_state.d)
-        {
-            dude->world_index.x += dude_speed; 
-        }
-        if(input_state.left_mouse && !last_frame_input_state.left_mouse)
-        {
-            // TODO(Fermin): Intrinsics.
-            // Store ortho somewhere and only update when screen size changes.
-            M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
-            V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, 0.0, 1.0};
-            V4 cursor_pos_in_px = invert(&ortho) * cursor_pos_ndc;
-            f32 map_tile_size_in_px_with_perspective = safe_ratio_n(game_state->tile_size_in_px, (map_z + 1.0f), game_state->tile_size_in_px);
-            V2 cursor_pos_in_tiles = (cursor_pos_in_px).xy / map_tile_size_in_px_with_perspective;
-            V2 cursor_pos_in_world_index = cursor_pos_in_tiles + dude->world_index.xy;
-
-            if(is_tile_index_valid(cursor_pos_in_world_index.x, cursor_pos_in_world_index.y, game_state->level_cols, game_state->level_rows))
-            {
-                // TODO(Fermin): This logic is broken, highligh is drawn on top of dude alwasys
-                game_state->editing_tile = 1;
-                game_state->editing_tile_x = (i32)cursor_pos_in_world_index.x;
-                game_state->editing_tile_y = (i32)cursor_pos_in_world_index.y;
-            }
-            else
-            {
-                game_state->editing_tile = 0;
-            }
-        }
+        d_pos *= dude_speed;
+        dude->world_index += d_pos; 
+        game_state->camera.pos = dude->world_index;
     }
     else
     {
-        if(input_state.w)
-        {
-            game_state->camera.pos += camera_speed * game_state->camera.front;
-        }
-        if(input_state.s)
-        {
-            game_state->camera.pos -= camera_speed * game_state->camera.front;
-        }
-        if(input_state.a)
-        {
-            game_state->camera.pos -= normalize(cross(game_state->camera.front, game_state->camera.up)) * camera_speed;
-        }
-        if(input_state.d)
-        {
-            game_state->camera.pos += normalize(cross(game_state->camera.front, game_state->camera.up)) * camera_speed;
-        }
+        d_pos *= camera_speed;
+        game_state->camera.pos += d_pos; 
     }
     dude->world_index.z = dude_z;
-    game_state->camera.pos = dude->world_index; // NOTE(Fermin): Testing
     game_state->camera.pos.z = camera_z;
 
-    if(!is_set(game_state, game_state_flag_free_cam_mode))
+    // NOTE(Fermin): This needs to happen after we update dude and camera position
+    if(input_state.left_mouse && !last_frame_input_state.left_mouse)
     {
-            //game_state->camera.pos.xy = dude->min_p.xy;
-            //game_state->camera.pos.z += 15.0f;
+        // TODO(Fermin): Intrinsics.
+        // Store ortho somewhere and only update when screen size changes.
+        M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
+        V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, 0.0, 1.0};
+        V4 cursor_pos_in_px = invert(&ortho) * cursor_pos_ndc;
+        f32 map_tile_size_in_px_with_perspective = safe_ratio_n(game_state->tile_size_in_px, (map_z - game_state->camera.pos.z + 1.0f), game_state->tile_size_in_px);
+        V2 cursor_pos_in_tiles = (cursor_pos_in_px).xy / map_tile_size_in_px_with_perspective;
+        V2 cursor_pos_in_world_index = cursor_pos_in_tiles + game_state->camera.pos.xy;
+
+        if(is_tile_index_valid(cursor_pos_in_world_index.x, cursor_pos_in_world_index.y, game_state->level_cols, game_state->level_rows))
+        {
+            // TODO(Fermin): This logic is broken, highligh is drawn on top of dude alwasys
+            game_state->editing_tile = 1;
+            game_state->editing_tile_x = (i32)cursor_pos_in_world_index.x;
+            game_state->editing_tile_y = (i32)cursor_pos_in_world_index.y;
+        }
+        else
+        {
+            game_state->editing_tile = 0;
+        }
     }
 
     // NOTE(Fermin): Experimental particle system logic START
@@ -454,7 +421,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
 
         //particle->p = dude->min_p + V3{random_unilateral(&game_state->entropy), 0.0f, 0.0f};
-        particle->p = V3{5.0f, 5.0f, 0.0f};
+        particle->p = V3{5.0f, 5.0f, map_z};
         particle->d_p = {
             random_between(&game_state->entropy, -1.0f, 1.0f),
             random_between(&game_state->entropy, 0.5f, 3.0f),

@@ -583,11 +583,10 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
 
     // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles.
     // Should we truncate? round? Not sure
-    V3 half_window =
+    V2 half_window =
     {
         (f32)(window_width / 2),
-        (f32)(window_height / 2),
-        0
+        (f32)(window_height / 2)
     };
 
     // NOTE(Fermin): Renders the world tiles
@@ -601,8 +600,8 @@ win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
         Rect *rect = rects + index;
 
         // NOTE(Fermin): Set the dude in the center of the screen and move the world.
-        V3 min_p = (rect->world_index - game_state->camera.pos) * tile_size_in_px + half_window;
-        min_p.z = rect->world_index.z;
+        V3 min_p = rect->world_index - game_state->camera.pos;
+        min_p.xy = min_p.xy * tile_size_in_px + half_window; // NOTE(Fermin): We don't want Z affected by tile size and window size
         V3 max_p = min_p;
         max_p.xy += (rect->dim_in_tiles * tile_size_in_px);
 
@@ -1360,67 +1359,20 @@ int main()
                 game_state.window_height = dimension.height;
                 win32_process_pending_messages(&game_state);
 
-                if(!is_set(&game_state, game_state_flag_free_cam_mode))
-                {
-                    mouse_enabled = 1;
+                POINT mouse_p;
+                GetCursorPos(&mouse_p);
+                ScreenToClient(window, &mouse_p);
+                f32 mouse_y = (f32)(dimension.height  - mouse_p.y);
+                f32 mouse_x = (f32)mouse_p.x;
 
-                    POINT mouse_p;
-                    GetCursorPos(&mouse_p);
-                    ScreenToClient(window, &mouse_p);
-                    f32 mouse_y = (f32)(dimension.height  - mouse_p.y);
-                    f32 mouse_x = (f32)mouse_p.x;
+                // NOTE(Fermin): Map from screen coords to normalize device coords (-1, 1)
+                game_state.input_state.cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
+                game_state.input_state.cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
 
-                    // NOTE(Fermin): Map from screen coords to normalize device coords (-1, 1)
-                    game_state.input_state.cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
-                    game_state.input_state.cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
-
-                    win32_process_keyboard_message(&game_state.input_state.left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
-                }
-                else
-                {
-                    mouse_enabled = 0;
-                    SetCursor(0);
-                }
+                win32_process_keyboard_message(&game_state.input_state.left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
+                // SetCursor(0); // To disable cursor
                 
 #if 0
-                char text_buffer[256];
-                if(is_set(&game_state, game_state_flag_prints))
-                {
-                    // Stop passing all this buffer and program info. Globals for now? then manager
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "tiles_buffer capacity %i/%i)", tiles_buffer.count, rect_cap);
-                    print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
-
-                    //f32 dude_x = dude.min_p.x + (dude.max_p.x - dude.min_p.x)/2.0f;
-                    //f32 dude_y = dude.min_p.y + (dude.max_p.y - dude.min_p.y)/2.0f;
-                    f32 dude_x = dude.min_p.x;
-                    f32 dude_y = dude.min_p.y;
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "dude min (%.2f, %.2f)", dude_x, dude_y);
-                    print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
-
-                    if(game_state.editing_tile)
-                    {
-                        // NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
-                        Rect *editing;
-                        if(get_tile(&tiles_buffer.buffer,
-                                    game_state.level_cols,
-                                    game_state.level_rows,
-                                    game_state.editing_tile_x,
-                                    game_state.editing_tile_y,
-                                    &editing))
-                        {
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
-                            print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
-
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "  x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
-                            print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
-
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "  texture_id: %i", editing->texture_id);
-                            print_debug_text(text_buffer, &consola, font_VBO, font_program_id);
-                        }
-                    }
-                }
-                // NOTE(Fermin): END font render state
-
                 if(is_set(&game_state, game_state_flag_wireframe_mode))
                 {
                     // TODO(Fermin): We need a different color for the wireframe
@@ -1456,6 +1408,39 @@ int main()
 
                 _snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/target_seconds_per_frame), target_seconds_per_frame*1000.0f);
                 print_debug_text(text_buffer, &consola);
+
+                if(is_set(&game_state, game_state_flag_prints))
+                {
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "tiles_buffer capacity %i/%i)", tiles_buffer.count, rect_cap);
+                    print_debug_text(text_buffer, &consola);
+
+                    f32 dude_x = dude.world_index.x;
+                    f32 dude_y = dude.world_index.y;
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index (%.2f, %.2f)", dude_x, dude_y);
+                    print_debug_text(text_buffer, &consola);
+
+                    if(game_state.editing_tile)
+                    {
+                        // NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
+                        Rect *editing;
+                        if(get_tile(&tiles_buffer.buffer,
+                                    game_state.level_cols,
+                                    game_state.level_rows,
+                                    game_state.editing_tile_x,
+                                    game_state.editing_tile_y,
+                                    &editing))
+                        {
+                            _snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
+                            print_debug_text(text_buffer, &consola);
+
+                            _snprintf_s(text_buffer, sizeof(text_buffer), "  x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
+                            print_debug_text(text_buffer, &consola);
+
+                            _snprintf_s(text_buffer, sizeof(text_buffer), "  texture_id: %i", editing->texture_id);
+                            print_debug_text(text_buffer, &consola);
+                        }
+                    }
+                }
 
 
                 HDC device_context = GetDC(window);
