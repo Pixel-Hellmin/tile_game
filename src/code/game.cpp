@@ -342,10 +342,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
         toggle_flag(game_state, game_state_flag_prints);
     }
-    if(input_state.f2 && !last_frame_input_state.f2)
-    {
-        toggle_flag(game_state, game_state_flag_wireframe_mode);
-    }
     if(input_state.f3 && !last_frame_input_state.f3)
     {
         toggle_flag(game_state, game_state_flag_free_cam_mode);

@@ -1372,32 +1372,6 @@ int main()
                 win32_process_keyboard_message(&game_state.input_state.left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
                 // SetCursor(0); // To disable cursor
                 
-#if 0
-                if(is_set(&game_state, game_state_flag_wireframe_mode))
-                {
-                    // TODO(Fermin): We need a different color for the wireframe
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-                    // NOTE(Fermin): sets the uniform on the CURRENTLY ACTIVE shader program.
-                    //int vertexColorLocation = glGetUniformLocation(shaderProgram, "wireframeColor");
-                    //glUniform4f(vertexColorLocation, 1.0f, 0.0f, 0.0f, 1.0f);
-
-                    //glDrawArrays(GL_TRIANGLES, 0, 3);
-                    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                }
-
-                glBindVertexArray(0);
-
-                glfwSwapBuffers(window);
-                glfwPollEvents();    
-
-                // TODO(Fermin): Double check this assignment makes sense here. (Theres an assert at the start of the loop)
-                tiles_buffer.count = tiles_buffer.cached;
-#endif
-
-
                 game.update_and_render(&tiles_buffer, &dude, &game_state);
 
                 debug_print_line = dimension.height;
@@ -1411,12 +1385,14 @@ int main()
 
                 if(is_set(&game_state, game_state_flag_prints))
                 {
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "tiles_buffer capacity %i/%i)", tiles_buffer.count, rect_cap);
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "tiles_buffer capacity:");
+                    print_debug_text(text_buffer, &consola);
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer.count, rect_cap);
                     print_debug_text(text_buffer, &consola);
 
-                    f32 dude_x = dude.world_index.x;
-                    f32 dude_y = dude.world_index.y;
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index (%.2f, %.2f)", dude_x, dude_y);
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index:");
+                    print_debug_text(text_buffer, &consola);
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "   %.2f, %.2f", dude.world_index.x, dude.world_index.y);
                     print_debug_text(text_buffer, &consola);
 
                     if(game_state.editing_tile)
@@ -1433,10 +1409,10 @@ int main()
                             _snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
                             print_debug_text(text_buffer, &consola);
 
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "  x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
+                            _snprintf_s(text_buffer, sizeof(text_buffer), "   x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
                             print_debug_text(text_buffer, &consola);
 
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "  texture_id: %i", editing->texture_id);
+                            _snprintf_s(text_buffer, sizeof(text_buffer), "   texture_id: %i", editing->texture_id);
                             print_debug_text(text_buffer, &consola);
                         }
                     }

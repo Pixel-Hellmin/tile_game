@@ -160,8 +160,7 @@ struct Input_Keys
 enum Game_State_Debug_Flags
 {
     game_state_flag_prints = (1 << 1),
-    game_state_flag_wireframe_mode = (1 << 2),
-    game_state_flag_free_cam_mode = (1 << 3),
+    game_state_flag_free_cam_mode = (1 << 2),
 };
 
 struct Camera
