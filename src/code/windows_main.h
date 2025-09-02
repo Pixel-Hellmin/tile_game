@@ -22,27 +22,15 @@
 #include <cmath>
 #include <cstdint>
 
-// NOTE(Fermin): Include glad before glfw3
-#if 0
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-#include "glad.c"
-#endif
-
 typedef int32_t    i32;
 typedef int64_t    i64;
-
-typedef uint8_t    u8;
+typedef uint8_t     u8;
 typedef uint32_t   u32;
 typedef uint64_t   u64;
-typedef int32_t    b32;
 typedef uintptr_t  umm;
-
 typedef float      f32;
 typedef double     f64;
-
-#define assert(expression) if(!(expression)) {*(int *)0 = 0;}
-#define invalid_code_path assert(!"invalid_code_path")
+typedef int32_t    b32;
 
 #define global_variable static
 
@@ -51,6 +39,8 @@ typedef double     f64;
 #define megabytes(value) (kilobytes(value)*1024LL)
 #define gigabytes(value) (megabytes(value)*1024LL)
 #define U32Max ((u32) - 1)
+#define assert(expression) if(!(expression)) {*(int *)0 = 0;}
+#define invalid_code_path assert(!"invalid_code_path")
 
 // NOTE(Fermin): This is used to store u32 as a (void *) type.
 // Not actual pointers, useful when using u32 and pointers as
@@ -58,15 +48,47 @@ typedef double     f64;
 #define u32_from_pointer(pointer) ((u32)(size_t)(pointer))
 #define pointer_from_u32(type, value) (type *)((size_t)value)
 
+// NOTE(Fermin): Windows specific
+#define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
+#define WGL_CONTEXT_LAYER_PLANE_ARB               0x2093
+#define WGL_CONTEXT_FLAGS_ARB                     0x2094
+#define WGL_CONTEXT_PROFILE_MASK_ARB              0x9126
+#define WGL_CONTEXT_DEBUG_BIT_ARB                 0x0001
+#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB    0x0002
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
+#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+
 global_variable f32 debug_print_line = 0.0f;
 global_variable const f32 font_point_size = 64.0f;
 global_variable const u32 font_first_character = '!';
 global_variable const u32 font_last_character = '~';
 global_variable const u32 font_character_count = font_last_character - font_first_character + 1;
+global_variable u32 bytes_per_pixel = 4;
+global_variable b32 win32_running;
+global_variable f32 global_perf_count_frequency;
 
 #include "math.cpp"
 #include "buffer.cpp"
 #include "random.h"
+
+struct Win32_Offscreen_Buffer
+{
+    // NOTE(Fermin): What part does this back buffer plays when rendering with
+    // OpenGL? Is the memory still needed if we never write to it?
+    BITMAPINFO info;
+    void *memory;
+    i32 width;
+    i32 height;
+    i32 pitch;
+    i32 bytes_per_pixel;
+};
+
+struct Win32_Window_Dimension
+{
+    i32 width;
+    i32 height;
+};
 
 struct Glyph_Metadata
 {
@@ -125,25 +147,6 @@ union Rect
     };
 };
 
-u32 push_rectangle(Render_Buffer *render_buffer, Rect *rect, V4 color = {1.0, 1.0, 1.0, 1.0})
-{
-    // NOTE(Fermin): This is error prone since we have to update this function each time we change Rect struct
-    static_assert(sizeof(Rect) == 44, "Pushing out of date Rect");
-
-    u32 result = render_buffer->count;
-
-    assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);
-
-    Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
-    pushed_rect->world_index = rect->world_index;
-    pushed_rect->dim_in_tiles = rect->dim_in_tiles;
-    pushed_rect->color = color;
-    pushed_rect->texture_id = rect->texture_id;
-    pushed_rect->rotation = rect->rotation;
-
-    return result;
-}
-
 struct Input_Keys
 {
     b32 w;
@@ -192,8 +195,6 @@ struct Game_State
     f32 tile_size_in_px;
 
     Camera camera;
-    M4 *proj;
-    M4 *view;
 
     i32 window_width;
     i32 window_height;
@@ -232,6 +233,26 @@ struct Game_Code
 
     b32 is_valid;
 };
+
+static u32
+push_rectangle(Render_Buffer *render_buffer, Rect *rect, V4 color = {1.0, 1.0, 1.0, 1.0})
+{
+    // NOTE(Fermin): This is error prone since we have to update this function each time we change Rect struct
+    static_assert(sizeof(Rect) == 44, "Pushing out of date Rect");
+
+    u32 result = render_buffer->count;
+
+    assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);
+
+    Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
+    pushed_rect->world_index = rect->world_index;
+    pushed_rect->dim_in_tiles = rect->dim_in_tiles;
+    pushed_rect->color = color;
+    pushed_rect->texture_id = rect->texture_id;
+    pushed_rect->rotation = rect->rotation;
+
+    return result;
+}
 
 #define MAIN_H
 #endif

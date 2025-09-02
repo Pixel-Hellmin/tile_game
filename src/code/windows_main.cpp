@@ -1,350 +1,25 @@
 #include "windows.h"
 #include "windows_main.h"
+#include "shared.h"
 #include "game.h"
 #include <gl/gl.h>
 
-global_variable u32 screen_width = 1280;
-global_variable u32 screen_height = 720;
-global_variable f32 aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-global_variable f32 fov = 45.0f;
-global_variable M4 projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
-global_variable f32 last_mouse_x = ((f32)screen_width) / 2.0f;
-global_variable f32 last_mouse_y = ((f32)screen_height) / 2.0f;
-global_variable b32 mouse_enabled = 1;
-global_variable f32 camera_pitch = 0.0f;
-global_variable f32 camera_yaw = -90.0f;
-global_variable u32 bytes_per_pixel = 4;
-global_variable Font consola = {};
+#include "opengl.h"
+global_variable Opengl opengl = {};
+global_variable GLuint texture_handle; // TODO(Fermin) Check if we still need this
+// NOTE(Fermin): I don't think these should be global. Think where they fit.
 global_variable Render_Buffer tiles_buffer = {};
 global_variable Render_Buffer ui_buffer = {};
+
+#include "opengl.cpp"
+
+global_variable Font consola = {};
 global_variable Game_State game_state = {};
-global_variable f32 global_perf_count_frequency;
-// TODO(Fermin): This goes in opengl header
-struct Opengl {
-    GLuint program;
-    GLuint transform_id;
-    GLuint texture_sampler_id;
-    GLuint default_internal_texture_format;
-    GLint max_multisample_count;
-};
-global_variable Opengl opengl = {};
-// END(Fermin): This goes in opengl header
-
-
-// NOTE(Fermin): | Start | win32 stuff
-struct Win32_Offscreen_Buffer
-{
-    // NOTE(Fermin): What part does this back buffer plays when rendering with
-    // OpenGL? Is the memory still needed if we never write to it?
-    BITMAPINFO info;
-    void *memory;
-    i32 width;
-    i32 height;
-    i32 pitch;
-    i32 bytes_per_pixel;
-};
-
-struct Win32_Window_Dimension
-{
-    i32 width;
-    i32 height;
-};
-
-global_variable b32 win32_running;
 global_variable Win32_Offscreen_Buffer global_back_buffer;
-global_variable GLuint texture_handle;
 
+typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
 typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
 global_variable Wgl_Swap_Interval_Ext *wgl_swap_interval;
-
-typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context,
-                                                    const int *attrib_list);
-
-// NOTE(Fermin): Got these from https://registry.khronos.org/OpenGL/api/GL/glcorearb.h
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-#define GL_SRGB8_ALPHA8                   0x8C43
-#define GL_SHADING_LANGUAGE_VERSION       0x8B8C
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FRAGMENT_SHADER                0x8B30
-#define GL_COMPILE_STATUS                 0x8B81
-#define GL_LINK_STATUS                    0x8B82
-#define GL_VALIDATE_STATUS                0x8B83
-#define GL_MAX_COLOR_TEXTURE_SAMPLES      0x910E
-#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
-
-
-typedef char GLchar;
-typedef void Gl_Attach_Shader(GLuint program, GLuint shader);
-typedef void Gl_Compile_Shader(GLuint shader);
-typedef GLuint Gl_Create_Program(void);
-typedef GLuint Gl_Create_Shader(GLenum type);
-typedef void Gl_Link_Program(GLuint program);
-typedef void Gl_Shader_Source(GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
-typedef void Gl_Use_Program(GLuint program);
-typedef void Gl_Validate_Program(GLuint program);
-typedef void Gl_Get_Programiv(GLuint program, GLenum pname, GLint *params);
-typedef void Gl_Get_Shader_Info_Log(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
-typedef void Gl_Get_Program_Info_Log(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
-typedef GLint Gl_Get_Uniform_Location(GLuint program, const GLchar *name);
-typedef void Gl_Uniform_Matrix_4vf(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-typedef void Gl_Uniform_1i(GLint location, GLint v0);
-typedef void Gl_Tex_Image_2D_Multisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
-//typedef void Gl_Bind_Attrib_Location(GLuint program, GLuint index, const GLchar *name);
-
-global_variable Gl_Attach_Shader *glAttachShader;
-global_variable Gl_Compile_Shader *glCompileShader;
-global_variable Gl_Create_Program *glCreateProgram;
-global_variable Gl_Create_Shader *glCreateShader;
-global_variable Gl_Link_Program *glLinkProgram;
-global_variable Gl_Shader_Source *glShaderSource;
-global_variable Gl_Use_Program *glUseProgram;
-global_variable Gl_Validate_Program *glValidateProgram;
-global_variable Gl_Get_Programiv *glGetProgramiv;
-global_variable Gl_Get_Shader_Info_Log *glGetShaderInfoLog;
-global_variable Gl_Get_Program_Info_Log *glGetProgramInfoLog;
-global_variable Gl_Get_Uniform_Location *glGetUniformLocation;
-global_variable Gl_Uniform_Matrix_4vf *glUniformMatrix4fv;
-global_variable Gl_Uniform_1i *glUniform1i;
-global_variable Gl_Tex_Image_2D_Multisample *glTexImage2DMultisample;
- 
-
-// NOTE(Fermin): Windows specific
-#define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
-#define WGL_CONTEXT_LAYER_PLANE_ARB               0x2093
-#define WGL_CONTEXT_FLAGS_ARB                     0x2094
-#define WGL_CONTEXT_PROFILE_MASK_ARB              0x9126
-#define WGL_CONTEXT_DEBUG_BIT_ARB                 0x0001
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB    0x0002
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
-#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
-
-inline b32
-strings_are_equal(umm a_length, char *a, char *b)
-{
-    char *at = b;
-    for(umm index = 0;
-        index < a_length;
-        ++index, ++at)
-    {
-        if((*at == 0) ||
-           (a[index] != *at))
-        {
-            return false;
-        }
-    }
-
-    b32 result = (*at == 0);
-    return result;
-}
-
-inline b32
-is_end_of_line(char c)
-{
-    b32 result = ((c == '\n') ||
-                  (c == '\r'));
-
-    return result;
-}
-
-inline b32
-is_whitespace(char c)
-{
-    b32 result = ((c == ' ') ||
-                  (c == '\t') ||
-                  (c == '\v') ||
-                  (c == '\f') ||
-                  is_end_of_line(c));
-
-    return result;
-}
-
-struct Opengl_Info
-{
-    b32 modern_context;
-    char *vendor;
-    char *renderer;
-    char *version;
-    char *shading_language_version;
-    char *extensions;
-
-    b32 GL_EXT_texture_sRGB;
-    b32 GL_EXT_framebuffer_sRGB;
-};
-
-static Opengl_Info
-opengl_get_info(b32 modern_context)
-{
-    Opengl_Info result = {};
-
-    result.modern_context = modern_context;
-    result.vendor = (char *)glGetString(GL_VENDOR);
-    result.renderer = (char *)glGetString(GL_RENDERER);
-    result.version = (char *)glGetString(GL_VERSION);
-    if(result.modern_context)
-    {
-        result.shading_language_version = (char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
-    }
-    else
-    {
-        result.shading_language_version = "(none)";
-    }
-    result.extensions = (char *)glGetString(GL_EXTENSIONS);
-
-    char *at = result.extensions;
-    while(*at)
-    {
-        while(is_whitespace(*at)) {++at;}
-        char *end = at;
-        while(*end && !is_whitespace(*end)) {++end;}
-
-        umm count = end - at;
-
-        if(0) {}
-        else if(strings_are_equal(count, at, "GL_EXT_texture_sRGB")) {result.GL_EXT_texture_sRGB = true;}
-        else if(strings_are_equal(count, at, "GL_EXT_framebuffer_sRGB")) {result.GL_EXT_framebuffer_sRGB = true;}
-
-        at = end;
-    }
-
-    return result;
-}
-
-static GLuint
-opengl_create_program(char *defines, char *header_code, char *vertex_code, char *fragment_code)
-{
-    GLuint vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-    GLchar *vertex_shader_code[] =
-    {
-        defines,
-        header_code,
-        vertex_code,
-    };
-    glShaderSource(vertex_shader_id, array_count(vertex_shader_code),
-                   vertex_shader_code, 0);
-    glCompileShader(vertex_shader_id);
-
-    GLuint fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
-    GLchar *fragment_shader_code[] =
-    {
-        defines,
-        header_code,
-        fragment_code,
-    };
-    glShaderSource(fragment_shader_id, array_count(fragment_shader_code),
-                   fragment_shader_code, 0);
-    glCompileShader(fragment_shader_id);
-
-    GLuint program_id = glCreateProgram();
-    glAttachShader(program_id, vertex_shader_id);
-    glAttachShader(program_id, fragment_shader_id);
-    glLinkProgram(program_id);
-
-    glValidateProgram(program_id);
-    GLint linked = false;
-    glGetProgramiv(program_id, GL_LINK_STATUS, &linked);
-    if(!linked)
-    {
-        GLsizei ignored;
-        char vertex_errors[4096];
-        char fragment_errors[4096];
-        char program_errors[4096];
-        glGetShaderInfoLog(vertex_shader_id, sizeof(vertex_errors), &ignored, vertex_errors);
-        glGetShaderInfoLog(fragment_shader_id, sizeof(fragment_errors), &ignored, fragment_errors);
-        glGetProgramInfoLog(program_id, sizeof(program_errors), &ignored, program_errors);
-
-        assert(!"Shader validation failed");
-    }
-
-    return program_id;
-}
-
-static void
-opengl_init(Opengl_Info info)
-{
-    opengl.default_internal_texture_format = GL_RGBA8;
-    if(info.GL_EXT_texture_sRGB)
-    {
-        opengl.default_internal_texture_format = GL_SRGB8_ALPHA8;
-    }
-
-    if(info.GL_EXT_framebuffer_sRGB)
-    {
-        glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &opengl.max_multisample_count);
-        if(opengl.max_multisample_count > 16)
-        {
-            opengl.max_multisample_count = 16;
-        }
-
-        GLuint test_texture;
-        glGenTextures(1, &test_texture);
-        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, test_texture);
-        glGetError(); // Clear the error
-        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE,
-                                opengl.max_multisample_count,
-                                GL_SRGB8_ALPHA8,
-                                1920, 1080,
-                                GL_FALSE);
-
-        if(glGetError() == GL_NO_ERROR)
-        {
-            glEnable(GL_FRAMEBUFFER_SRGB);
-            //opengl.default_frame_buffer_texture_format = GL_SRGB8_ALPHA8;
-        }
-        glDeleteTextures(1, &test_texture);
-        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-    }
-
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-    char *defines = "#version 130\n";
-    if(false)
-    {
-        defines = R"FOO(
-        #version 130
-        #define example 1
-        )FOO";
-    }
-
-    char *header_code = R"FOO(
-    // Header code
-    )FOO";
-
-    char *vertex_code = R"FOO(
-    // Vertex code
-    uniform mat4x4 transform;
-    //in vec2 in_uv;
-    //in vec4 in_color;
-    smooth out vec2 frag_uv;
-    smooth out vec4 frag_color;
-    void main(void)
-    {
-        // NOTE(Fermin): This rounding still doesn't fix the gaps between
-        // tiles when they are small. That is when their z is high.
-        gl_Position = transform*round(gl_Vertex);
-
-        frag_uv = gl_MultiTexCoord0.xy; //in_uv;
-        frag_color = gl_Color; //in_color;
-    }
-    )FOO";
-
-    char *fragment_code = R"FOO(
-    // Fragment code
-    uniform sampler2D texture_sampler;
-    smooth in vec2 frag_uv;
-    smooth in vec4 frag_color;
-    out vec4 result_color;
-    void main(void)
-    {
-        vec4 tex_sample = texture(texture_sampler, frag_uv);
-        result_color = frag_color*tex_sample;
-    }
-    )FOO";
-
-    opengl.program = opengl_create_program(defines, header_code, vertex_code, fragment_code);
-    opengl.transform_id = glGetUniformLocation(opengl.program, "transform");
-    opengl.texture_sampler_id = glGetUniformLocation(opengl.program, "texture_sampler");
-}
 
 static void
 win32_init_opengl(HWND window)
@@ -466,7 +141,7 @@ win32_resize_DIB_section(i32 width, i32 height)
 
     global_back_buffer.width = width;
     global_back_buffer.height = height;
-    global_back_buffer.bytes_per_pixel = 4;
+    global_back_buffer.bytes_per_pixel = bytes_per_pixel;
     global_back_buffer.pitch = width * global_back_buffer.bytes_per_pixel;
     global_back_buffer.info.bmiHeader.biSize = sizeof(global_back_buffer.info.bmiHeader);
     global_back_buffer.info.bmiHeader.biWidth = global_back_buffer.width;
@@ -479,152 +154,10 @@ win32_resize_DIB_section(i32 width, i32 height)
     global_back_buffer.memory = VirtualAlloc(0, bitmap_memory_size, MEM_COMMIT, PAGE_READWRITE);
 }
 
-inline void
-opengl_rectangle(V3 min_p, V3 max_p, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
-{
-    f32 z = min_p.z;
-
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
-
-    glBegin(GL_TRIANGLES);
-
-    // NOTE(Fermin): Lower triangle
-    glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex3f(min_p.x, min_p.y, z);
-
-    glTexCoord2f(max_uv.x, min_uv.y);
-    glVertex3f(max_p.x, min_p.y, z);
-
-    glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex3f(max_p.x, max_p.y, z);
-
-    // NOTE(Fermin): Upper triangle
-    glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex3f(min_p.x, min_p.y, z);
-
-    glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex3f(max_p.x, max_p.y, z);
-
-    glTexCoord2f(min_uv.x, max_uv.y);
-    glVertex3f(min_p.x, max_p.y, z);
-
-    glEnd();
-}
-
-static void //internal void *
-opengl_allocate_texture(u32 width, u32 height, void *data)
-{
-    /*
-    GLuint handle;
-    glGenTextures(1, &handle);
-    glBindTexture(GL_TEXTURE_2D, handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
-                 width, height, 0, GL_BGRA_EXT,
-                 GL_UNSIGNED_BYTE, data);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // NOTE(Fermin): In this case we are not actually pointing to any memory.
-    // We use this void * type to store a u32 which is the texture handle.
-    // We do this because opengl uses u32 as texture handles but we may want
-    // to use actual pointers on the cpu side. This way we can store both
-    // in a (void *)
-    assert(sizeof(handle) <= sizeof(void *));
-    void *result = pointer_from_u32(void, handle);
-    return result;
-    */
-
-    glBindTexture(GL_TEXTURE_2D, texture_handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
-                 width, height, 0, GL_BGRA_EXT,
-                 GL_UNSIGNED_BYTE, data);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-}
-
 static void
-win32_display_buffer_in_window(HDC device_context, Render_Buffer* render_buffer,
-                               i32 window_width, i32 window_height,
-                               Game_State* game_state)
+win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Game_State* game_state)
 {
-    M4 ortho = {};
-    ortho = orthogonal((f32)window_width, (f32)window_height);
-
-    glViewport(0, 0, window_width, window_height);
-
-    //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    //glDepthFunc(GL_LESS);
-    glDepthFunc(GL_LEQUAL);
-
-    glEnable(GL_TEXTURE_2D);
-    glEnable(GL_SCISSOR_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-    glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
-    glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
-
-    glUseProgram(opengl.program);
-        
-    glUniform1i(opengl.texture_sampler_id, 0);
-
-    // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles.
-    // Should we truncate? round? Not sure
-    V2 half_window =
-    {
-        (f32)(window_width / 2),
-        (f32)(window_height / 2)
-    };
-
-    // NOTE(Fermin): Renders the world tiles
-    ortho.m[2].w = 1.0f; // NOTE(Fermin): Enables perspective divide by z
-    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
-
-    f32 tile_size_in_px = game_state->tile_size_in_px;
-    Rect *rects = (Rect *)render_buffer->buffer.data;
-    for(u32 index = 0; index < render_buffer->count; index++)
-    {
-        Rect *rect = rects + index;
-
-        // NOTE(Fermin): Set the dude in the center of the screen and move the world.
-        V3 min_p = rect->world_index - game_state->camera.pos;
-        min_p.xy = min_p.xy * tile_size_in_px + half_window; // NOTE(Fermin): We don't want Z affected by tile size and window size
-        V3 max_p = min_p;
-        max_p.xy += (rect->dim_in_tiles * tile_size_in_px);
-
-        opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
-    }
-
-    // NOTE(Fermin): Renders the UI
-    ortho.m[2].w = 0.0f; // NOTE(Fermin): Disables perspective divide by z
-    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
-
-    Rect *ui_rects = (Rect *)ui_buffer.buffer.data;
-    for(u32 index = 0; index < ui_buffer.count; index++)
-    {
-        Rect *rect = ui_rects + index;
-
-        V3 min_p = rect->pos_in_screen;
-        V3 max_p = min_p;
-        max_p.xy += rect->dim_in_px;
-
-        opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
-    }
-
-    glUseProgram(0);
+    opengl_render(window_width, window_height, game_state);
 
     SwapBuffers(device_context);
 }
@@ -676,11 +209,7 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             PAINTSTRUCT paint;
             HDC device_context = BeginPaint(window, &paint);
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
-            win32_display_buffer_in_window(device_context,
-                                           &tiles_buffer,
-                                           dimension.width,
-                                           dimension.height,
-                                           &game_state);
+            win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &game_state);
             EndPaint(window, &paint);
         } break;
 
@@ -689,187 +218,6 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             result = DefWindowProc(window, message, w_param, l_param);
         } break;
     }
-
-    return result;
-}
-// NOTE(Fermin): | End | win32 stuff
-
-#if 0
-// OpenGL
-static void
-framebuffer_size_callback(GLFWwindow* window, i32 width, i32 height)
-{
-    screen_width = width;
-    screen_height = height;
-    aspect_ratio = ((f32)screen_width)/((f32)screen_height);
-    projection = perspective(radians(fov), aspect_ratio, 1.0f, 100.0f);
-
-    //glViewport(0, 0, width, height);
-}  
-
-// OpenGL
-static void
-mouse_callback(GLFWwindow* window, double x_pos, double y_pos)
-{
-    static b32 first_mouse = 1;
-    if(first_mouse)
-    {
-        last_mouse_x = x_pos;
-        last_mouse_y = y_pos;
-        first_mouse = 0;
-    }
-
-    if(!mouse_enabled)
-    {
-        f32 x_offset = x_pos - last_mouse_x;
-        f32 y_offset = last_mouse_y - y_pos; // reversed since y-coord range from bot to top
-
-        f32 sensitivity = 0.05f;
-        x_offset *= sensitivity;
-        y_offset *= sensitivity;
-
-        camera_pitch += y_offset;
-        camera_yaw += x_offset;
-
-        if(camera_pitch > 89.0f)
-            camera_pitch =  89.0f;
-
-        if(camera_pitch < -89.0f)
-            camera_pitch = -89.0f;
-    }
-
-    last_mouse_x = x_pos;
-    last_mouse_y = y_pos;
-}
-
-// OpenGL
-static void
-scroll_callback(GLFWwindow* window, double x_offset, double y_offset)
-{
-    fov -= y_offset;
-
-    if(fov < 1.0f)
-        fov = 1.0f;
-    if(fov > 45.0f)
-        fov = 45.0f;
-}
-#endif
-
-static void
-cat_strings(size_t source_a_count, char *source_a,
-            size_t source_b_count, char *source_b, 
-            size_t dest_count, char *dest)
-{
-    for(int index = 0;
-        index < source_a_count;
-        ++index)
-    {
-        *dest++ = *source_a++;
-    }
-
-    for(int index = 0;
-        index < source_b_count;
-        ++index)
-    {
-        *dest++ = *source_b++;
-    }
-
-    *dest++ = 0;
-}
-
-static long
-open_file(FILE **handle, char const *name)
-{
-    *handle = fopen(name, "rb");
-    if (!*handle)
-    {
-        fprintf(stderr, "Error: Couldn't open file: %s\n", name);
-        return -1;
-    }
-
-    fseek(*handle, 0, SEEK_END);
-    long file_size = ftell(*handle);
-    rewind(*handle);
-
-    return file_size;
-}
-
-static Buffer
-read_file(const char *file_name)
-{
-    Buffer result = {};
-
-    FILE* file;
-    long file_size = open_file(&file, file_name);
-
-    result = allocate_buffer(file_size);
-
-    if (result.data)
-    {
-        size_t bytes_read = fread(result.data, sizeof(char), result.count, file);
-        if ((bytes_read) != result.count)
-        {
-            fprintf(stderr, "Error: Failed to read %s\nfile_size: %zu, bytes_read: %zu\n", file_name, result.count, bytes_read);
-
-            free_buffer(&result);
-            fclose(file);
-
-            return result;
-        }
-    }
-    else
-    {
-        fprintf(stderr, "Error: Memory allocation failed while reading file %s\n", file_name);
-    }
-
-    fclose(file);
-
-    return result;
-}
-// NOTE(Fermin): read_file declaration should go in main.h, fix error when moving
-
-// OpenGL
-static u32
-generate_texture(u8 *data, i32 width, i32 height, u32 format)
-{
-
-    u32 result;
-    glGenTextures(1, &result);  
-    glBindTexture(GL_TEXTURE_2D, result);  
-
-    // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
-                     width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        //glGenerateMipmap(GL_TEXTURE_2D);
-    }
-
-    return result;
-}
-
-// OpenGL
-static u32
-generate_texture(char *path, u32 format)
-{
-    // TODO(Fermin): Maybe use opengl.default_internal_texture_format here?
-    u32 result;
-
-    Buffer buffer = read_file(path);
-
-    i32 width =    *(i32 *)buffer.data;
-    i32 height =   *(((i32 *)buffer.data) + 1);
-    i32 channels = *(((i32 *)buffer.data) + 2);
-    u8 *data = buffer.data + sizeof(i32)*3;
-
-    result = generate_texture(data, width, height, format);
 
     return result;
 }
@@ -1131,7 +479,7 @@ init_font(Font *font, char *source)
             }
         }
 
-        font->glyph_texture_ids[index] = generate_texture(character_buffer.data, width, height, GL_RGBA);
+        font->glyph_texture_ids[index] = opengl_generate_texture(character_buffer.data, width, height, GL_RGBA);
 
         free_buffer(&character_buffer);
     }
@@ -1283,11 +631,11 @@ int main()
             glGenTextures(1, &texture_handle);
 
             // NOTE(Fermin) | Start | Textures
-            u32 floor_texture_id     = generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
-            u32 wall_texture_id      = generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
-            u32 roof_texture_id      = generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
-            u32 highlight_texture_id = generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-            u32 dude_texture_id      = generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
+            u32 floor_texture_id     = opengl_generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
+            u32 wall_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
+            u32 roof_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
+            u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
+            u32 dude_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
             init_font(&consola, "src\\misc\\assets\\consola.font");
@@ -1313,9 +661,6 @@ int main()
                               game_state.camera.pos + game_state.camera.front,
                               game_state.camera.up);
 
-            game_state.proj = &projection;
-            game_state.view = &view;
-            
             set_flag(&game_state, game_state_flag_prints);
 
             Rect dude = {};
@@ -1420,11 +765,7 @@ int main()
 
 
                 HDC device_context = GetDC(window);
-                win32_display_buffer_in_window(device_context,
-                                               &tiles_buffer,
-                                               dimension.width,
-                                               dimension.height,
-                                               &game_state);
+                win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &game_state);
                 ReleaseDC(window, device_context);
                 tiles_buffer.count = tiles_buffer.cached;
                 ui_buffer.count = 0;
@@ -1447,15 +788,5 @@ int main()
         invalid_code_path
     }
 
-#if 0
-    glDeleteVertexArrays(1, &draw_rect_prog.vao);
-    glDeleteBuffers(1, &draw_rectangle_VBO);
-    glDeleteBuffers(1, &draw_rectangle_EBO);
-
-    glDeleteVertexArrays(1, &font_VAO);
-    glDeleteBuffers(1, &font_VBO);
-
-    glfwTerminate();
-#endif
     return 666;
 }
