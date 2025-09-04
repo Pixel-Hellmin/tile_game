@@ -152,6 +152,13 @@ inline V2 operator*(V2 a, f32 b)
     return result;
 }
 
+inline V2 & operator*=(V2 &a, f32 b)
+{
+    a = a * b;
+
+    return a;
+}
+
 inline V2 operator/(V2 a, f32 b)
 {
     V2 result = {};
@@ -592,13 +599,29 @@ M4 scale_m4(V3 scale)
     return result;
 }
 
+inline f32
+_sin(f32 angle)
+{
+    // TODO(Fermin): intrinsics
+    f32 result = sinf(angle);
+    return result;
+}
+
+inline f32
+_cos(f32 angle)
+{
+    // TODO(Fermin): intrinsics
+    f32 result = cosf(angle);
+    return result;
+}
+
 static inline
 M4 rotate(f32 radians, V3 axis)
 {
     // NOTE(Fermin): angle must be a unit vector
 
-    f32 cos_theta = cosf(radians);
-    f32 sin_theta = sinf(radians);
+    f32 cos_theta = _cos(radians);
+    f32 sin_theta = _sin(radians);
     f32 one_minus_cos_theta = 1.0f - cos_theta;
 
     f32 x = axis.x;

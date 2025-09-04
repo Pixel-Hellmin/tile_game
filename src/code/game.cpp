@@ -480,6 +480,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         push_rectangle(tiles_buffer, &highlight, V4{0.0f, 1.0f, 0.0f, 1.0f});
     }
 
+    dude->rotation += dt_in_seconds; // nocheckin
     push_rectangle(tiles_buffer, dude);
 
     game_state->last_frame_input_state = input_state;

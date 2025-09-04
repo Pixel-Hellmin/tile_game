@@ -139,8 +139,6 @@ opengl_init(Opengl_Info info)
     char *vertex_code = R"FOO(
     // Vertex code
     uniform mat4x4 transform;
-    //in vec2 in_uv;
-    //in vec4 in_color;
     smooth out vec2 frag_uv;
     smooth out vec4 frag_color;
     void main(void)
@@ -149,8 +147,8 @@ opengl_init(Opengl_Info info)
         // tiles when they are small. That is when their z is high.
         gl_Position = transform*round(gl_Vertex);
 
-        frag_uv = gl_MultiTexCoord0.xy; //in_uv;
-        frag_color = gl_Color; //in_color;
+        frag_uv = gl_MultiTexCoord0.xy;
+        frag_color = gl_Color;
     }
     )FOO";
 
@@ -170,6 +168,39 @@ opengl_init(Opengl_Info info)
     opengl.program = opengl_create_program(defines, header_code, vertex_code, fragment_code);
     opengl.transform_id = glGetUniformLocation(opengl.program, "transform");
     opengl.texture_sampler_id = glGetUniformLocation(opengl.program, "texture_sampler");
+}
+
+inline void
+opengl_rectangle(V3 *corners, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
+{
+    f32 z = corners[0].z;
+
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
+
+    glBegin(GL_TRIANGLES);
+
+    // NOTE(Fermin): Lower triangle
+    glTexCoord2f(min_uv.x, min_uv.y);
+    glVertex3f(corners[0].x, corners[0].y, z);
+
+    glTexCoord2f(max_uv.x, min_uv.y);
+    glVertex3f(corners[1].x, corners[1].y, z);
+
+    glTexCoord2f(max_uv.x, max_uv.y);
+    glVertex3f(corners[2].x, corners[2].y, z);
+
+    // NOTE(Fermin): Upper triangle
+    glTexCoord2f(min_uv.x, min_uv.y);
+    glVertex3f(corners[0].x, corners[0].y, z);
+
+    glTexCoord2f(max_uv.x, max_uv.y);
+    glVertex3f(corners[2].x, corners[2].y, z);
+
+    glTexCoord2f(min_uv.x, max_uv.y);
+    glVertex3f(corners[3].x, corners[3].y, z);
+
+    glEnd();
 }
 
 inline void
@@ -332,13 +363,41 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
     {
         Rect *rect = rects + index;
 
-        // NOTE(Fermin): Set the dude in the center of the screen and move the world.
-        V3 min_p = rect->world_index - game_state->camera.pos;
-        min_p.xy = min_p.xy * tile_size_in_px + half_window; // NOTE(Fermin): We don't want Z affected by tile size and window size
-        V3 max_p = min_p;
-        max_p.xy += (rect->dim_in_tiles * tile_size_in_px);
+        // rotate axis
+        V2 x_axis = V2{_cos(rect->rotation), _sin(rect->rotation)};
+        V2 y_axis = V2{-x_axis.y, x_axis.x};
 
-        opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
+        // scale by half dim because origin of rotation is at the center of the tile
+        x_axis *= rect->dim_in_tiles.x * 0.5f;
+        y_axis *= rect->dim_in_tiles.y * 0.5f;
+
+        V3 origin = rect->world_index - game_state->camera.pos; // move into camera space
+        origin.xy = origin.xy + rect->dim_in_px / 2.0f; // set origin in center of tile
+
+        // NOTE(Fermin): We dont need all the z
+        V3 corners[4];
+        corners[0].xy = origin.xy - x_axis - y_axis; // Lower left
+        corners[0].z = origin.z;
+        corners[1].xy = origin.xy + x_axis - y_axis; // Lower right
+        corners[1].z = origin.z;
+        corners[2].xy = origin.xy + x_axis + y_axis; // Upper right
+        corners[2].z = origin.z;
+        corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
+        corners[3].z = origin.z;
+            
+        // Transform from world index to pixels. Not Z since that is used for z-buffer
+        corners[0].xy *= tile_size_in_px;
+        corners[1].xy *= tile_size_in_px;
+        corners[2].xy *= tile_size_in_px;
+        corners[3].xy *= tile_size_in_px;
+
+        // Move the origin of the camera from bottom left to the center of the window
+        corners[0].xy += half_window;
+        corners[1].xy += half_window;
+        corners[2].xy += half_window;
+        corners[3].xy += half_window;
+
+        opengl_rectangle(corners, rect->color, rect->texture_id);
     }
 
     // NOTE(Fermin): Renders the UI

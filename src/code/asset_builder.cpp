@@ -161,6 +161,8 @@ int main()
                      "src\\misc\\assets\\textures\\highlight.texture");
     generate_texture("src\\misc\\assets\\textures\\raw\\dude.png",
                      "src\\misc\\assets\\textures\\dude.texture");
+    generate_texture("src\\misc\\assets\\textures\\raw\\direction.png",
+                     "src\\misc\\assets\\textures\\direction.texture");
 
     return 666;
 }

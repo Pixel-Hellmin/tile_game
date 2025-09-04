@@ -10,10 +10,10 @@ global_variable GLuint texture_handle; // TODO(Fermin) Check if we still need th
 // NOTE(Fermin): I don't think these should be global. Think where they fit.
 global_variable Render_Buffer tiles_buffer = {};
 global_variable Render_Buffer ui_buffer = {};
+global_variable Font consola = {};
 
 #include "opengl.cpp"
 
-global_variable Font consola = {};
 global_variable Game_State game_state = {};
 global_variable Win32_Offscreen_Buffer global_back_buffer;
 
@@ -634,8 +634,9 @@ int main()
             u32 floor_texture_id     = opengl_generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
             u32 wall_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
             u32 roof_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
-            u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-            u32 dude_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\dude.texture",      GL_RGBA);
+            u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture", GL_RGBA);
+            //u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
+            u32 dude_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
             init_font(&consola, "src\\misc\\assets\\consola.font");
@@ -665,7 +666,7 @@ int main()
 
             Rect dude = {};
             dude.world_index = V3{0.0f, 0.0f, 0.0f};
-            dude.dim_in_tiles = V2{1.0f, 1.0f};
+            dude.dim_in_tiles = V2{2.0f, 2.0f};
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
@@ -681,7 +682,6 @@ int main()
             // NOTE(Fermin): This is the main loop
             while(win32_running)
             {
-
                 game_state.dt_in_seconds = target_seconds_per_frame;
 
                 assert(tiles_buffer.count == tiles_buffer.cached);
