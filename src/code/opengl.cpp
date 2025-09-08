@@ -203,39 +203,6 @@ opengl_rectangle(V3 *corners, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 
     glEnd();
 }
 
-inline void
-opengl_rectangle(V3 min_p, V3 max_p, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
-{
-    f32 z = min_p.z;
-
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
-
-    glBegin(GL_TRIANGLES);
-
-    // NOTE(Fermin): Lower triangle
-    glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex3f(min_p.x, min_p.y, z);
-
-    glTexCoord2f(max_uv.x, min_uv.y);
-    glVertex3f(max_p.x, min_p.y, z);
-
-    glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex3f(max_p.x, max_p.y, z);
-
-    // NOTE(Fermin): Upper triangle
-    glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex3f(min_p.x, min_p.y, z);
-
-    glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex3f(max_p.x, max_p.y, z);
-
-    glTexCoord2f(min_uv.x, max_uv.y);
-    glVertex3f(min_p.x, max_p.y, z);
-
-    glEnd();
-}
-
 static void //internal void *
 opengl_allocate_texture(u32 width, u32 height, void *data)
 {
@@ -350,8 +317,8 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
     // Should we truncate? round? Not sure
     V2 half_window =
     {
-        (f32)(window_width / 2),
-        (f32)(window_height / 2)
+        ((f32)window_width) / 2.0f,
+        ((f32)window_height) / 2.0f
     };
 
     // NOTE(Fermin): Renders the world tiles
@@ -363,16 +330,16 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
     {
         Rect *rect = rects + index;
 
-        // rotate axis
+        // rotate axis. Perp.
         V2 x_axis = V2{_cos(rect->rotation), _sin(rect->rotation)};
         V2 y_axis = V2{-x_axis.y, x_axis.x};
 
-        // scale by half dim because origin of rotation is at the center of the tile
+        // scale by half dim because origin is at the center of the tile
         x_axis *= rect->dim_in_tiles.x * 0.5f;
         y_axis *= rect->dim_in_tiles.y * 0.5f;
 
         V3 origin = rect->world_index - game_state->camera.pos; // move into camera space
-        origin.xy = origin.xy + rect->dim_in_px / 2.0f; // set origin in center of tile
+        origin.xy = origin.xy + rect->dim_in_tiles / 2.0f; // set origin in center of tile
 
         // NOTE(Fermin): We dont need all the z
         V3 corners[4];
@@ -403,17 +370,33 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
     // NOTE(Fermin): Renders the UI
     ortho.m[2].w = 0.0f; // NOTE(Fermin): Disables perspective divide by z
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
-
     Rect *ui_rects = (Rect *)ui_buffer.buffer.data;
     for(u32 index = 0; index < ui_buffer.count; index++)
     {
         Rect *rect = ui_rects + index;
 
-        V3 min_p = rect->pos_in_screen;
-        V3 max_p = min_p;
-        max_p.xy += rect->dim_in_px;
+        // rotate axis. Perp.
+        V2 x_axis = V2{_cos(rect->rotation), _sin(rect->rotation)};
+        V2 y_axis = V2{-x_axis.y, x_axis.x};
 
-        opengl_rectangle(min_p, max_p, rect->color, rect->texture_id);
+        // scale by half dim because origin is at the center of the tile
+        x_axis *= rect->dim_in_px.x * 0.5f;
+        y_axis *= rect->dim_in_px.y * 0.5f;
+
+        V3 origin = rect->pos_in_screen;
+        origin.xy = origin.xy + rect->dim_in_px * 0.5f; // set origin in center of rect
+        // NOTE(Fermin): We dont need all the z
+        V3 corners[4];
+        corners[0].xy = origin.xy - x_axis - y_axis; // Lower left
+        corners[0].z = origin.z;
+        corners[1].xy = origin.xy + x_axis - y_axis; // Lower right
+        corners[1].z = origin.z;
+        corners[2].xy = origin.xy + x_axis + y_axis; // Upper right
+        corners[2].z = origin.z;
+        corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
+        corners[3].z = origin.z;
+            
+        opengl_rectangle(corners, rect->color, rect->texture_id);
     }
 
     glUseProgram(0);
