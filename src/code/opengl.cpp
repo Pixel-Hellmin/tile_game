@@ -231,7 +231,7 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
     return result;
     */
 
-    glBindTexture(GL_TEXTURE_2D, texture_handle);
+    glBindTexture(GL_TEXTURE_2D, 1); // texture handle?
     glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
                  width, height, 0, GL_BGRA_EXT,
                  GL_UNSIGNED_BYTE, data);
@@ -289,6 +289,8 @@ opengl_generate_texture(char *path, u32 format)
 static void
 opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
 {
+    time_function;
+
     M4 ortho = {};
     ortho = orthogonal((f32)window_width, (f32)window_height);
 
@@ -339,7 +341,7 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
         y_axis *= rect->dim_in_tiles.y * 0.5f;
 
         V3 origin = rect->world_index - game_state->camera.pos; // move into camera space
-        origin.xy = origin.xy + rect->dim_in_tiles / 2.0f; // set origin in center of tile
+        origin.xy = origin.xy + rect->dim_in_tiles * 0.5f; // set origin in center of tile
 
         // NOTE(Fermin): We dont need all the z
         V3 corners[4];

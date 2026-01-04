@@ -2,8 +2,6 @@
 
 #include "windows_main.h"
 
-#define array_count(array) (sizeof(array) / sizeof((array)[0]))
-
 inline b32
 is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
 {
@@ -12,23 +10,16 @@ is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
     return result;
 }
 
-b32
+inline b32
 get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
 {
     // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
     // have null pointers and can instead check on that pointer instead of 
-    // returning a success/fail result.
+    // returning a success/fail result?
     b32 result = 0;
 
     if(is_tile_index_valid(x, y, cols, rows))
     {
-        /* ????????????????????
-        // NOTE(Fermin): Since the order the tiles are stored in memory and 
-        // the order of the tile indexes in world are opposite from each other
-        // we need to access tiles from bottom up
-        *out = tiles + (x + (rows - 1)*cols - (y * cols));
-        */
-
         Rect *tiles = (Rect *)buffer->data;
         *out = tiles + x + y * cols;
         result = 1;

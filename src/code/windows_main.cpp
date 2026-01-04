@@ -6,7 +6,6 @@
 
 #include "opengl.h"
 global_variable Opengl opengl = {};
-global_variable GLuint texture_handle; // TODO(Fermin) Check if we still need this
 // NOTE(Fermin): I don't think these should be global. Think where they fit.
 global_variable Render_Buffer tiles_buffer = {};
 global_variable Render_Buffer ui_buffer = {};
@@ -159,7 +158,12 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 {
     opengl_render(window_width, window_height, game_state);
 
-    SwapBuffers(device_context);
+    {
+        // NOTE(Fermin): This takes most of the time because of V-Sync.
+        // If we uncap fps this is negligible.
+        time_block("SwapBuffers");
+        SwapBuffers(device_context);
+    }
 }
 
 LRESULT CALLBACK
@@ -502,8 +506,10 @@ get_character_metadata(char character, Glyph_Metadata *out)
 }
 
 static void
-print_debug_text(char *string, Font *font)
+print_debug_text(char *string, Font *font, V4 color = {0.0f, 1.0f, 0.0f, 1.0f})
 {
+    time_function;
+
     f32 print_font_size = 24.0f;
     debug_print_line -= print_font_size;
 
@@ -530,10 +536,9 @@ print_debug_text(char *string, Font *font)
             Rect glyph = {};
             glyph.pos_in_screen.xy = V2{x, y};
             glyph.dim_in_px = V2{w, h};
-            glyph.color = V4{0.0f, 1.0f, 0.0f, 1.0f};
             glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
 
-            push_rectangle(&ui_buffer, &glyph, glyph.color);
+            push_rectangle(&ui_buffer, &glyph, color);
 
             x += advance;
         }
@@ -547,6 +552,8 @@ print_debug_text(char *string, Font *font)
 
 int main()
 {
+    begin_profile();
+
     LARGE_INTEGER perf_count_frequency_result;
     QueryPerformanceFrequency(&perf_count_frequency_result);
     global_perf_count_frequency = perf_count_frequency_result.QuadPart;
@@ -627,15 +634,13 @@ int main()
 
             win32_running = 1;
 
-            // TODO(Fermin): We'll need some sort of asset streaming
-            glGenTextures(1, &texture_handle);
-
+            // TODO(Fermin): We'll need some sort of asset streaming. Do this when we load level?
             // NOTE(Fermin) | Start | Textures
             u32 floor_texture_id     = opengl_generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
             u32 wall_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
             u32 roof_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
-            u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture", GL_RGBA);
-            //u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
+            //u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture", GL_RGBA);
+            u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
             u32 dude_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
@@ -646,33 +651,22 @@ int main()
                                                   tmp_game_code_dll_full_path);
 
             game_state.entropy.index = 666;
-            //game_state.camera.pos = {3.0f, -1.0f, 9.0f};
             game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
-            game_state.camera.up    = { 0.0f,  1.0f,  0.0f};
-            game_state.camera.front = { 0.0f,  0.0f, -1.0f};
-            game_state.level_rows = 8 * 8;
-            game_state.level_cols = 8 * 8;
             game_state.floor_texture_id     = floor_texture_id;
             game_state.wall_texture_id      = wall_texture_id;
             game_state.roof_texture_id      = roof_texture_id;
             game_state.highlight_texture_id = highlight_texture_id;
             game_state.tile_size_in_px = 64.0f;
 
-            M4 view = look_at(game_state.camera.pos,
-                              game_state.camera.pos + game_state.camera.front,
-                              game_state.camera.up);
-
             set_flag(&game_state, game_state_flag_prints);
 
             Rect dude = {};
             dude.world_index = V3{0.0f, 0.0f, 0.0f};
-            dude.dim_in_tiles = V2{2.0f, 2.0f};
+            dude.dim_in_tiles = V2{1.0f, 1.0f};
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             tiles_buffer.buffer = allocate_buffer(gigabytes(1));
-            u32 rect_cap = gigabytes(1)/sizeof(Rect);
-
             ui_buffer.buffer = allocate_buffer(gigabytes(1));
             // NOTE(Fermin): Game things end
 
@@ -717,7 +711,10 @@ int main()
                 win32_process_keyboard_message(&game_state.input_state.left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
                 // SetCursor(0); // To disable cursor
                 
-                game.update_and_render(&tiles_buffer, &dude, &game_state);
+                {
+                    time_block("game.update_and_render");
+                    game.update_and_render(&tiles_buffer, &dude, &game_state);
+                }
 
                 debug_print_line = dimension.height;
                 char text_buffer[256];
@@ -730,10 +727,14 @@ int main()
 
                 if(is_set(&game_state, game_state_flag_prints))
                 {
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "tiles_buffer capacity:");
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "Rects capacity:");
                     print_debug_text(text_buffer, &consola);
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer.count, rect_cap);
-                    print_debug_text(text_buffer, &consola);
+
+                    u32 rect_max_capacity = tiles_buffer.buffer.count/sizeof(Rect);
+                    f32 used_tiles_ratio = (f32)tiles_buffer.count / (f32)rect_max_capacity;
+                    V4 text_color = V4{used_tiles_ratio, (1.0f-used_tiles_ratio), 0.0f, 1.0f};
+                    _snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer.count, rect_max_capacity);
+                    print_debug_text(text_buffer, &consola, text_color);
 
                     _snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index:");
                     print_debug_text(text_buffer, &consola);
@@ -767,6 +768,8 @@ int main()
                 HDC device_context = GetDC(window);
                 win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &game_state);
                 ReleaseDC(window, device_context);
+
+                // NOTE(Fermin): We overwrite temp partition of render buffers each frame
                 tiles_buffer.count = tiles_buffer.cached;
                 ui_buffer.count = 0;
 
@@ -787,6 +790,8 @@ int main()
         // TODO
         invalid_code_path
     }
+
+    end_and_print_profile();
 
     return 666;
 }

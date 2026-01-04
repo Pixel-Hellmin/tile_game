@@ -4,7 +4,7 @@
 
 struct Buffer
 {
-    size_t count;
+    size_t count; // bytes
     u8 *data;
 };
 

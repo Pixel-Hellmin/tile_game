@@ -41,6 +41,7 @@ typedef int32_t    b32;
 #define U32Max ((u32) - 1)
 #define assert(expression) if(!(expression)) {*(int *)0 = 0;}
 #define invalid_code_path assert(!"invalid_code_path")
+#define array_count(array) (sizeof(array) / sizeof((array)[0]))
 
 // NOTE(Fermin): This is used to store u32 as a (void *) type.
 // Not actual pointers, useful when using u32 and pointers as
@@ -71,6 +72,10 @@ global_variable f32 global_perf_count_frequency;
 #include "math.cpp"
 #include "buffer.cpp"
 #include "random.h"
+
+#define PROFILER 1
+//#define READ_BLOCK_TIMER read_OS_timer
+#include "profiler.cpp"
 
 struct Win32_Offscreen_Buffer
 {
@@ -108,8 +113,8 @@ struct Font
 
 struct Render_Buffer
 {
-    // NOTE(Fermin): May need to eventually add a type here when
-    // we have more than one type of render object
+    // NOTE(Fermin): May need to eventually add a type here when we have more than one type of render object.
+    // For now we only store Rects.
     u32 count;
     u32 cached;
     Buffer buffer;
@@ -169,8 +174,6 @@ enum Game_State_Debug_Flags
 struct Camera
 {
     V3 pos;
-    V3 up;
-    V3 front;
 };
 
 struct Particle
@@ -242,6 +245,7 @@ push_rectangle(Render_Buffer *render_buffer, Rect *rect, V4 color = {1.0, 1.0, 1
 
     u32 result = render_buffer->count;
 
+    // NOTE(Fermin): Check if we have enough space for another Rect
     assert((result+1) * sizeof(Rect) <= render_buffer->buffer.count);
 
     Rect *pushed_rect = (Rect *)render_buffer->buffer.data + render_buffer->count++;
