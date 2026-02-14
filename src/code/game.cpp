@@ -436,3 +436,34 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     game_state->last_frame_input_state = input_state;
 }
+
+extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
+{
+#define Tau32 6.28318530717958647692f
+	static float tsine = 0.0f;
+    i16 tone_volume = 3000;
+	i32 tone_hz = 400;
+    int wave_period = sound_buffer->samples_per_second / tone_hz;
+
+    i16 *sample_out = sound_buffer->samples;
+    for(int sample_index = 0;
+        sample_index < sound_buffer->sample_count;
+        ++sample_index)
+    {
+#if 1
+        float sine_value = sinf(tsine);
+        i16 sample_value = (i16)(sine_value * tone_volume);
+#else
+        i16 sample_value = 0;
+#endif
+        *sample_out++ = sample_value;
+        *sample_out++ = sample_value;
+#if 1
+        tsine += Tau32*1.0f/(float)wave_period;
+        if(tsine > Tau32)
+        {
+            tsine -= Tau32;
+        }
+#endif
+    }
+}

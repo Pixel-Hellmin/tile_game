@@ -10,6 +10,7 @@ global_variable Opengl opengl = {};
 global_variable Render_Buffer tiles_buffer = {};
 global_variable Render_Buffer ui_buffer = {};
 global_variable Font consola = {};
+global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
 
 #include "opengl.cpp"
 
@@ -19,6 +20,9 @@ global_variable Win32_Offscreen_Buffer global_back_buffer;
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
 typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
 global_variable Wgl_Swap_Interval_Ext *wgl_swap_interval;
+
+#define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
+typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
 
 static void
 win32_init_opengl(HWND window)
@@ -117,6 +121,152 @@ win32_init_opengl(HWND window)
     ReleaseDC(window, window_dc);
 }
 
+static void
+win32_init_dsound(HWND window, i32 samples_per_second, i32 buffer_size)
+{
+	HMODULE dsound_library = LoadLibraryA("dsound.dll");
+	if(dsound_library)
+	{
+		Direct_Sound_Create *direct_sound_create = (Direct_Sound_Create *)
+			GetProcAddress(dsound_library, "DirectSoundCreate");
+
+		LPDIRECTSOUND direct_sound;
+		if(direct_sound_create && SUCCEEDED(direct_sound_create(0, &direct_sound ,0)))
+		{
+			WAVEFORMATEX wave_format = {};
+			wave_format.wFormatTag = WAVE_FORMAT_PCM;
+			wave_format.nChannels = 2;
+			wave_format.nSamplesPerSec = samples_per_second;
+			wave_format.wBitsPerSample = 16;
+			wave_format.nBlockAlign = (wave_format.nChannels * wave_format.wBitsPerSample) / 8;
+			wave_format.nAvgBytesPerSec = wave_format.nSamplesPerSec * wave_format.nBlockAlign;
+			wave_format.cbSize = 0;
+
+			if(SUCCEEDED(direct_sound->SetCooperativeLevel(window, DSSCL_PRIORITY)))
+			{
+				// NOTE(Fermin): Windows requires us to set every member of buffer_description to 0.
+				DSBUFFERDESC buffer_description = {};
+				buffer_description.dwSize = sizeof(buffer_description);
+				buffer_description.dwFlags = DSBCAPS_PRIMARYBUFFER;
+
+				LPDIRECTSOUNDBUFFER primary_buffer;
+				if(SUCCEEDED(direct_sound->CreateSoundBuffer(&buffer_description, &primary_buffer, 0)))
+				{
+					HRESULT error = primary_buffer->SetFormat(&wave_format);
+					if(SUCCEEDED(error))
+					{
+						// NOTE(Fermin): Format set
+					}
+					else
+					{
+						// TODO: Diagnostic
+					}
+				}
+				else
+				{
+					// TODO: Diagnostic
+				}
+			}
+			else
+			{
+				// TODO: Diagnostic
+			}
+
+			DSBUFFERDESC buffer_description = {};
+			buffer_description.dwSize = sizeof(buffer_description);
+			buffer_description.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
+			buffer_description.dwBufferBytes = buffer_size;
+			buffer_description.lpwfxFormat = &wave_format;
+			HRESULT error = direct_sound->CreateSoundBuffer(&buffer_description, &secondary_buffer, 0);
+			if(SUCCEEDED(error))
+			{
+				// NOTE(Fermin): Secondary buffer created successfully
+			}
+		}
+		else
+		{
+			// TODO: Diagnostic
+		}
+	}
+	else
+	{
+		// TODO: Diagnostic
+	}
+}
+
+static void
+win32_clear_buffer(Win32_Sound_Output *sound_output)
+{
+    VOID *region1;
+    DWORD region1_size;
+    VOID *region2;
+    DWORD region2_size;
+    if(SUCCEEDED(secondary_buffer->Lock(0, sound_output->secondary_buffer_size,
+                                        &region1, &region1_size,
+                                        &region2, &region2_size,
+                                        0)))
+    {
+		// TODO: assert that Region1Size/Region2Size is valid
+		u8 *dest_sample = (u8 *)region1;
+		for(DWORD byte_index = 0;
+		byte_index < region1_size;
+		++byte_index)
+		{
+			*dest_sample++ = 0;
+		}
+
+		dest_sample = (u8 *)region2;
+		for(DWORD byte_index = 0;
+		byte_index < region2_size;
+		++byte_index)
+		{
+			*dest_sample++ = 0;
+		}
+
+		secondary_buffer->Unlock(region1, region1_size, region2, region2_size);
+	}
+}
+
+static void
+win32_fill_sound_buffer(Win32_Sound_Output *sound_output, DWORD byte_to_lock,
+						DWORD bytes_to_write, Game_Sound_Output_Buffer *source_buffer)
+{
+    VOID *region1;
+    DWORD region1_size;
+    VOID *region2;
+    DWORD region2_size;
+    if(SUCCEEDED(secondary_buffer->Lock(byte_to_lock, bytes_to_write,
+                                        &region1, &region1_size,
+                                        &region2, &region2_size,
+                                        0)))
+    {
+		DWORD region1_sample_count = region1_size / sound_output->bytes_per_sample;
+		i16 *dest_sample = (i16 *)region1;
+		i16 *source_sample = source_buffer->samples;
+		for(DWORD sample_index = 0;
+			sample_index < region1_sample_count;
+			++sample_index)
+		{
+			*dest_sample++ = *source_sample++;
+			*dest_sample++ = *source_sample++;
+			++sound_output->running_sample_index;
+		}
+
+		DWORD region2_sample_count = region2_size / sound_output->bytes_per_sample;
+		dest_sample = (i16 *)region2;
+		for(DWORD sample_index = 0;
+			sample_index < region2_sample_count;
+			++sample_index)
+		{
+			*dest_sample++ = *source_sample++;
+			*dest_sample++ = *source_sample++;
+			++sound_output->running_sample_index;
+		}
+
+		secondary_buffer->Unlock(region1, region1_size, region2, region2_size);
+	}
+}
+
 static Win32_Window_Dimension
 win32_get_window_dimension(HWND window)
 {
@@ -150,7 +300,7 @@ win32_resize_DIB_section(i32 width, i32 height)
     global_back_buffer.info.bmiHeader.biCompression = BI_RGB;
 
     i32 bitmap_memory_size = (global_back_buffer.width * global_back_buffer.height) * global_back_buffer.bytes_per_pixel;
-    global_back_buffer.memory = VirtualAlloc(0, bitmap_memory_size, MEM_COMMIT, PAGE_READWRITE);
+    global_back_buffer.memory = VirtualAlloc(0, bitmap_memory_size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 }
 
 static void
@@ -242,10 +392,10 @@ win32_get_last_write_time(char *file_name)
     return result;
 }
 
-static Game_Code
+static Win32_Game_Code
 win32_load_game_code(char *src_dll_name, char *tmp_dll_name)
 {
-    Game_Code result = {};
+    Win32_Game_Code result = {};
 
     result.dll_last_write_time = win32_get_last_write_time(src_dll_name);
 
@@ -255,20 +405,24 @@ win32_load_game_code(char *src_dll_name, char *tmp_dll_name)
     {
         result.update_and_render = (Game_Update_And_Render *)GetProcAddress(result.game_code_dll, "game_update_and_render");
 
-        result.is_valid = result.update_and_render && 1;
+        result.get_sound_samples = (Game_Get_Sound_Samples *)GetProcAddress(result.game_code_dll, "game_get_sound_samples");
+
+        //result.is_valid = result.update_and_render && 1;
+        result.is_valid = (result.update_and_render && result.get_sound_samples);
     }
 
     if(!result.is_valid)
     {
         // NOTE(Femin): If we call a function in a null pointer we crash
         result.update_and_render = game_update_and_render_stub;
+        result.get_sound_samples = game_get_sound_samples_stub;
     }
 
     return result;
 }
 
 static void
-win32_unload_game_code(Game_Code *game_code)
+win32_unload_game_code(Win32_Game_Code *game_code)
 {
     if(game_code->game_code_dll)
     {
@@ -278,6 +432,7 @@ win32_unload_game_code(Game_Code *game_code)
 
     game_code->is_valid = false;
     game_code->update_and_render = game_update_and_render_stub;
+    game_code->get_sound_samples = game_get_sound_samples_stub;
 }
 
 static void
@@ -632,6 +787,22 @@ int main()
             }
             f32 game_update_hz = (f32)(monitor_refresh_hz);
 
+            Win32_Sound_Output sound_output = {};
+            sound_output.samples_per_second = 48000;
+            sound_output.bytes_per_sample = sizeof(i16)*2;
+            sound_output.secondary_buffer_size = sound_output.samples_per_second * sound_output.bytes_per_sample;
+            sound_output.safety_bytes = (i32)(((float)sound_output.samples_per_second * (float)sound_output.bytes_per_sample / game_update_hz) / 3.0f);
+			win32_init_dsound(window, sound_output.samples_per_second, sound_output.secondary_buffer_size);
+            win32_clear_buffer(&sound_output);
+            secondary_buffer->Play(0, 0, DSBPLAY_LOOPING);
+			DWORD audio_latency_bytes = 0;
+			float audio_latency_seconds = 0;
+			b32 sound_is_valid = false;
+
+			// TODO(Fermin): Place this where it makes sense
+			i16 *samples = (i16 *)VirtualAlloc(0, sound_output.secondary_buffer_size,
+											   MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+
             win32_running = 1;
 
             // TODO(Fermin): We'll need some sort of asset streaming. Do this when we load level?
@@ -647,7 +818,7 @@ int main()
             init_font(&consola, "src\\misc\\assets\\consola.font");
 
             // NOTE(Fermin): Game things start
-            Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
+            Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
                                                   tmp_game_code_dll_full_path);
 
             game_state.entropy.index = 666;
@@ -672,6 +843,7 @@ int main()
 
             u32 expected_frames_per_update = 1;
             LARGE_INTEGER last_counter = win32_get_wallclock();
+			LARGE_INTEGER flip_wall_clock = win32_get_wallclock();
             f32 target_seconds_per_frame = (f32)expected_frames_per_update / (f32)game_update_hz;
             // NOTE(Fermin): This is the main loop
             while(win32_running)
@@ -715,6 +887,85 @@ int main()
                     time_block("game.update_and_render");
                     game.update_and_render(&tiles_buffer, &dude, &game_state);
                 }
+
+				// NOTE(Fermin): audio
+				LARGE_INTEGER audio_wall_clock = win32_get_wallclock();
+				float from_begin_to_audio_seconds = win32_get_seconds_elapsed(flip_wall_clock, audio_wall_clock);
+
+				DWORD play_cursor;
+				DWORD write_cursor;
+				if(secondary_buffer->GetCurrentPosition(&play_cursor, &write_cursor) == DS_OK)
+				{
+					if(!sound_is_valid)
+					{
+						sound_output.running_sample_index = write_cursor / sound_output.bytes_per_sample;
+						sound_is_valid = true;
+					}
+
+					DWORD byte_to_lock = ((sound_output.running_sample_index * sound_output.bytes_per_sample) %
+										  sound_output.secondary_buffer_size);
+
+					DWORD expected_sound_bytes_per_frame =
+						(i32)((float)(sound_output.samples_per_second * sound_output.bytes_per_sample) /
+						game_update_hz);
+					float seconds_left_until_flip = (target_seconds_per_frame - from_begin_to_audio_seconds);
+					DWORD expected_bytes_until_flip = (DWORD)((seconds_left_until_flip / target_seconds_per_frame) * (float)expected_sound_bytes_per_frame);
+					DWORD expected_frame_boundary_byte = play_cursor + expected_bytes_until_flip;
+					DWORD safe_write_cursor = write_cursor;
+					if(safe_write_cursor < play_cursor)
+					{
+						safe_write_cursor += sound_output.secondary_buffer_size;
+					}
+					assert(safe_write_cursor >= play_cursor);
+					safe_write_cursor += sound_output.safety_bytes;
+
+					b32 audio_card_is_low_latency = (safe_write_cursor < expected_frame_boundary_byte);
+
+					DWORD target_cursor = 0;
+					if(audio_card_is_low_latency)
+					{
+						target_cursor = (expected_frame_boundary_byte + expected_sound_bytes_per_frame);
+					}
+					else
+					{
+						target_cursor = (write_cursor + expected_sound_bytes_per_frame +
+										 sound_output.safety_bytes);
+					}
+					target_cursor = (target_cursor % sound_output.secondary_buffer_size);
+
+					DWORD bytes_to_write = 0;
+					if(byte_to_lock > target_cursor)
+					{
+						bytes_to_write = (sound_output.secondary_buffer_size - byte_to_lock);
+						bytes_to_write += target_cursor;
+					}
+					else
+					{
+						bytes_to_write = target_cursor - byte_to_lock;
+					}
+
+					Game_Sound_Output_Buffer sound_buffer = {};
+					sound_buffer.samples_per_second = sound_output.samples_per_second;
+					sound_buffer.sample_count = bytes_to_write / sound_output.bytes_per_sample;
+					sound_buffer.samples = samples;
+                    game.get_sound_samples(&sound_buffer);
+
+					DWORD unwrapped_write_cursor = write_cursor;
+					if(unwrapped_write_cursor < play_cursor)
+					{
+						unwrapped_write_cursor += sound_output.secondary_buffer_size;
+					}
+					audio_latency_bytes = unwrapped_write_cursor - play_cursor;
+					audio_latency_seconds =
+						(((float)audio_latency_bytes / (float)sound_output.bytes_per_sample) /
+						 (float)sound_output.samples_per_second);
+
+					win32_fill_sound_buffer(&sound_output, byte_to_lock, bytes_to_write, &sound_buffer);
+				}
+				else
+				{
+					sound_is_valid = false;
+				}
 
                 debug_print_line = dimension.height;
                 char text_buffer[256];
@@ -777,6 +1028,8 @@ int main()
                 f32 measured_seconds_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
                 target_seconds_per_frame = measured_seconds_for_frame;
                 last_counter = end_counter;
+
+				flip_wall_clock = win32_get_wallclock();
             }
         }
         else

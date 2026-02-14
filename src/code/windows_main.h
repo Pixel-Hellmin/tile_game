@@ -2,12 +2,26 @@
  * COMBACK:
  * - Catch up: 358w, 359w, 360, 361, 362, 363?, 364
  * TODO(Fermin):
+ * + Platform struct to pass into the game.
+ *	 We can add info like Window, Keys, Etc...
+ *	 This data can get updated in(or out) game and the platform reacts.
+ * + Instead of:
+ *       if(input_state.w)
+ *       {
+ *           d_pos.y = 1.0f; 
+ *       }
+ *   Try something like:
+ *	 d_pos.y = input_state.w * speed * delta;
+ *	 or
+ *	 d_pos.y = input_state.w.is_down * speed * delta;
+ *	 Store states for keys?
+ *	 is_down, was_pressed, was_released
+ *
  * - RNG! search for std::random_device rd;
  * - Store tile indices for dude and for highlighted tile in game state instead of 
  *   what we are doing now. I guess we can follow this logic when we need a tile in the 
  *   platform layer?
  * - Investigate FileSystem::getPath("resources/textures/container.jpg"
- * - Global Managers?
  * - Investigate why are the boxes deformed when rotated?
  * - Fix font bearings
  * - Get rid of vc140.pdb when building
@@ -21,7 +35,9 @@
 #include <cstdio>
 #include <cmath>
 #include <cstdint>
+#include <dsound.h>
 
+typedef int16_t    i16;
 typedef int32_t    i32;
 typedef int64_t    i64;
 typedef uint8_t     u8;
@@ -87,6 +103,15 @@ struct Win32_Offscreen_Buffer
     i32 height;
     i32 pitch;
     i32 bytes_per_pixel;
+};
+
+struct Win32_Sound_Output
+{
+	i32 samples_per_second;
+	u32 running_sample_index;
+	i32 bytes_per_sample;
+	DWORD secondary_buffer_size;
+	DWORD safety_bytes;
 };
 
 struct Win32_Window_Dimension
@@ -171,6 +196,13 @@ enum Game_State_Debug_Flags
     game_state_flag_free_cam_mode = (1 << 2),
 };
 
+struct Game_Sound_Output_Buffer
+{
+	i32 samples_per_second;
+	i32 sample_count;
+	i16 *samples;
+};
+
 struct Camera
 {
     V3 pos;
@@ -228,11 +260,18 @@ GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {
 }
 
-struct Game_Code
+#define GAME_GET_SOUND_SAMPLES(name) void name(Game_Sound_Output_Buffer *sound_buffer)
+typedef GAME_GET_SOUND_SAMPLES(Game_Get_Sound_Samples);
+GAME_GET_SOUND_SAMPLES(game_get_sound_samples_stub)
+{
+}
+
+struct Win32_Game_Code
 {
     HMODULE game_code_dll;
     FILETIME dll_last_write_time;
     Game_Update_And_Render *update_and_render;
+    Game_Get_Sound_Samples *get_sound_samples;
 
     b32 is_valid;
 };
