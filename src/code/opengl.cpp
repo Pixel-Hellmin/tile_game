@@ -243,7 +243,7 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
 }
 
 static u32
-opengl_generate_texture(u8 *data, i32 width, i32 height, u32 format)
+opengl_load_texture(u8 *data, i32 width, i32 height, u32 format)
 {
 
     u32 result;
@@ -269,7 +269,7 @@ opengl_generate_texture(u8 *data, i32 width, i32 height, u32 format)
 }
 
 static u32
-opengl_generate_texture(char *path, u32 format)
+opengl_load_texture(char *path, u32 format)
 {
     // TODO(Fermin): Maybe use opengl.default_internal_texture_format here?
     u32 result;
@@ -281,7 +281,7 @@ opengl_generate_texture(char *path, u32 format)
     i32 channels = *(((i32 *)buffer.data) + 2);
     u8 *data = buffer.data + sizeof(i32)*3;
 
-    result = opengl_generate_texture(data, width, height, format);
+    result = opengl_load_texture(data, width, height, format);
 
     return result;
 }

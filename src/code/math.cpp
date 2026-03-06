@@ -1,4 +1,7 @@
 #if !defined(MATH_CPP)
+
+#include <cmath>
+
 // NOTE(Fermin): This is the start of the code that should go in an intrinsics file
 static inline
 f32 square_root(f32 a)

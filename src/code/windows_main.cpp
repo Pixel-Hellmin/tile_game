@@ -1,8 +1,11 @@
-#include "windows.h"
-#include "windows_main.h"
-#include "shared.h"
+#include "platform.h"
+
+#include <windows.h>
+#include <dsound.h>
 #include "game.h"
 #include <gl/gl.h>
+#include "windows_main.h"
+#include "shared.h"
 
 #include "opengl.h"
 global_variable Opengl opengl = {};
@@ -11,6 +14,10 @@ global_variable Render_Buffer tiles_buffer = {};
 global_variable Render_Buffer ui_buffer = {};
 global_variable Font consola = {};
 global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
+global_variable f32 debug_print_line = 0.0f;
+global_variable u32 bytes_per_pixel = 4;
+global_variable b32 win32_running;
+global_variable f32 global_perf_count_frequency;
 
 #include "opengl.cpp"
 
@@ -638,7 +645,7 @@ init_font(Font *font, char *source)
             }
         }
 
-        font->glyph_texture_ids[index] = opengl_generate_texture(character_buffer.data, width, height, GL_RGBA);
+        font->glyph_texture_ids[index] = opengl_load_texture(character_buffer.data, width, height, GL_RGBA);
 
         free_buffer(&character_buffer);
     }
@@ -807,12 +814,12 @@ int main()
 
             // TODO(Fermin): We'll need some sort of asset streaming. Do this when we load level?
             // NOTE(Fermin) | Start | Textures
-            u32 floor_texture_id     = opengl_generate_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
-            u32 wall_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
-            u32 roof_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
-            //u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture", GL_RGBA);
-            u32 highlight_texture_id = opengl_generate_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-            u32 dude_texture_id      = opengl_generate_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
+            u32 floor_texture_id     = opengl_load_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
+            u32 wall_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
+            u32 roof_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
+            //u32 highlight_texture_id = opengl_load_texture("src\\misc\\assets\\textures\\direction.texture", GL_RGBA);
+            u32 highlight_texture_id = opengl_load_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
+            u32 dude_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
             init_font(&consola, "src\\misc\\assets\\consola.font");

@@ -1,5 +1,6 @@
 #if !defined(GAME_H)
 
+//#include "platform.h"
 #include "windows_main.h"
 
 inline b32
