@@ -376,34 +376,35 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     
     // NOTE(Fermin): Update dude
-    Input_Keys input_state = game_state->input_state;
-    Input_Keys last_frame_input_state = game_state->last_frame_input_state;
+    Input_Keys new_input = input[0];
+    Input_Keys old_input = input[1];
+    //Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 dt_in_seconds = game_state->dt_in_seconds;
     f32 dude_speed = 10.0 * dt_in_seconds;
     f32 camera_speed = 30.0 * dt_in_seconds;
-    if(input_state.f1 && !last_frame_input_state.f1)
+    if(new_input.f1 && !old_input.f1)
     {
         toggle_flag(game_state, game_state_flag_prints);
     }
-    if(input_state.f3 && !last_frame_input_state.f3)
+    if(new_input.f3 && !old_input.f3)
     {
         toggle_flag(game_state, game_state_flag_free_cam_mode);
     }
 
     V3 d_pos = {};
-    if(input_state.w)
+    if(new_input.w)
     {
         d_pos.y = 1.0f; 
     }
-    if(input_state.s)
+    if(new_input.s)
     {
         d_pos.y = -1.0f; 
     }
-    if(input_state.a)
+    if(new_input.a)
     {
         d_pos.x = -1.0f; 
     }
-    if(input_state.d)
+    if(new_input.d)
     {
         d_pos.x = 1.0f; 
     }
@@ -423,12 +424,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     game_state->camera.pos.z = camera_z;
 
     // NOTE(Fermin): This needs to happen after we update dude and camera position
-    if(input_state.left_mouse && !last_frame_input_state.left_mouse)
+    if(new_input.left_mouse && !old_input.left_mouse)
     {
         // TODO(Fermin): Intrinsics.
         // Store ortho somewhere and only update when screen size changes.
         M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
-        V4 cursor_pos_ndc = V4{input_state.cursor.x, input_state.cursor.y, 0.0, 1.0};
+        V4 cursor_pos_ndc = V4{new_input.cursor.x, new_input.cursor.y, 0.0, 1.0};
         V4 cursor_pos_in_px = invert(&ortho) * cursor_pos_ndc;
         f32 map_tile_size_in_px_with_perspective = safe_ratio_n(game_state->tile_size_in_px, (map_z - game_state->camera.pos.z + 1.0f), game_state->tile_size_in_px);
         V2 cursor_pos_in_tiles = (cursor_pos_in_px).xy / map_tile_size_in_px_with_perspective;
@@ -529,8 +530,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	assert(render_buffer->count == 0)
 	render_tiles(game_state, tiles_buffer, render_buffer);
 	//render_ui(game_state, tiles_buffer);
-
-    game_state->last_frame_input_state = input_state;
 }
 
 extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)

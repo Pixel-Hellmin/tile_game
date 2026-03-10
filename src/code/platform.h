@@ -135,9 +135,6 @@ struct Game_State // here for now. Move to game
     f32 dt_in_seconds;
     Random_Series entropy;
 
-    Input_Keys input_state;
-    Input_Keys last_frame_input_state;
-
     u32 debug_flags;
     f32 tile_size_in_px;
 
@@ -192,7 +189,7 @@ struct Font // here for now. where should it go?
     Glyph_Metadata metadata[font_character_count];
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Tile *dude, Game_State *game_state, Render_Buffer *render_buffer)
+#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Tile *dude, Game_State *game_state, Render_Buffer *render_buffer, Input_Keys *input)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {

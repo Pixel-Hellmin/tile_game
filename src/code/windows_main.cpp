@@ -11,8 +11,12 @@
 global_variable Opengl opengl = {};
 // NOTE(Fermin): I don't think these should be global. Think where they fit.
 global_variable Render_Buffer render_buffer = {};
+
+// NOTE(Fermin): These two will go in the game memory eventually.
+// We will only use render_buffer for rendering everything
 global_variable Render_Buffer tiles_buffer = {}; 
 global_variable Render_Buffer ui_buffer = {};
+
 global_variable Font consola = {};
 global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
 global_variable f32 debug_print_line = 0.0f;
@@ -451,7 +455,7 @@ win32_process_keyboard_message(b32 *button_state, b32 is_down)
 }
 
 static void
-win32_process_pending_messages(Game_State *game_state)
+win32_process_pending_messages(Input_Keys *new_input)
 {
     MSG message;
     while(PeekMessage(&message, 0, 0, 0, PM_REMOVE))
@@ -480,63 +484,63 @@ win32_process_pending_messages(Game_State *game_state)
                 {
                     if(vk_code == 'W')
                     {
-                        win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == 'A')
                     {
-                        win32_process_keyboard_message(&game_state->input_state.a, is_down);
+                        win32_process_keyboard_message(&new_input->a, is_down);
                     }
                     else if(vk_code == 'S')
                     {
-                        win32_process_keyboard_message(&game_state->input_state.s, is_down);
+                        win32_process_keyboard_message(&new_input->s, is_down);
                     }
                     else if(vk_code == 'D')
                     {
-                        win32_process_keyboard_message(&game_state->input_state.d, is_down);
+                        win32_process_keyboard_message(&new_input->d, is_down);
                     }
                     else if(vk_code == 'Q')
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == 'E')
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_UP)
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_LEFT)
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_DOWN)
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_RIGHT)
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_ESCAPE)
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_SPACE)
                     {
-                        //win32_process_keyboard_message(&game_state->input_state.w, is_down);
+                        //win32_process_keyboard_message(&new_input->w, is_down);
                     }
                     else if(vk_code == VK_F1)
                     {
-                        win32_process_keyboard_message(&game_state->input_state.f1, is_down);
+                        win32_process_keyboard_message(&new_input->f1, is_down);
                     }
                     else if(vk_code == VK_F2)
                     {
-                        win32_process_keyboard_message(&game_state->input_state.f2, is_down);
+                        win32_process_keyboard_message(&new_input->f2, is_down);
                     }
                     else if(vk_code == VK_F3)
                     {
-                        win32_process_keyboard_message(&game_state->input_state.f3, is_down);
+                        win32_process_keyboard_message(&new_input->f3, is_down);
                     }
                     else if(vk_code == 'P')
                     {
@@ -828,6 +832,10 @@ int main()
             Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
                                                   tmp_game_code_dll_full_path);
 
+			Input_Keys input[2] = {};
+			Input_Keys *new_input = &input[0];
+			Input_Keys *old_input = &input[1];
+
             game_state.entropy.index = 666;
             game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
             game_state.floor_texture_id     = floor_texture_id;
@@ -876,7 +884,7 @@ int main()
                 Win32_Window_Dimension dimension = win32_get_window_dimension(window);
                 game_state.window_width = dimension.width;
                 game_state.window_height = dimension.height;
-                win32_process_pending_messages(&game_state);
+                win32_process_pending_messages(new_input);
 
                 POINT mouse_p;
                 GetCursorPos(&mouse_p);
@@ -885,16 +893,16 @@ int main()
                 f32 mouse_x = (f32)mouse_p.x;
 
                 // NOTE(Fermin): Map from screen coords to normalize device coords (-1, 1)
-                game_state.input_state.cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
-                game_state.input_state.cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
+                new_input->cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
+                new_input->cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
 
-                win32_process_keyboard_message(&game_state.input_state.left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
+                win32_process_keyboard_message(&new_input->left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
                 // SetCursor(0); // To disable cursor
                 
                 {
                     time_block("game.update_and_render");
 					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
-                    game.update_and_render(&tiles_buffer, &dude, &game_state, &render_buffer);
+                    game.update_and_render(&tiles_buffer, &dude, &game_state, &render_buffer, input);
                 }
 
 				// NOTE(Fermin): audio
@@ -1032,6 +1040,8 @@ int main()
                 tiles_buffer.count = tiles_buffer.cached;
                 ui_buffer.count = 0;
                 render_buffer.count = 0;
+
+				*old_input = *new_input;
 
                 LARGE_INTEGER end_counter = win32_get_wallclock();
                 f32 measured_seconds_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
