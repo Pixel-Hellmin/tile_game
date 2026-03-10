@@ -40,8 +40,10 @@ global_variable const f32 font_point_size = 64.0f;
 #include "math.cpp"
 #include "buffer.cpp"
 
-union Rect
+union Tile
 {
+	// NOTE(Fermin): This is how we store tiles in the game memory. Later these
+	// are processed into Quads for rendering.
     // NOTE(Fermin): This are drawn as 2d rects, I'm thinking using the Z
     // coord as an indicator of the 'floor' where this rect lives
     /* NOTE(Fermin): Is this better?
@@ -56,6 +58,7 @@ union Rect
     V3 max_p;
     */
     // TODO(Fermin): Union world_index -> screen_coords
+	// TODO(Fermin): Tiles should only exist in game. Move this to game.h
     struct {
         V3 world_index;
         V2 dim_in_tiles;
@@ -72,10 +75,19 @@ union Rect
     };
 };
 
+struct Quad
+{
+	// NOTE(Fermin): This is how we store tiles in the Render_Buffer.
+	// Ready to pass down to opengl
+	V3 corners[4];
+	V4 color;
+	i32 texture_id;
+};
+
 struct Render_Buffer
 {
     // NOTE(Fermin): May need to eventually add a type here when we have more than one type of render object.
-    // For now we only store Rects.
+    // For now we only store Quads.
     u32 count;
     u32 cached;
     Buffer buffer;
@@ -94,12 +106,12 @@ struct Input_Keys
     V2 cursor; // NOTE(Fermin): (-1, -1) to (1, 1)
 };
 
-struct Camera
+struct Camera // here for now. Move to game
 {
     V3 pos;
 };
 
-struct Particle
+struct Particle // here for now. Move to game
 {
     V3 p;
     V3 d_p;
@@ -111,7 +123,14 @@ struct Particle
 
 // NOTE(Fermin): This is here for now. Will move to game.h eventually
 #include "random.h"
-struct Game_State
+
+enum Game_State_Debug_Flags // here for now. Move to game
+{
+    game_state_flag_prints = (1 << 1),
+    game_state_flag_free_cam_mode = (1 << 2),
+};
+
+struct Game_State // here for now. Move to game
 {
     f32 dt_in_seconds;
     Random_Series entropy;
@@ -154,7 +173,26 @@ struct Game_Sound_Output_Buffer
 	i16 *samples;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Rect *dude, Game_State *game_state)
+struct Glyph_Metadata // here for now. where should it go?
+{
+    // NOTE(Fermin): advance has left side bearing calculated already
+    size_t offset;
+    i32 width;
+    i32 height;
+    i32 y_offset;
+    i32 advance;
+};
+
+global_variable const u32 font_first_character = '!';
+global_variable const u32 font_last_character = '~';
+global_variable const u32 font_character_count = font_last_character - font_first_character + 1;
+struct Font // here for now. where should it go?
+{
+    u32 glyph_texture_ids[font_character_count];
+    Glyph_Metadata metadata[font_character_count];
+};
+
+#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Tile *dude, Game_State *game_state, Render_Buffer *render_buffer)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {
@@ -164,6 +202,46 @@ GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 typedef GAME_GET_SOUND_SAMPLES(Game_Get_Sound_Samples);
 GAME_GET_SOUND_SAMPLES(game_get_sound_samples_stub)
 {
+}
+
+static u32
+push_quad(Render_Buffer *render_buffer, V3 *corners, u32 texture_id, V4 color)
+{
+    u32 result = render_buffer->count;
+
+    // NOTE(Fermin): Check if we have enough space for another Quad
+    assert((result+1) * sizeof(Quad) <= render_buffer->buffer.count);
+
+    Quad *pushed_quad = (Quad *)render_buffer->buffer.data + render_buffer->count++;
+    pushed_quad->corners[0] = corners[0];
+    pushed_quad->corners[1] = corners[1];
+    pushed_quad->corners[2] = corners[2];
+    pushed_quad->corners[3] = corners[3];
+    pushed_quad->texture_id = texture_id;
+    pushed_quad->color = color;
+
+    return result;
+}
+
+static u32
+push_tile(Render_Buffer *render_buffer, Tile *tile, V4 color = {1.0, 1.0, 1.0, 1.0}) // TODO(Fermin): Move this to game
+{
+    // NOTE(Fermin): This is error prone since we have to update this function each time we change Tile struct
+    static_assert(sizeof(Tile) == 44, "Pushing out of date Tile");
+
+    u32 result = render_buffer->count;
+
+    // NOTE(Fermin): Check if we have enough space for another Tile
+    assert((result+1) * sizeof(Tile) <= render_buffer->buffer.count);
+
+    Tile *pushed_tile = (Tile *)render_buffer->buffer.data + render_buffer->count++;
+    pushed_tile->world_index = tile->world_index;
+    pushed_tile->dim_in_tiles = tile->dim_in_tiles;
+    pushed_tile->color = color;
+    pushed_tile->texture_id = tile->texture_id;
+    pushed_tile->rotation = tile->rotation;
+
+    return result;
 }
 
 #define PLATFORM_H

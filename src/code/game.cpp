@@ -5,14 +5,14 @@
 void
 set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Render_Buffer *render_buffer)
 {
-    Rect *rect;
+    Tile *tile;
     for(u32 x = x_start; x <= x_end; x++)
     {
         for(u32 y = y_start; y <= y_end; y++)
         {
-            if(get_tile(&render_buffer->buffer, cols, rows, x, y, &rect))
+            if(get_tile(&render_buffer->buffer, cols, rows, x, y, &tile))
             {
-                rect->texture_id = texture_id;
+                tile->texture_id = texture_id;
             }
         }
     }
@@ -34,69 +34,69 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
     {
         for(i32 col = 0; col < game_state->level_cols; col++)
         {
-            Rect rect = {};
-            rect.world_index = V3{(f32)col, (f32)row, map_z};
-            rect.dim_in_tiles = V2{1.0f, 1.0f};
+            Tile tile = {};
+            tile.world_index = V3{(f32)col, (f32)row, map_z};
+            tile.dim_in_tiles = V2{1.0f, 1.0f};
 
             // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
             if(col == 0 || row == 0 || col == game_state->level_cols - 1 || row == game_state->level_rows - 1) // Roof all around
             {
-                rect.texture_id = game_state->roof_texture_id;
+                tile.texture_id = game_state->roof_texture_id;
 
                 if(col == 0) // First col
                 {
-                    rect.rotation = Pi32/2.0f;
+                    tile.rotation = Pi32/2.0f;
                 }
                 else if(col == game_state->level_cols - 1) // Last col
                 {
-                    rect.rotation = -Pi32/2.0f;
+                    tile.rotation = -Pi32/2.0f;
                 }
                 else if(row == 0) // First row
                 {
-                    rect.rotation = Pi32;
+                    tile.rotation = Pi32;
                 }
             }
             else if(row == 1 || row == game_state->level_rows - 2) // Wall top and bottom
             {
                 if((col - 1) % room_width != 0)
                 {
-                    rect.texture_id = game_state->wall_texture_id;
+                    tile.texture_id = game_state->wall_texture_id;
                     if(row == 1)
                     {
-                        rect.rotation = Pi32;
+                        tile.rotation = Pi32;
                     }
                 }
                 else
             {
-                    rect.texture_id = game_state->roof_texture_id; // Roof for grid
+                    tile.texture_id = game_state->roof_texture_id; // Roof for grid
                 }
             }
             else if(col == 1 || col == game_state->level_cols - 2) // Wall left and right
             {
                 if((row - 1) % room_width != 0)
                 {
-                    rect.texture_id = game_state->wall_texture_id;
+                    tile.texture_id = game_state->wall_texture_id;
                     if(col == 1)
                     {
-                        rect.rotation = Pi32/2.0f;
+                        tile.rotation = Pi32/2.0f;
                     }
                     else
                 {
-                        rect.rotation = -Pi32/2.0f;
+                        tile.rotation = -Pi32/2.0f;
                     }
                 }
                 else
             {
-                    rect.texture_id = game_state->roof_texture_id; // Roof for grid
+                    tile.texture_id = game_state->roof_texture_id; // Roof for grid
                 }
             }
             else if((col - 1) % room_width == 0 || (row - 1) % room_width == 0)
             {
-                rect.texture_id = game_state->roof_texture_id; // Roof for grid
+                tile.texture_id = game_state->roof_texture_id; // Roof for grid
             }
             else
         {
-                rect.texture_id = game_state->floor_texture_id;
+                tile.texture_id = game_state->floor_texture_id;
             }
 
             // Corners
@@ -105,10 +105,10 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
                 (col == game_state->level_cols - 2 && row == 1) ||
                 (col == game_state->level_cols - 2 && row == game_state->level_rows - 2))
             { 
-                rect.texture_id = game_state->wall_texture_id; 
+                tile.texture_id = game_state->wall_texture_id; 
             }
 
-            push_rectangle(tiles_buffer, &rect);
+            push_tile(tiles_buffer, &tile);
         }
     }
 
@@ -192,37 +192,37 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
             // NOTE(Fermin): Place walls in gaps left by the removed roofs
             if(x_start == 2) // Left
             {
-                Rect *rect;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start-1, y_start, &rect))
+                Tile *tile;
+                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start-1, y_start, &tile))
                 {
-                    rect->texture_id = game_state->wall_texture_id;
-                    rect->rotation = Pi32/2.0f;
+                    tile->texture_id = game_state->wall_texture_id;
+                    tile->rotation = Pi32/2.0f;
                 }
             }
             if(x_end == game_state->level_cols - 3) // Right
             {
-                Rect *rect;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_end+1, y_end, &rect))
+                Tile *tile;
+                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_end+1, y_end, &tile))
                 {
-                    rect->texture_id = game_state->wall_texture_id;
-                    rect->rotation = -Pi32/2.0f;
+                    tile->texture_id = game_state->wall_texture_id;
+                    tile->rotation = -Pi32/2.0f;
                 }
             }
             if(y_start == 2) // Bottom
             {
-                Rect *rect;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_start-1, &rect))
+                Tile *tile;
+                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_start-1, &tile))
                 {
-                    rect->texture_id = game_state->wall_texture_id;
-                    rect->rotation = Pi32;
+                    tile->texture_id = game_state->wall_texture_id;
+                    tile->rotation = Pi32;
                 }
             }
             if(y_end == game_state->level_rows - 3) // Top
             {
-                Rect *rect;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_end+1, &rect))
+                Tile *tile;
+                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_end+1, &tile))
                 {
-                    rect->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->wall_texture_id;
                 }
             }
 
@@ -241,23 +241,115 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
     {
         for(i32 col = 2; col <= game_state->level_cols - 2; col++)
         {
-            Rect *test_roof_rect = {};
-            if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row, &test_roof_rect))
+            Tile *test_roof_tile = {};
+            if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row, &test_roof_tile))
             {
-                if(test_roof_rect->texture_id == game_state->roof_texture_id)
+                if(test_roof_tile->texture_id == game_state->roof_texture_id)
                 {
-                    Rect *wall_rect = {};
-                    if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row-1, &wall_rect))
+                    Tile *wall_tile = {};
+                    if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row-1, &wall_tile))
                     {
-                        if(wall_rect->texture_id == game_state->floor_texture_id)
+                        if(wall_tile->texture_id == game_state->floor_texture_id)
                         {
-                            wall_rect->texture_id = game_state->wall_texture_id;
+                            wall_tile->texture_id = game_state->wall_texture_id;
                         }
                     }
                 }
             }
         }
     }
+}
+
+void
+render_tiles(Game_State *game_state, Render_Buffer *tiles_buffer, Render_Buffer *render_buffer)
+{
+	// NOTE(Fermin): @Speed - We should only render the tiles that are visible on screen
+
+	f32 tile_size_in_px = game_state->tile_size_in_px;
+
+    // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles.
+    // Should we truncate? round? Not sure
+    V2 half_window =
+    {
+        ((f32)game_state->window_width) / 2.0f,
+        ((f32)game_state->window_height) / 2.0f
+    };
+
+	Tile *tiles = (Tile *)tiles_buffer->buffer.data;
+	for(u32 index = 0; index < tiles_buffer->count; index++)
+	{
+		Tile *tile = tiles + index;
+
+		// rotate axis. Perp.
+		V2 x_axis = V2{_cos(tile->rotation), _sin(tile->rotation)};
+		V2 y_axis = V2{-x_axis.y, x_axis.x};
+
+		// scale by half dim because origin is at the center of the tile
+		x_axis *= tile->dim_in_tiles.x * 0.5f;
+		y_axis *= tile->dim_in_tiles.y * 0.5f;
+
+		V3 origin = tile->world_index - game_state->camera.pos; // move into camera space
+		origin.xy = origin.xy + tile->dim_in_tiles * 0.5f; // set origin in center of tile
+
+		// NOTE(Fermin): We dont need all the z
+		V3 corners[4];
+		corners[0].xy = origin.xy - x_axis - y_axis; // Lower left
+		corners[0].z = origin.z;
+		corners[1].xy = origin.xy + x_axis - y_axis; // Lower right
+		corners[1].z = origin.z;
+		corners[2].xy = origin.xy + x_axis + y_axis; // Upper right
+		corners[2].z = origin.z;
+		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
+		corners[3].z = origin.z;
+
+		// Transform from world index to pixels. Not Z since that is used for z-buffer
+		corners[0].xy *= tile_size_in_px;
+		corners[1].xy *= tile_size_in_px;
+		corners[2].xy *= tile_size_in_px;
+		corners[3].xy *= tile_size_in_px;
+
+		// Move the origin of the camera from bottom left to the center of the window
+		corners[0].xy += half_window;
+		corners[1].xy += half_window;
+		corners[2].xy += half_window;
+		corners[3].xy += half_window;
+
+		push_quad(render_buffer, corners, tile->texture_id, tile->color);
+	}
+}
+
+void
+render_ui(Game_State *game_state, Render_Buffer *ui_buffer)
+{
+	Tile *ui_rects = (Tile *)ui_buffer->buffer.data;
+	for(u32 index = 0; index < ui_buffer->count; index++)
+	{
+		Tile *tile = ui_rects + index;
+
+		// rotate axis. Perp.
+		V2 x_axis = V2{_cos(tile->rotation), _sin(tile->rotation)};
+		V2 y_axis = V2{-x_axis.y, x_axis.x};
+
+		// scale by half dim because origin is at the center of the tile
+		x_axis *= tile->dim_in_px.x * 0.5f;
+		y_axis *= tile->dim_in_px.y * 0.5f;
+
+		V3 origin = tile->pos_in_screen;
+		origin.xy = origin.xy + tile->dim_in_px * 0.5f; // set origin in center of tile
+		// NOTE(Fermin): We dont need all the z
+		V3 corners[4];
+		corners[0].xy = origin.xy - x_axis - y_axis; // Lower left
+		corners[0].z = origin.z;
+		corners[1].xy = origin.xy + x_axis - y_axis; // Lower right
+		corners[1].z = origin.z;
+		corners[2].xy = origin.xy + x_axis + y_axis; // Upper right
+		corners[2].z = origin.z;
+		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
+		corners[3].z = origin.z;
+
+		// push to render buffer
+		//opengl_rectangle(corners, tile->color, tile->texture_id);
+	}
 }
 
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
@@ -409,13 +501,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         particle->rotation += game_state->dt_in_seconds * particle->d_rotation;
 
-        Rect part = {};
+        Tile part = {};
         part.world_index = particle->p;
         part.dim_in_tiles = V2{0.4, 0.4};
         part.rotation = particle->rotation;
         part.texture_id = game_state->wall_texture_id;
 
-        push_rectangle(tiles_buffer, &part, color_trans);
+        push_tile(tiles_buffer, &part, color_trans);
     }
     // NOTE(Fermin): Experimental particle system logic END
     
@@ -423,16 +515,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if(game_state->editing_tile)
     {
         // NOTE(Fermin): We can avoid doing this if we use the z coord
-        Rect highlight = {};
+        Tile highlight = {};
         highlight.world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, map_z};
         highlight.dim_in_tiles = V2{1.0f, 1.0f};
         highlight.texture_id = game_state->highlight_texture_id;
 
-        push_rectangle(tiles_buffer, &highlight, V4{0.0f, 1.0f, 0.0f, 1.0f});
+        push_tile(tiles_buffer, &highlight, V4{0.0f, 1.0f, 0.0f, 1.0f});
     }
 
     dude->rotation += dt_in_seconds; // nocheckin
-    push_rectangle(tiles_buffer, dude);
+    push_tile(tiles_buffer, dude);
+
+	assert(render_buffer->count == 0)
+	render_tiles(game_state, tiles_buffer, render_buffer);
+	//render_ui(game_state, tiles_buffer);
 
     game_state->last_frame_input_state = input_state;
 }

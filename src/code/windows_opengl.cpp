@@ -289,6 +289,10 @@ opengl_load_texture(char *path, u32 format)
 static void
 opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
 {
+	// NOTE(Fermin): IMPORTANT - Deprecated, see alternative below
+	// NOTE(Fermin): We should do all of the logic to get from Tile to rendered
+	// corner data in the game, store that in a buffer and pass that down to platform
+	// then here.
     time_function;
 
     M4 ortho = {};
@@ -327,10 +331,10 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
     ortho.m[2].w = 1.0f; // Enables perspective divide by z
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
     f32 tile_size_in_px = game_state->tile_size_in_px;
-    Rect *rects = (Rect *)tiles_buffer.buffer.data;
+    Tile *rects = (Tile *)tiles_buffer.buffer.data;
     for(u32 index = 0; index < tiles_buffer.count; index++)
     {
-        Rect *rect = rects + index;
+        Tile *rect = rects + index;
 
         // rotate axis. Perp.
         V2 x_axis = V2{_cos(rect->rotation), _sin(rect->rotation)};
@@ -372,10 +376,10 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
     // NOTE(Fermin): Renders the UI
     ortho.m[2].w = 0.0f; // NOTE(Fermin): Disables perspective divide by z
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
-    Rect *ui_rects = (Rect *)ui_buffer.buffer.data;
+    Tile *ui_rects = (Tile *)ui_buffer.buffer.data;
     for(u32 index = 0; index < ui_buffer.count; index++)
     {
-        Rect *rect = ui_rects + index;
+        Tile *rect = ui_rects + index;
 
         // rotate axis. Perp.
         V2 x_axis = V2{_cos(rect->rotation), _sin(rect->rotation)};
@@ -399,6 +403,49 @@ opengl_render(i32 window_width, i32 window_height, Game_State* game_state)
         corners[3].z = origin.z;
             
         opengl_rectangle(corners, rect->color, rect->texture_id);
+    }
+
+    glUseProgram(0);
+}
+
+static void
+opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
+{
+    time_function;
+
+    M4 ortho = {};
+    ortho = orthogonal((f32)window_width, (f32)window_height);
+
+    glViewport(0, 0, window_width, window_height);
+
+    //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LEQUAL); // GL_LESS
+
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_SCISSOR_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
+    glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
+
+    glUseProgram(opengl.program);
+        
+    glUniform1i(opengl.texture_sampler_id, 0);
+
+    // NOTE(Fermin): Renders the world tiles
+    ortho.m[2].w = 1.0f; // Enables perspective divide by z
+    glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
+
+    Quad *quads = (Quad *)render_buffer->buffer.data;
+    for(u32 index = 0; index < render_buffer->count; index++)
+    {
+        Quad *quad = quads + index;
+        opengl_rectangle(quad->corners, quad->color, quad->texture_id);
     }
 
     glUseProgram(0);

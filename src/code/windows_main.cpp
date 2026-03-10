@@ -7,10 +7,11 @@
 #include "windows_main.h"
 #include "shared.h"
 
-#include "opengl.h"
+#include "windows_opengl.h"
 global_variable Opengl opengl = {};
 // NOTE(Fermin): I don't think these should be global. Think where they fit.
-global_variable Render_Buffer tiles_buffer = {};
+global_variable Render_Buffer render_buffer = {};
+global_variable Render_Buffer tiles_buffer = {}; 
 global_variable Render_Buffer ui_buffer = {};
 global_variable Font consola = {};
 global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
@@ -19,7 +20,7 @@ global_variable u32 bytes_per_pixel = 4;
 global_variable b32 win32_running;
 global_variable f32 global_perf_count_frequency;
 
-#include "opengl.cpp"
+#include "windows_opengl.cpp"
 
 global_variable Game_State game_state = {};
 global_variable Win32_Offscreen_Buffer global_back_buffer;
@@ -311,9 +312,9 @@ win32_resize_DIB_section(i32 width, i32 height)
 }
 
 static void
-win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Game_State* game_state)
+win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Render_Buffer *render_buffer)
 {
-    opengl_render(window_width, window_height, game_state);
+    opengl_render(window_width, window_height, render_buffer);
 
     {
         // NOTE(Fermin): This takes most of the time because of V-Sync.
@@ -370,7 +371,7 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             PAINTSTRUCT paint;
             HDC device_context = BeginPaint(window, &paint);
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
-            win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &game_state);
+            win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
             EndPaint(window, &paint);
         } break;
 
@@ -598,7 +599,7 @@ win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 }
 
 static void
-init_font(Font *font, char *source)
+init_font(Font *font, char *source) // here for now. where should it go? opengl?
 {
     Buffer data = read_file(source);
 
@@ -654,7 +655,7 @@ init_font(Font *font, char *source)
 }
 
 static void
-get_character_metadata(char character, Glyph_Metadata *out)
+get_character_metadata(char character, Glyph_Metadata *out) // here for now. where should it go?
 {
     // TODO(Fermin): Pass Font so it works when we add more fonts
     size_t index = character - font_first_character;
@@ -668,7 +669,7 @@ get_character_metadata(char character, Glyph_Metadata *out)
 }
 
 static void
-print_debug_text(char *string, Font *font, V4 color = {0.0f, 1.0f, 0.0f, 1.0f})
+print_debug_text(char *string, Font *font, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // here for now. move to where? platform?
 {
     time_function;
 
@@ -695,12 +696,12 @@ print_debug_text(char *string, Font *font, V4 color = {0.0f, 1.0f, 0.0f, 1.0f})
             f32 advance = glyph_info.advance * max_scale;
 
 
-            Rect glyph = {};
+            Tile glyph = {};
             glyph.pos_in_screen.xy = V2{x, y};
             glyph.dim_in_px = V2{w, h};
             glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
 
-            push_rectangle(&ui_buffer, &glyph, color);
+            push_tile(&ui_buffer, &glyph, color);
 
             x += advance;
         }
@@ -708,7 +709,6 @@ print_debug_text(char *string, Font *font, V4 color = {0.0f, 1.0f, 0.0f, 1.0f})
         {
             x += space_width;
         }
-
     }
 }
 
@@ -838,12 +838,13 @@ int main()
 
             set_flag(&game_state, game_state_flag_prints);
 
-            Rect dude = {};
+            Tile dude = {};
             dude.world_index = V3{0.0f, 0.0f, 0.0f};
             dude.dim_in_tiles = V2{1.0f, 1.0f};
             dude.texture_id = dude_texture_id;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
+            render_buffer.buffer = allocate_buffer(gigabytes(1));
             tiles_buffer.buffer = allocate_buffer(gigabytes(1));
             ui_buffer.buffer = allocate_buffer(gigabytes(1));
             // NOTE(Fermin): Game things end
@@ -892,7 +893,8 @@ int main()
                 
                 {
                     time_block("game.update_and_render");
-                    game.update_and_render(&tiles_buffer, &dude, &game_state);
+					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
+                    game.update_and_render(&tiles_buffer, &dude, &game_state, &render_buffer);
                 }
 
 				// NOTE(Fermin): audio
@@ -988,7 +990,7 @@ int main()
                     _snprintf_s(text_buffer, sizeof(text_buffer), "Rects capacity:");
                     print_debug_text(text_buffer, &consola);
 
-                    u32 rect_max_capacity = tiles_buffer.buffer.count/sizeof(Rect);
+                    u32 rect_max_capacity = tiles_buffer.buffer.count/sizeof(Tile);
                     f32 used_tiles_ratio = (f32)tiles_buffer.count / (f32)rect_max_capacity;
                     V4 text_color = V4{used_tiles_ratio, (1.0f-used_tiles_ratio), 0.0f, 1.0f};
                     _snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer.count, rect_max_capacity);
@@ -1002,7 +1004,7 @@ int main()
                     if(game_state.editing_tile)
                     {
                         // NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
-                        Rect *editing;
+                        Tile *editing;
                         if(get_tile(&tiles_buffer.buffer,
                                     game_state.level_cols,
                                     game_state.level_rows,
@@ -1022,14 +1024,14 @@ int main()
                     }
                 }
 
-
                 HDC device_context = GetDC(window);
-                win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &game_state);
+                win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
                 ReleaseDC(window, device_context);
 
                 // NOTE(Fermin): We overwrite temp partition of render buffers each frame
                 tiles_buffer.count = tiles_buffer.cached;
                 ui_buffer.count = 0;
+                render_buffer.count = 0;
 
                 LARGE_INTEGER end_counter = win32_get_wallclock();
                 f32 measured_seconds_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);

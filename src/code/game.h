@@ -12,7 +12,7 @@ is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
 }
 
 inline b32
-get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
+get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Tile **out)
 {
     // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
     // have null pointers and can instead check on that pointer instead of 
@@ -21,7 +21,7 @@ get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Rect **out)
 
     if(is_tile_index_valid(x, y, cols, rows))
     {
-        Rect *tiles = (Rect *)buffer->data;
+        Tile *tiles = (Tile *)buffer->data;
         *out = tiles + x + y * cols;
         result = 1;
     }
