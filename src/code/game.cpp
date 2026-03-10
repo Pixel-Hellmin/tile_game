@@ -319,7 +319,7 @@ render_tiles(Game_State *game_state, Render_Buffer *tiles_buffer, Render_Buffer 
 }
 
 void
-render_ui(Game_State *game_state, Render_Buffer *ui_buffer)
+render_ui(Game_State *game_state, Render_Buffer *ui_buffer, Render_Buffer *render_buffer)
 {
 	Tile *ui_rects = (Tile *)ui_buffer->buffer.data;
 	for(u32 index = 0; index < ui_buffer->count; index++)
@@ -347,8 +347,7 @@ render_ui(Game_State *game_state, Render_Buffer *ui_buffer)
 		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
 		corners[3].z = origin.z;
 
-		// push to render buffer
-		//opengl_rectangle(corners, tile->color, tile->texture_id);
+		push_quad(render_buffer, corners, tile->texture_id, tile->color);
 	}
 }
 
@@ -527,9 +526,61 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     dude->rotation += dt_in_seconds; // nocheckin
     push_tile(tiles_buffer, dude);
 
+
+	// ------------------ DEBUG PRINTS ------------------
+	// TODO(Fermin): We just moved this into game from platform,
+	// some of this may not make much sense anymore. Take a look
+	// and refactor.
+	debug_print_line = game_state->window_height;
+	char text_buffer[256];
+
+	_snprintf_s(text_buffer, sizeof(text_buffer), "[f]   [ms]");
+	print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+	_snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/game_state->dt_in_seconds), game_state->dt_in_seconds*1000.0f);
+	print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+	if(is_set(game_state, game_state_flag_prints))
+	{
+		_snprintf_s(text_buffer, sizeof(text_buffer), "Rects capacity:");
+		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+
+		u32 rect_max_capacity = tiles_buffer->buffer.count/sizeof(Tile);
+		f32 used_tiles_ratio = (f32)tiles_buffer->count / (f32)rect_max_capacity;
+		V4 text_color = V4{used_tiles_ratio, (1.0f-used_tiles_ratio), 0.0f, 1.0f};
+		_snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer->count, rect_max_capacity);
+		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer, text_color);
+
+		_snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index:");
+		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+		_snprintf_s(text_buffer, sizeof(text_buffer), "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
+		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+
+		if(game_state->editing_tile)
+		{
+			// NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
+			Tile *editing;
+			if(get_tile(&tiles_buffer->buffer,
+			   game_state->level_cols,
+			   game_state->level_rows,
+			   game_state->editing_tile_x,
+			   game_state->editing_tile_y,
+			   &editing))
+			{
+				_snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
+				print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+
+				_snprintf_s(text_buffer, sizeof(text_buffer), "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
+				print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+
+				_snprintf_s(text_buffer, sizeof(text_buffer), "   texture_id: %i", editing->texture_id);
+				print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+			}
+		}
+	}
+	// ------------------ DEBUG PRINTS ------------------
+
 	assert(render_buffer->count == 0)
 	render_tiles(game_state, tiles_buffer, render_buffer);
-	//render_ui(game_state, tiles_buffer);
+	render_ui(game_state, ui_buffer, render_buffer);
 }
 
 extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)

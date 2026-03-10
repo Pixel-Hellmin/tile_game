@@ -124,6 +124,26 @@ struct Particle // here for now. Move to game
 // NOTE(Fermin): This is here for now. Will move to game.h eventually
 #include "random.h"
 
+
+struct Glyph_Metadata // here for now. where should it go?
+{
+    // NOTE(Fermin): advance has left side bearing calculated already
+    size_t offset;
+    i32 width;
+    i32 height;
+    i32 y_offset;
+    i32 advance;
+};
+
+global_variable const u32 font_first_character = '!';
+global_variable const u32 font_last_character = '~';
+global_variable const u32 font_character_count = font_last_character - font_first_character + 1;
+struct Font // here for now. where should it go?
+{
+    u32 glyph_texture_ids[font_character_count];
+    Glyph_Metadata metadata[font_character_count];
+};
+
 enum Game_State_Debug_Flags // here for now. Move to game
 {
     game_state_flag_prints = (1 << 1),
@@ -161,6 +181,8 @@ struct Game_State // here for now. Move to game
     // NOTE(Fermin): Testing particle system stuff. Move this to where it makes sense
     u32 next_particle;
     Particle particles[64];
+
+	Font debug_font_consola;
 };
 
 struct Game_Sound_Output_Buffer
@@ -170,26 +192,7 @@ struct Game_Sound_Output_Buffer
 	i16 *samples;
 };
 
-struct Glyph_Metadata // here for now. where should it go?
-{
-    // NOTE(Fermin): advance has left side bearing calculated already
-    size_t offset;
-    i32 width;
-    i32 height;
-    i32 y_offset;
-    i32 advance;
-};
-
-global_variable const u32 font_first_character = '!';
-global_variable const u32 font_last_character = '~';
-global_variable const u32 font_character_count = font_last_character - font_first_character + 1;
-struct Font // here for now. where should it go?
-{
-    u32 glyph_texture_ids[font_character_count];
-    Glyph_Metadata metadata[font_character_count];
-};
-
-#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Tile *dude, Game_State *game_state, Render_Buffer *render_buffer, Input_Keys *input)
+#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Render_Buffer *ui_buffer, Tile *dude, Game_State *game_state, Render_Buffer *render_buffer, Input_Keys *input)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {
@@ -239,6 +242,63 @@ push_tile(Render_Buffer *render_buffer, Tile *tile, V4 color = {1.0, 1.0, 1.0, 1
     pushed_tile->rotation = tile->rotation;
 
     return result;
+}
+
+static void
+get_character_metadata(char character, Glyph_Metadata *out, Font *font) // here for now. where should it go?
+{
+    // TODO(Fermin): Pass Font so it works when we add more fonts
+    size_t index = character - font_first_character;
+    Glyph_Metadata character_info = font->metadata[index];
+
+    out->width = character_info.width;
+    out->height = character_info.height;
+    out->offset = character_info.offset;
+    out->y_offset = character_info.y_offset;
+    out->advance = character_info.advance;
+}
+
+global_variable f32 debug_print_line = 0.0f;
+static void
+print_debug_text(char *string, Font *font, Render_Buffer *ui_buffer, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // here for now. move to where? platform?
+{
+    f32 print_font_size = 24.0f;
+    debug_print_line -= print_font_size;
+
+    f32 x = 10.0f;
+    f32 line_y = debug_print_line;
+    f32 max_scale = print_font_size / font_point_size;
+    f32 space_width = font_point_size / 2.0f * max_scale;
+
+    for(char *c = string; *c; c++)
+    {
+        if(*c != ' ')
+        {
+            Glyph_Metadata glyph_info = {};
+            get_character_metadata(*c, &glyph_info, font);
+
+            f32 y_scale = glyph_info.height / font_point_size;
+            f32 x_scale = glyph_info.width / font_point_size;
+            f32 h = print_font_size * y_scale;
+            f32 w = print_font_size * x_scale;
+            f32 y = line_y - glyph_info.y_offset * max_scale;
+            f32 advance = glyph_info.advance * max_scale;
+
+
+            Tile glyph = {};
+            glyph.pos_in_screen.xy = V2{x, y};
+            glyph.dim_in_px = V2{w, h};
+            glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
+
+            push_tile(ui_buffer, &glyph, color);
+
+            x += advance;
+        }
+        else
+        {
+            x += space_width;
+        }
+    }
 }
 
 #define PLATFORM_H

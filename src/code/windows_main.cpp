@@ -17,9 +17,7 @@ global_variable Render_Buffer render_buffer = {};
 global_variable Render_Buffer tiles_buffer = {}; 
 global_variable Render_Buffer ui_buffer = {};
 
-global_variable Font consola = {};
 global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
-global_variable f32 debug_print_line = 0.0f;
 global_variable u32 bytes_per_pixel = 4;
 global_variable b32 win32_running;
 global_variable f32 global_perf_count_frequency;
@@ -658,64 +656,6 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
     free_buffer(&data);
 }
 
-static void
-get_character_metadata(char character, Glyph_Metadata *out) // here for now. where should it go?
-{
-    // TODO(Fermin): Pass Font so it works when we add more fonts
-    size_t index = character - font_first_character;
-    Glyph_Metadata character_info = consola.metadata[index];
-
-    out->width = character_info.width;
-    out->height = character_info.height;
-    out->offset = character_info.offset;
-    out->y_offset = character_info.y_offset;
-    out->advance = character_info.advance;
-}
-
-static void
-print_debug_text(char *string, Font *font, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // here for now. move to where? platform?
-{
-    time_function;
-
-    f32 print_font_size = 24.0f;
-    debug_print_line -= print_font_size;
-
-    f32 x = 10.0f;
-    f32 line_y = debug_print_line;
-    f32 max_scale = print_font_size / font_point_size;
-    f32 space_width = font_point_size / 2.0f * max_scale;
-
-    for(char *c = string; *c; c++)
-    {
-        if(*c != ' ')
-        {
-            Glyph_Metadata glyph_info = {};
-            get_character_metadata(*c, &glyph_info);
-
-            f32 y_scale = glyph_info.height / font_point_size;
-            f32 x_scale = glyph_info.width / font_point_size;
-            f32 h = print_font_size * y_scale;
-            f32 w = print_font_size * x_scale;
-            f32 y = line_y - glyph_info.y_offset * max_scale;
-            f32 advance = glyph_info.advance * max_scale;
-
-
-            Tile glyph = {};
-            glyph.pos_in_screen.xy = V2{x, y};
-            glyph.dim_in_px = V2{w, h};
-            glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
-
-            push_tile(&ui_buffer, &glyph, color);
-
-            x += advance;
-        }
-        else
-        {
-            x += space_width;
-        }
-    }
-}
-
 int main()
 {
     begin_profile();
@@ -826,7 +766,7 @@ int main()
             u32 dude_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
-            init_font(&consola, "src\\misc\\assets\\consola.font");
+            init_font(&game_state.debug_font_consola, "src\\misc\\assets\\consola.font");
 
             // NOTE(Fermin): Game things start
             Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
@@ -902,7 +842,7 @@ int main()
                 {
                     time_block("game.update_and_render");
 					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
-                    game.update_and_render(&tiles_buffer, &dude, &game_state, &render_buffer, input);
+                    game.update_and_render(&tiles_buffer, &ui_buffer, &dude, &game_state, &render_buffer, input);
                 }
 
 				// NOTE(Fermin): audio
@@ -983,54 +923,6 @@ int main()
 				{
 					sound_is_valid = false;
 				}
-
-                debug_print_line = dimension.height;
-                char text_buffer[256];
-
-                _snprintf_s(text_buffer, sizeof(text_buffer), "[f]   [ms]");
-                print_debug_text(text_buffer, &consola);
-
-                _snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/target_seconds_per_frame), target_seconds_per_frame*1000.0f);
-                print_debug_text(text_buffer, &consola);
-
-                if(is_set(&game_state, game_state_flag_prints))
-                {
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "Rects capacity:");
-                    print_debug_text(text_buffer, &consola);
-
-                    u32 rect_max_capacity = tiles_buffer.buffer.count/sizeof(Tile);
-                    f32 used_tiles_ratio = (f32)tiles_buffer.count / (f32)rect_max_capacity;
-                    V4 text_color = V4{used_tiles_ratio, (1.0f-used_tiles_ratio), 0.0f, 1.0f};
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer.count, rect_max_capacity);
-                    print_debug_text(text_buffer, &consola, text_color);
-
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index:");
-                    print_debug_text(text_buffer, &consola);
-                    _snprintf_s(text_buffer, sizeof(text_buffer), "   %.2f, %.2f", dude.world_index.x, dude.world_index.y);
-                    print_debug_text(text_buffer, &consola);
-
-                    if(game_state.editing_tile)
-                    {
-                        // NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
-                        Tile *editing;
-                        if(get_tile(&tiles_buffer.buffer,
-                                    game_state.level_cols,
-                                    game_state.level_rows,
-                                    game_state.editing_tile_x,
-                                    game_state.editing_tile_y,
-                                    &editing))
-                        {
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
-                            print_debug_text(text_buffer, &consola);
-
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "   x: %i, y: %i", game_state.editing_tile_x, game_state.editing_tile_y);
-                            print_debug_text(text_buffer, &consola);
-
-                            _snprintf_s(text_buffer, sizeof(text_buffer), "   texture_id: %i", editing->texture_id);
-                            print_debug_text(text_buffer, &consola);
-                        }
-                    }
-                }
 
                 HDC device_context = GetDC(window);
                 win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
