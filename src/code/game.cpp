@@ -1,5 +1,3 @@
-#include <cstdio>
-
 #include "game.h"
 
 void
@@ -364,21 +362,41 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     f32 map_z = 2.0f;
     f32 camera_z = 2.0f;
 
+	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
+	Tile *dude = &game_state->dude;
     if(!game_state->initialized)
     {
         assert(tiles_buffer->count == 0);
 
+		game_state->entropy.index = 666;
+		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
+		game_state->tile_size_in_px = 64.0f;
+		// TODO(Fermin): Handle assets properly. How?
+		game_state->floor_texture_id     = game_memory->floor_texture_id;
+		game_state->wall_texture_id      = game_memory->wall_texture_id;
+		game_state->roof_texture_id      = game_memory->roof_texture_id;
+		game_state->highlight_texture_id = game_memory->highlight_texture_id;
+
+		dude->world_index = V3{0.0f, 0.0f, 0.0f};
+		dude->dim_in_tiles = V2{1.0f, 1.0f};
+		dude->texture_id = game_memory->dude_texture_id;
+
         generate_level(game_state, tiles_buffer, map_z);
 
         tiles_buffer->cached = tiles_buffer->count;
+
+		set_flag(game_state, game_state_flag_prints);
         game_state->initialized = 1;
     }
+
+	game_state->window_width = game_memory->window_width;
+	game_state->window_height = game_memory->window_height;
     
     // NOTE(Fermin): Update dude
     Input_Keys new_input = input[0];
     Input_Keys old_input = input[1];
     //Input_Keys last_frame_input_state = game_state->last_frame_input_state;
-    f32 dt_in_seconds = game_state->dt_in_seconds;
+    f32 dt_in_seconds = new_input.dt_in_seconds;
     f32 dude_speed = 10.0 * dt_in_seconds;
     f32 camera_speed = 30.0 * dt_in_seconds;
     if(new_input.f1 && !old_input.f1)
@@ -480,8 +498,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         Particle *particle = game_state->particles + particle_index;
 
         // NOTE(Fermin): Simulate particles forward in time
-        particle->p += game_state->dt_in_seconds * particle->d_p;
-        particle->color_trans += game_state->dt_in_seconds * particle->d_color;
+        particle->p += new_input.dt_in_seconds * particle->d_p;
+        particle->color_trans += new_input.dt_in_seconds * particle->d_color;
 
         V4 color_trans;
         color_trans.r = clamp01(particle->color_trans.r);
@@ -499,7 +517,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
             color_trans.a = 0.9f * clamp01_map_to_range(1.0f, color_trans.a, 0.9f);
         }
 
-        particle->rotation += game_state->dt_in_seconds * particle->d_rotation;
+        particle->rotation += new_input.dt_in_seconds * particle->d_rotation;
 
         Tile part = {};
         part.world_index = particle->p;
@@ -523,7 +541,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         push_tile(tiles_buffer, &highlight, V4{0.0f, 1.0f, 0.0f, 1.0f});
     }
 
-    dude->rotation += dt_in_seconds; // nocheckin
+    dude->rotation += dt_in_seconds;
     push_tile(tiles_buffer, dude);
 
 
@@ -534,25 +552,26 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	debug_print_line = game_state->window_height;
 	char text_buffer[256];
 
+	Font *debug_font_consola = &game_memory->debug_font_consola;
 	_snprintf_s(text_buffer, sizeof(text_buffer), "[f]   [ms]");
-	print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
-	_snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/game_state->dt_in_seconds), game_state->dt_in_seconds*1000.0f);
-	print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+	print_debug_text(text_buffer, debug_font_consola, ui_buffer);
+	_snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/new_input.dt_in_seconds), new_input.dt_in_seconds*1000.0f);
+	print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 	if(is_set(game_state, game_state_flag_prints))
 	{
 		_snprintf_s(text_buffer, sizeof(text_buffer), "Rects capacity:");
-		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 
 		u32 rect_max_capacity = tiles_buffer->buffer.count/sizeof(Tile);
 		f32 used_tiles_ratio = (f32)tiles_buffer->count / (f32)rect_max_capacity;
 		V4 text_color = V4{used_tiles_ratio, (1.0f-used_tiles_ratio), 0.0f, 1.0f};
 		_snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%i", tiles_buffer->count, rect_max_capacity);
-		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer, text_color);
+		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
 
 		_snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index:");
-		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 		_snprintf_s(text_buffer, sizeof(text_buffer), "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
-		print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 
 		if(game_state->editing_tile)
 		{
@@ -566,13 +585,13 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 			   &editing))
 			{
 				_snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
-				print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+				print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 
 				_snprintf_s(text_buffer, sizeof(text_buffer), "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
-				print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+				print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 
 				_snprintf_s(text_buffer, sizeof(text_buffer), "   texture_id: %i", editing->texture_id);
-				print_debug_text(text_buffer, &game_state->debug_font_consola, ui_buffer);
+				print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 			}
 		}
 	}
@@ -596,7 +615,7 @@ extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
         sample_index < sound_buffer->sample_count;
         ++sample_index)
     {
-#if 1
+#if 0
         float sine_value = sinf(tsine);
         i16 sample_value = (i16)(sine_value * tone_volume);
 #else
@@ -604,7 +623,7 @@ extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
 #endif
         *sample_out++ = sample_value;
         *sample_out++ = sample_value;
-#if 1
+#if 0
         tsine += Tau32*1.0f/(float)wave_period;
         if(tsine > Tau32)
         {

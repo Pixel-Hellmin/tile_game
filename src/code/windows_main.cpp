@@ -2,7 +2,6 @@
 
 #include <windows.h>
 #include <dsound.h>
-#include "game.h"
 #include <gl/gl.h>
 #include "windows_main.h"
 #include "shared.h"
@@ -24,7 +23,6 @@ global_variable f32 global_perf_count_frequency;
 
 #include "windows_opengl.cpp"
 
-global_variable Game_State game_state = {};
 global_variable Win32_Offscreen_Buffer global_back_buffer;
 
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
@@ -766,8 +764,6 @@ int main()
             u32 dude_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
             // NOTE(Fermin) | End | Texture
 
-            init_font(&game_state.debug_font_consola, "src\\misc\\assets\\consola.font");
-
             // NOTE(Fermin): Game things start
             Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
                                                   tmp_game_code_dll_full_path);
@@ -776,20 +772,17 @@ int main()
 			Input_Keys *new_input = &input[0];
 			Input_Keys *old_input = &input[1];
 
-            game_state.entropy.index = 666;
-            game_state.camera.pos   = {10.0f, 10.0f, 10.0f};
-            game_state.floor_texture_id     = floor_texture_id;
-            game_state.wall_texture_id      = wall_texture_id;
-            game_state.roof_texture_id      = roof_texture_id;
-            game_state.highlight_texture_id = highlight_texture_id;
-            game_state.tile_size_in_px = 64.0f;
+			Game_Memory game_memory = {};
+            game_memory.permanent_storage = allocate_buffer(gigabytes(1));
 
-            set_flag(&game_state, game_state_flag_prints);
-
-            Tile dude = {};
-            dude.world_index = V3{0.0f, 0.0f, 0.0f};
-            dude.dim_in_tiles = V2{1.0f, 1.0f};
-            dude.texture_id = dude_texture_id;
+			// NOTE(Fermin): Figure out what to do with game assets
+            game_memory.floor_texture_id     = floor_texture_id;
+            game_memory.wall_texture_id      = wall_texture_id;
+            game_memory.roof_texture_id      = roof_texture_id;
+            game_memory.highlight_texture_id = highlight_texture_id;
+            game_memory.dude_texture_id = dude_texture_id;
+			
+            init_font(&game_memory.debug_font_consola, "src\\misc\\assets\\consola.font");
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             render_buffer.buffer = allocate_buffer(gigabytes(1));
@@ -804,7 +797,7 @@ int main()
             // NOTE(Fermin): This is the main loop
             while(win32_running)
             {
-                game_state.dt_in_seconds = target_seconds_per_frame;
+                new_input->dt_in_seconds = target_seconds_per_frame;
 
                 assert(tiles_buffer.count == tiles_buffer.cached);
 
@@ -816,14 +809,14 @@ int main()
                                                 tmp_game_code_dll_full_path);
 
                     // NOTE(Fermin): DEBUG We regenerate maze when reloading for easy testing
-                    game_state.initialized = 0;
+                    game_memory.debug_initialized = 0;
                     tiles_buffer.count = 0;
                     tiles_buffer.cached = 0;
                 }
 
                 Win32_Window_Dimension dimension = win32_get_window_dimension(window);
-                game_state.window_width = dimension.width;
-                game_state.window_height = dimension.height;
+                game_memory.window_width = dimension.width;
+                game_memory.window_height = dimension.height;
                 win32_process_pending_messages(new_input);
 
                 POINT mouse_p;
@@ -842,7 +835,7 @@ int main()
                 {
                     time_block("game.update_and_render");
 					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
-                    game.update_and_render(&tiles_buffer, &ui_buffer, &dude, &game_state, &render_buffer, input);
+                    game.update_and_render(&tiles_buffer, &ui_buffer, &game_memory, &render_buffer, input);
                 }
 
 				// NOTE(Fermin): audio
