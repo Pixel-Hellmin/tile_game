@@ -100,6 +100,7 @@ struct Game_Sound_Output_Buffer
 
 struct Game_Memory
 {
+	// USE this instead of all the buffers in win layer
     Buffer permanent_storage; // REQUIRED to be cleared to zero at startup
 
 	i32 window_width;
@@ -116,7 +117,7 @@ struct Game_Memory
 	b32 debug_initialized;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Render_Buffer *tiles_buffer, Render_Buffer *ui_buffer, Game_Memory *game_memory, Render_Buffer *render_buffer, Input_Keys *input)
+#define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Render_Buffer *render_buffer, Input_Keys *input)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {

@@ -11,11 +11,6 @@ global_variable Opengl opengl = {};
 // NOTE(Fermin): I don't think these should be global. Think where they fit.
 global_variable Render_Buffer render_buffer = {};
 
-// NOTE(Fermin): These two will go in the game memory eventually.
-// We will only use render_buffer for rendering everything
-global_variable Render_Buffer tiles_buffer = {}; 
-global_variable Render_Buffer ui_buffer = {};
-
 global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
 global_variable u32 bytes_per_pixel = 4;
 global_variable b32 win32_running;
@@ -773,7 +768,7 @@ int main()
 			Input_Keys *old_input = &input[1];
 
 			Game_Memory game_memory = {};
-            game_memory.permanent_storage = allocate_buffer(gigabytes(1));
+            game_memory.permanent_storage = allocate_buffer(gigabytes(2));
 
 			// NOTE(Fermin): Figure out what to do with game assets
             game_memory.floor_texture_id     = floor_texture_id;
@@ -786,8 +781,6 @@ int main()
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             render_buffer.buffer = allocate_buffer(gigabytes(1));
-            tiles_buffer.buffer = allocate_buffer(gigabytes(1));
-            ui_buffer.buffer = allocate_buffer(gigabytes(1));
             // NOTE(Fermin): Game things end
 
             u32 expected_frames_per_update = 1;
@@ -799,8 +792,6 @@ int main()
             {
                 new_input->dt_in_seconds = target_seconds_per_frame;
 
-                assert(tiles_buffer.count == tiles_buffer.cached);
-
                 FILETIME new_dll_write_time = win32_get_last_write_time(src_game_code_dll_full_path);
                 if(CompareFileTime(&new_dll_write_time, &game.dll_last_write_time) != 0)
                 {
@@ -810,8 +801,6 @@ int main()
 
                     // NOTE(Fermin): DEBUG We regenerate maze when reloading for easy testing
                     game_memory.debug_initialized = 0;
-                    tiles_buffer.count = 0;
-                    tiles_buffer.cached = 0;
                 }
 
                 Win32_Window_Dimension dimension = win32_get_window_dimension(window);
@@ -835,7 +824,7 @@ int main()
                 {
                     time_block("game.update_and_render");
 					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
-                    game.update_and_render(&tiles_buffer, &ui_buffer, &game_memory, &render_buffer, input);
+                    game.update_and_render(&game_memory, &render_buffer, input);
                 }
 
 				// NOTE(Fermin): audio
@@ -920,11 +909,6 @@ int main()
                 HDC device_context = GetDC(window);
                 win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
                 ReleaseDC(window, device_context);
-
-                // NOTE(Fermin): We overwrite temp partition of render buffers each frame
-                tiles_buffer.count = tiles_buffer.cached;
-                ui_buffer.count = 0;
-                render_buffer.count = 0;
 
 				*old_input = *new_input;
 

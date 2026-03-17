@@ -92,6 +92,10 @@ struct Game_State
     Particle particles[64];
 
 	Tile dude;
+
+	// NOTE(Fermin): We only push Rects to these buffers
+	Render_Buffer tiles_buffer;
+	Render_Buffer ui_buffer;
 };
 
 inline b32
@@ -191,7 +195,7 @@ push_quad(Render_Buffer *render_buffer, V3 *corners, u32 texture_id, V4 color)
 }
 
 static u32
-push_tile(Render_Buffer *render_buffer, Tile *tile, V4 color = {1.0, 1.0, 1.0, 1.0}) // TODO(Fermin): Move this to game
+push_tile(Render_Buffer *render_buffer, Tile *tile, V4 color = {1.0, 1.0, 1.0, 1.0})
 {
     // NOTE(Fermin): This is error prone since we have to update this function each time we change Tile struct
     static_assert(sizeof(Tile) == 44, "Pushing out of date Tile");
