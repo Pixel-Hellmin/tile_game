@@ -374,6 +374,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	Render_Buffer *tiles_buffer = &game_state->tiles_buffer;
 	Render_Buffer *ui_buffer = &game_state->ui_buffer;
 	Tile *dude = &game_state->dude;
+	debug_print_font = &game_memory->debug_font_consola;
 
 	f64 last_frame_render_buffer_used = (f64)render_buffer->count;
 	f64 last_frame_ui_buffer_used = (f64)ui_buffer->count;
@@ -570,70 +571,44 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     push_tile(tiles_buffer, dude);
 	
 	// ------------------ DEBUG PRINTS ------------------
-	// TODO(Fermin): We just moved this into game from platform,
-	// some of this may not make much sense anymore. Take a look
-	// and refactor. THIS IS SHIT; FIX ASAP
+	// TODO(Fermin): This is better but still needs to improve.
+	// Explore a macro/const/dest implementation?
 	debug_print_line = game_state->window_height;
-	char text_buffer[256];
+	print_debug_text(ui_buffer, "[f]   [ms]");
+	print_debug_text(ui_buffer, "%i  %.3f", round_f32_to_i32(1.0f/new_input.dt_in_seconds),
+											new_input.dt_in_seconds*1000.0f);
 
-	Font *debug_font_consola = &game_memory->debug_font_consola;
-	_snprintf_s(text_buffer, sizeof(text_buffer), "[f]   [ms]");
-	print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-	_snprintf_s(text_buffer, sizeof(text_buffer), "%i  %.3f", round_f32_to_i32(1.0f/new_input.dt_in_seconds), new_input.dt_in_seconds*1000.0f);
-	print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 	if(is_set(game_state, game_state_flag_prints))
 	{
 		// --------------- Tiles Buffer ---------------
-		_snprintf_s(text_buffer, sizeof(text_buffer), "Tiles buffer:");
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-
 		f64 tiles_max_capacity = (f64)tiles_buffer->buffer.count/(f64)sizeof(Tile);
 		u64 tiles_bytes = (u64)tiles_buffer->count * (u64)sizeof(Tile);
-		f32 used_tiles_ratio = (f32)((f64)tiles_buffer->count / tiles_max_capacity);
-		V4 text_color = V4{used_tiles_ratio, (1.0f-used_tiles_ratio), 0.0f, 1.0f};
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %i/%llu Tiles", tiles_buffer->count, (u64)tiles_max_capacity);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %llu/%zu Bytes", tiles_bytes, tiles_buffer->buffer.count);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
+		print_debug_text(ui_buffer, "Tiles buffer:");
+		print_debug_text(ui_buffer, "   %i/%llu Tiles", tiles_buffer->count, (u64)tiles_max_capacity);
+		print_debug_text(ui_buffer, "   %llu/%zu Bytes", tiles_bytes, tiles_buffer->buffer.count);
 
 		// --------------- UI Buffer ---------------
-		_snprintf_s(text_buffer, sizeof(text_buffer), "UI buffer:");
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-
 		f64 ui_max_capacity = (f64)ui_buffer->buffer.count/(f64)sizeof(Tile);
 		u64 ui_render_bytes = (u64)last_frame_ui_buffer_used * (u64)sizeof(Tile);
-		f32 used_ui_quads_ratio = (f32)(last_frame_ui_buffer_used / ui_max_capacity);
-		text_color = V4{used_ui_quads_ratio, (1.0f-used_ui_quads_ratio), 0.0f, 1.0f};
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %llu/%llu Tiles", (u64)last_frame_ui_buffer_used, (u64)ui_max_capacity);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %llu/%zu Bytes", ui_render_bytes, ui_buffer->buffer.count);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
+		print_debug_text(ui_buffer, "UI buffer:");
+		print_debug_text(ui_buffer, "   %llu/%llu Tiles", (u64)last_frame_ui_buffer_used, (u64)ui_max_capacity);
+		print_debug_text(ui_buffer, "   %llu/%zu Bytes", ui_render_bytes, ui_buffer->buffer.count);
 		
 		// --------------- Game Memory ---------------
-		_snprintf_s(text_buffer, sizeof(text_buffer), "Game Memory:");
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
 		u64 game_memory_used = (u64)tiles_buffer->count*sizeof(Tile) + sizeof(Game_State) + (u64)last_frame_ui_buffer_used*sizeof(Tile);
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %llu/%zu Bytes", game_memory_used, game_memory->permanent_storage.count);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
+		print_debug_text(ui_buffer, "Game Memory:");
+		print_debug_text(ui_buffer, "   %llu/%zu Bytes", game_memory_used, game_memory->permanent_storage.count);
 
 		// --------------- Render Buffer ---------------
-		_snprintf_s(text_buffer, sizeof(text_buffer), "Render buffer:");
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-
 		f64 quads_max_capacity = (f64)render_buffer->buffer.count/(f64)sizeof(Quad);
 		u64 render_bytes = (u64)last_frame_render_buffer_used * (u64)sizeof(Quad);
-		f32 used_quads_ratio = (f32)(last_frame_render_buffer_used / quads_max_capacity);
-		text_color = V4{used_quads_ratio, (1.0f-used_quads_ratio), 0.0f, 1.0f};
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %llu/%llu Quads", (u64)last_frame_render_buffer_used, (u64)quads_max_capacity);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %llu/%zu Bytes", render_bytes, tiles_buffer->buffer.count);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer, text_color);
+		print_debug_text(ui_buffer, "Render buffer:");
+		print_debug_text(ui_buffer, "   %llu/%llu Quads", (u64)last_frame_render_buffer_used, (u64)quads_max_capacity);
+		print_debug_text(ui_buffer, "   %llu/%zu Bytes", render_bytes, tiles_buffer->buffer.count);
 
 		// --------------- Dude ---------------
-		_snprintf_s(text_buffer, sizeof(text_buffer), "dude world_index:");
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-		_snprintf_s(text_buffer, sizeof(text_buffer), "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
-		print_debug_text(text_buffer, debug_font_consola, ui_buffer);
+		print_debug_text(ui_buffer, "dude world_index:");
+		print_debug_text(ui_buffer, "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
 
 		if(game_state->editing_tile)
 		{
@@ -646,14 +621,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 			   game_state->editing_tile_y,
 			   &editing))
 			{
-				_snprintf_s(text_buffer, sizeof(text_buffer), "Editing tile:");
-				print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-
-				_snprintf_s(text_buffer, sizeof(text_buffer), "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
-				print_debug_text(text_buffer, debug_font_consola, ui_buffer);
-
-				_snprintf_s(text_buffer, sizeof(text_buffer), "   texture_id: %i", editing->texture_id);
-				print_debug_text(text_buffer, debug_font_consola, ui_buffer);
+				print_debug_text(ui_buffer, "Editing tile:");
+				print_debug_text(ui_buffer, "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
+				print_debug_text(ui_buffer, "   texture_id: %i", editing->texture_id);
 			}
 		}
 	}

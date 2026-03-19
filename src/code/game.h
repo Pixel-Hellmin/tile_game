@@ -3,6 +3,7 @@
 #include "platform.h"
 #include "random.h"
 #include <cstdio>
+#include <stdarg.h> // move to shared?
 
 union Tile
 {
@@ -229,12 +230,17 @@ get_character_metadata(char character, Glyph_Metadata *out, Font *font) // here 
     out->advance = character_info.advance;
 }
 
+// NOTE: where should these variables go?
 global_variable f32 debug_print_line = 0.0f;
+global_variable Font *debug_print_font = {};
 static void
-print_debug_text(char *string, Font *font, Render_Buffer *ui_buffer, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // here for now. move to where? platform?
+print_debug_text(char *string, Render_Buffer *ui_buffer, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // move to shared?
 {
+	assert(debug_print_font)
+
     f32 print_font_size = 24.0f;
     debug_print_line -= print_font_size;
+	Font *font = debug_print_font;
 
     f32 x = 10.0f;
     f32 line_y = debug_print_line;
@@ -270,6 +276,19 @@ print_debug_text(char *string, Font *font, Render_Buffer *ui_buffer, V4 color = 
             x += space_width;
         }
     }
+}
+
+static void
+print_debug_text(Render_Buffer *ui_buffer, char *format, ...)
+{
+	char text_buffer[256];
+	assert(sizeof(format) <= sizeof(text_buffer))
+
+    va_list args;
+    va_start(args, format);
+    _vsnprintf_s(text_buffer, sizeof(text_buffer), _TRUNCATE, format, args);
+	print_debug_text(text_buffer, ui_buffer);
+    va_end(args);
 }
 
 #define GAME_H
