@@ -3,21 +3,20 @@
 #include <windows.h>
 #include <dsound.h>
 #include <gl/gl.h>
+
 #include "windows_main.h"
 #include "shared.h"
-
 #include "windows_opengl.h"
-global_variable Opengl opengl = {};
-// NOTE(Fermin): I don't think these should be global. Think where they fit.
-global_variable Render_Buffer render_buffer = {};
 
-global_variable LPDIRECTSOUNDBUFFER secondary_buffer; // TODO: this goes in the platform struct?
+global_variable Opengl opengl = {};
+#include "windows_opengl.cpp"
+
+// NOTE(Fermin): Start moving these globals to where they belong
+global_variable Render_Buffer render_buffer = {};
+global_variable LPDIRECTSOUNDBUFFER secondary_buffer;
 global_variable u32 bytes_per_pixel = 4;
 global_variable b32 win32_running;
 global_variable f32 global_perf_count_frequency;
-
-#include "windows_opengl.cpp"
-
 global_variable Win32_Offscreen_Buffer global_back_buffer;
 
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
@@ -121,7 +120,6 @@ win32_init_opengl(HWND window)
     {
         invalid_code_path
     }
-    ReleaseDC(window, window_dc);
 }
 
 static void
@@ -316,6 +314,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
         // If we uncap fps this is negligible.
         time_block("SwapBuffers");
         SwapBuffers(device_context);
+		//SwapBuffers(wglGetCurrentDC());
     }
 }
 
@@ -327,10 +326,6 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
 
     switch(message)
     {
-        case WM_SIZE:
-        {
-        } break;
-
         case WM_CLOSE:
         {
             win32_running = 0;
@@ -694,7 +689,7 @@ int main()
     win32_resize_DIB_section(1920, 1080);
 
     WNDCLASS window_class = {};
-    window_class.style = CS_HREDRAW|CS_VREDRAW;
+    window_class.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
     window_class.lpfnWndProc = win32_main_window_callback;
     window_class.hInstance = GetModuleHandle(0);
     window_class.hCursor = LoadCursor(0, IDC_ARROW);
@@ -724,7 +719,6 @@ int main()
             i32 monitor_refresh_hz = 60;
             HDC refresh_dc = GetDC(window);
             i32 win32_refresh_rate = GetDeviceCaps(refresh_dc, VREFRESH);
-            ReleaseDC(window, refresh_dc);
             if(win32_refresh_rate > 1)
             {
                 monitor_refresh_hz = win32_refresh_rate;
@@ -775,7 +769,7 @@ int main()
             game_memory.wall_texture_id      = wall_texture_id;
             game_memory.roof_texture_id      = roof_texture_id;
             game_memory.highlight_texture_id = highlight_texture_id;
-            game_memory.dude_texture_id = dude_texture_id;
+            game_memory.dude_texture_id      = dude_texture_id;
 			
             init_font(&game_memory.debug_font_consola, "src\\misc\\assets\\consola.font");
 
@@ -787,8 +781,8 @@ int main()
             LARGE_INTEGER last_counter = win32_get_wallclock();
 			LARGE_INTEGER flip_wall_clock = win32_get_wallclock();
             f32 target_seconds_per_frame = (f32)expected_frames_per_update / (f32)game_update_hz;
-            // NOTE(Fermin): This is the main loop
-            while(win32_running)
+
+            while(win32_running) // NOTE(Fermin): main loop
             {
                 new_input->dt_in_seconds = target_seconds_per_frame;
 
@@ -908,7 +902,6 @@ int main()
 
                 HDC device_context = GetDC(window);
                 win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
-                ReleaseDC(window, device_context);
 
 				*old_input = *new_input;
 

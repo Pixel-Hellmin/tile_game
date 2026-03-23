@@ -1,3 +1,5 @@
+#include "windows_opengl.h"
+
 static Opengl_Info
 opengl_get_info(b32 modern_context)
 {
@@ -294,7 +296,9 @@ opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
     M4 ortho = {};
     ortho = orthogonal((f32)window_width, (f32)window_height);
 
+	printf("width %i, height %i\n", window_width, window_height);
     glViewport(0, 0, window_width, window_height);
+	//glScissor(0, 0, window_width, window_height);
 
     //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
 
@@ -303,7 +307,7 @@ opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
     glDepthFunc(GL_LEQUAL); // GL_LESS
 
     glEnable(GL_TEXTURE_2D);
-    glEnable(GL_SCISSOR_TEST);
+    //glEnable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -315,7 +319,6 @@ opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
         
     glUniform1i(opengl.texture_sampler_id, 0);
 
-    // NOTE(Fermin): Renders the world tiles
     ortho.m[2].w = 1.0f; // Enables perspective divide by z
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
 

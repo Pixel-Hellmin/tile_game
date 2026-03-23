@@ -39,20 +39,20 @@ typedef GLuint Gl_Create_Program(void);
 typedef GLuint Gl_Create_Shader(GLenum type);
 typedef GLint  Gl_Get_Uniform_Location(GLuint program, const GLchar *name);
 
-global_variable Gl_Attach_Shader *glAttachShader;
-global_variable Gl_Compile_Shader *glCompileShader;
-global_variable Gl_Create_Program *glCreateProgram;
-global_variable Gl_Create_Shader *glCreateShader;
-global_variable Gl_Link_Program *glLinkProgram;
-global_variable Gl_Shader_Source *glShaderSource;
-global_variable Gl_Use_Program *glUseProgram;
-global_variable Gl_Validate_Program *glValidateProgram;
-global_variable Gl_Get_Programiv *glGetProgramiv;
-global_variable Gl_Get_Shader_Info_Log *glGetShaderInfoLog;
-global_variable Gl_Get_Program_Info_Log *glGetProgramInfoLog;
-global_variable Gl_Get_Uniform_Location *glGetUniformLocation;
-global_variable Gl_Uniform_Matrix_4vf *glUniformMatrix4fv;
-global_variable Gl_Uniform_1i *glUniform1i;
+global_variable Gl_Attach_Shader			*glAttachShader;
+global_variable Gl_Compile_Shader			*glCompileShader;
+global_variable Gl_Create_Program			*glCreateProgram;
+global_variable Gl_Create_Shader			*glCreateShader;
+global_variable Gl_Link_Program				*glLinkProgram;
+global_variable Gl_Shader_Source			*glShaderSource;
+global_variable Gl_Use_Program				*glUseProgram;
+global_variable Gl_Validate_Program		    *glValidateProgram;
+global_variable Gl_Get_Programiv			*glGetProgramiv;
+global_variable Gl_Get_Shader_Info_Log		*glGetShaderInfoLog;
+global_variable Gl_Get_Program_Info_Log		*glGetProgramInfoLog;
+global_variable Gl_Get_Uniform_Location 	*glGetUniformLocation;
+global_variable Gl_Uniform_Matrix_4vf	    *glUniformMatrix4fv;
+global_variable Gl_Uniform_1i				*glUniform1i;
 global_variable Gl_Tex_Image_2D_Multisample *glTexImage2DMultisample;
  
 struct Opengl {
