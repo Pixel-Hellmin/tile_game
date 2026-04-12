@@ -1,9 +1,11 @@
 #if !defined(GAME_H)
 
 #include "platform.h"
+#include "shared.h"
 #include "random.h"
 #include <cstdio>
 #include <stdarg.h> // move to shared?
+#include "asset.h"
 
 union Tile
 {
@@ -97,6 +99,9 @@ struct Game_State
 	// NOTE(Fermin): We only push Rects to these buffers
 	Render_Buffer tiles_buffer;
 	Render_Buffer ui_buffer;
+
+	u32 test_sample_index;
+	Loaded_Sound test_sound;
 };
 
 inline b32

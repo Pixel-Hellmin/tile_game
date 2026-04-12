@@ -1,4 +1,5 @@
 #include "game.h"
+#include "asset.cpp"
 
 static void
 set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Render_Buffer *render_buffer)
@@ -412,6 +413,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		tiles_buffer->cached = tiles_buffer->count; // NOTE(Fermin): Cache the level
 
 		set_flag(game_state, game_state_flag_prints);
+
+		game_state->test_sound = DEBUG_load_WAV("src\\misc\\assets\\sounds\\test_music.wav");
         game_state->initialized = 1;
     }
 
@@ -636,31 +639,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
 {
-#define Tau32 6.28318530717958647692f
-	static float tsine = 0.0f;
-    i16 tone_volume = 3000;
-	i32 tone_hz = 400;
-    int wave_period = sound_buffer->samples_per_second / tone_hz;
+	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
 
     i16 *sample_out = sound_buffer->samples;
     for(int sample_index = 0;
         sample_index < sound_buffer->sample_count;
         ++sample_index)
     {
-#if 0
-        float sine_value = sinf(tsine);
-        i16 sample_value = (i16)(sine_value * tone_volume);
-#else
-        i16 sample_value = 0;
-#endif
-        *sample_out++ = sample_value;
-        *sample_out++ = sample_value;
-#if 0
-        tsine += Tau32*1.0f/(float)wave_period;
-        if(tsine > Tau32)
-        {
-            tsine -= Tau32;
-        }
-#endif
+		u32 test_sound_sample_index = (game_state->test_sample_index + sample_index) %
+			game_state->test_sound.sample_count;
+		i16 sample_value = game_state->test_sound.samples[0][test_sound_sample_index];
+		*sample_out++ = sample_value;
+		*sample_out++ = sample_value;
     }
+
+	game_state->test_sample_index += sound_buffer->sample_count;
 }

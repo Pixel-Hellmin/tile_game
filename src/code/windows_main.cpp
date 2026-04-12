@@ -727,6 +727,7 @@ int main()
 
             Win32_Sound_Output sound_output = {};
             sound_output.samples_per_second = 48000;
+            sound_output.samples_per_second = 41100; // TODO(Fermin): Get 48000 sound sample
             sound_output.bytes_per_sample = sizeof(i16)*2;
             sound_output.secondary_buffer_size = sound_output.samples_per_second * sound_output.bytes_per_sample;
             sound_output.safety_bytes = (i32)(((float)sound_output.samples_per_second * (float)sound_output.bytes_per_sample / game_update_hz) / 3.0f);
@@ -881,7 +882,7 @@ int main()
 					sound_buffer.samples_per_second = sound_output.samples_per_second;
 					sound_buffer.sample_count = bytes_to_write / sound_output.bytes_per_sample;
 					sound_buffer.samples = samples;
-                    game.get_sound_samples(&sound_buffer);
+                    game.get_sound_samples(&game_memory, &sound_buffer);
 
 					DWORD unwrapped_write_cursor = write_cursor;
 					if(unwrapped_write_cursor < play_cursor)

@@ -296,7 +296,6 @@ opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
     M4 ortho = {};
     ortho = orthogonal((f32)window_width, (f32)window_height);
 
-	printf("width %i, height %i\n", window_width, window_height);
     glViewport(0, 0, window_width, window_height);
 	//glScissor(0, 0, window_width, window_height);
 
