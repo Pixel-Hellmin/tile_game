@@ -103,6 +103,7 @@ struct Game_Memory
 {
 	// USE this instead of all the buffers in win layer
     Buffer permanent_storage; // REQUIRED to be cleared to zero at startup
+    Buffer temporary_storage; // REQUIRED to be cleared to zero at startup
 
 	i32 window_width;
 	i32 window_height;

@@ -763,7 +763,8 @@ int main()
 			Input_Keys *old_input = &input[1];
 
 			Game_Memory game_memory = {};
-            game_memory.permanent_storage = allocate_buffer(gigabytes(2));
+            game_memory.permanent_storage = allocate_buffer(gigabytes(3));
+            game_memory.temporary_storage = allocate_buffer(gigabytes(1));
 
 			// NOTE(Fermin): Figure out what to do with game assets
             game_memory.floor_texture_id     = floor_texture_id;

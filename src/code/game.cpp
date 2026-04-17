@@ -359,6 +359,63 @@ reset_non_cached_memory(Render_Buffer *buffer)
 	buffer->count = buffer->cached;
 }
 
+static Playing_Sound*
+push_sound(Render_Buffer *sound_buffer)
+{
+    // NOTE(Fermin): Check if we have enough space for another Playing_Sound
+    assert((sound_buffer->count+1) * sizeof(Playing_Sound) <= sound_buffer->buffer.count);
+
+    Playing_Sound *pushed_sound = (Playing_Sound *)sound_buffer->buffer.data + sound_buffer->count++;
+
+    return pushed_sound;
+}
+
+static Playing_Sound*
+play_sound(Game_State *game_state, Render_Buffer *sound_buffer, Loaded_Sound *sound_id)
+{
+	// NOTE(Fermin): Move this to audio.cpp?
+	// Create the idea of sound ids instead of Loaded_Sound
+	if(!game_state->first_free_playing_sound)
+	{
+		game_state->first_free_playing_sound = push_sound(sound_buffer);
+		game_state->first_free_playing_sound->next = 0;
+	}
+
+	Playing_Sound *playing_sound = game_state->first_free_playing_sound;
+	game_state->first_free_playing_sound = playing_sound->next;
+
+	playing_sound->samples_played = 0;
+	playing_sound->volume[0] = 1.0f;
+	playing_sound->volume[1] = 1.0f;
+	playing_sound->id = sound_id;
+
+	playing_sound->next = game_state->first_playing_sound;
+	game_state->first_playing_sound = playing_sound;
+
+	return playing_sound;
+}
+
+static void
+partition_memory(Game_State *game_state, Game_Memory *game_memory)
+{
+	size_t total_memory_partitioned = sizeof(Game_State);
+
+	game_state->tiles_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
+	game_state->tiles_buffer.buffer.count = gigabytes(1);
+	total_memory_partitioned += game_state->tiles_buffer.buffer.count;
+
+	game_state->ui_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
+	game_state->ui_buffer.buffer.count = gigabytes(1);
+	total_memory_partitioned += game_state->ui_buffer.buffer.count;
+
+	game_state->sound_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
+	game_state->sound_buffer.buffer.count = game_memory->permanent_storage.count - total_memory_partitioned;
+	total_memory_partitioned += game_state->sound_buffer.buffer.count;
+
+	size_t total_memory_available = game_memory->permanent_storage.count;
+	assert(total_memory_partitioned == total_memory_available)
+}
+
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -374,6 +431,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
 	Render_Buffer *tiles_buffer = &game_state->tiles_buffer;
 	Render_Buffer *ui_buffer = &game_state->ui_buffer;
+	Render_Buffer *sound_buffer = &game_state->sound_buffer;
 	Tile *dude = &game_state->dude;
 	debug_print_font = &game_memory->debug_font_consola;
 
@@ -400,14 +458,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		dude->dim_in_tiles = V2{1.0f, 1.0f};
 		dude->texture_id = game_memory->dude_texture_id;
 
-		tiles_buffer->buffer.data = (u8 *)(game_memory->permanent_storage.data + sizeof(Game_State));
-		tiles_buffer->buffer.count = gigabytes(1);
-
-		ui_buffer->buffer.data = (u8 *)(game_memory->permanent_storage.data + sizeof(Game_State) + tiles_buffer->buffer.count);
-		ui_buffer->buffer.count = game_memory->permanent_storage.count - sizeof(Game_State) - tiles_buffer->buffer.count;
-
-		// NOTE(Fermin): End of memory partition
-		assert((sizeof(Game_State) + tiles_buffer->buffer.count + ui_buffer->buffer.count) == game_memory->permanent_storage.count)
+		partition_memory(game_state, game_memory);
 
         generate_level(game_state, tiles_buffer, map_z);
 		tiles_buffer->cached = tiles_buffer->count; // NOTE(Fermin): Cache the level
@@ -492,6 +543,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         {
             game_state->editing_tile = 0;
         }
+
+		// nocheckin
+		play_sound(game_state, sound_buffer, &game_state->test_sound);
     }
 
     // NOTE(Fermin): Experimental particle system logic START
@@ -641,17 +695,94 @@ extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
 {
 	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
 
-    i16 *sample_out = sound_buffer->samples;
-    for(int sample_index = 0;
-        sample_index < sound_buffer->sample_count;
-        ++sample_index)
-    {
-		u32 test_sound_sample_index = (game_state->test_sample_index + sample_index) %
-			game_state->test_sound.sample_count;
-		i16 sample_value = game_state->test_sound.samples[0][test_sound_sample_index];
-		*sample_out++ = sample_value;
-		*sample_out++ = sample_value;
-    }
+	void *temp_storage = (void *)game_memory->temporary_storage.data;
+	assert(game_memory->temporary_storage.count >= (sizeof(f32) * sound_buffer->sample_count * 2.0f))
+	f32 *real_channel_0 = (f32 *)temp_storage;
+	f32 *real_channel_1 = real_channel_0 + sizeof(f32)*sound_buffer->sample_count;
+	assert((real_channel_1 - real_channel_0) == (sizeof(f32) * sound_buffer->sample_count))
 
-	game_state->test_sample_index += sound_buffer->sample_count;
+	// Clear out the mixer channels
+	{
+		f32 *dest_0 = real_channel_0;
+		f32 *dest_1 = real_channel_1;
+		for(i32 sample_index = 0;
+			sample_index < sound_buffer->sample_count;
+			++sample_index)
+		{
+			*dest_0++ = 0.0f;
+			*dest_1++ = 0.0f;
+		}
+	}
+
+	// Sum all sounds
+	for(Playing_Sound **playing_sound_ptr = &game_state->first_playing_sound;
+		*playing_sound_ptr;
+		)
+	{
+		Playing_Sound *playing_sound = *playing_sound_ptr;
+		b32 sound_finished = false;
+
+		Loaded_Sound *loaded_sound = playing_sound->id;
+		if(loaded_sound)
+		{
+			// TODO: handle stereo
+			f32 volume_0 = playing_sound->volume[0];
+			f32 volume_1 = playing_sound->volume[1];
+			f32 *dest_0 = real_channel_0;
+			f32 *dest_1 = real_channel_1;
+
+			assert(playing_sound->samples_played >= 0);
+
+			u32 samples_to_mix = sound_buffer->sample_count;
+			u32 samples_remaining_in_sound = loaded_sound->sample_count - playing_sound->samples_played;
+			if(samples_to_mix > samples_remaining_in_sound)
+			{
+				samples_to_mix = samples_remaining_in_sound;
+			}
+
+			for(u32 sample_index = playing_sound->samples_played;
+				sample_index < (playing_sound->samples_played + samples_to_mix);
+				++sample_index)
+			{
+				f32 sample_value = loaded_sound->samples[0][sample_index];
+				// NOTE(Fermin): We are clipping. Probably over +-32k.
+				*dest_0++ += volume_0 * sample_value;
+				*dest_1++ += volume_1 * sample_value;
+			}
+
+			// NOTE: Shouldnt we add samples played before checking if its finished?
+			// This will keep the Playing_Sound for one more frame before freeing it. Why?
+			sound_finished = ((u32)playing_sound->samples_played == loaded_sound->sample_count);
+			playing_sound->samples_played += samples_to_mix;
+		}
+		else
+		{
+			// TODO: handle playing not loaded sound
+		}
+
+		if(sound_finished)
+		{
+			*playing_sound_ptr = playing_sound->next;
+			playing_sound->next = game_state->first_free_playing_sound;
+			game_state->first_free_playing_sound = playing_sound;
+		}
+		else
+		{
+			playing_sound_ptr = &playing_sound->next;
+		}
+	}
+
+	// convert to 16-bit
+	{
+		f32 *source_0 = real_channel_0;
+		f32 *source_1 = real_channel_1;
+		i16 *sample_out = sound_buffer->samples;
+		for(int sample_index = 0;
+			sample_index < sound_buffer->sample_count;
+			++sample_index)
+		{
+			*sample_out++ = (i16)(*source_0++ + 0.5f);
+			*sample_out++ = (i16)(*source_1++ + 0.5f);
+		}
+	}
 }

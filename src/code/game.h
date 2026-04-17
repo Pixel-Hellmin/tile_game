@@ -63,6 +63,14 @@ struct Particle
     f32 d_rotation;
 };
 
+struct Playing_Sound
+{
+	f32 volume[2];
+	Loaded_Sound *id; // TODO: Stop using *Loaded_Sound and use an ID
+	i32 samples_played;
+	Playing_Sound *next;
+};
+
 struct Game_State
 {
     Random_Series entropy;
@@ -96,12 +104,16 @@ struct Game_State
 
 	Tile dude;
 
-	// NOTE(Fermin): We only push Rects to these buffers
+	// NOTE(Fermin): We only push Tiles to these buffers
+	// This is bad, lets work on a general solution for memory
 	Render_Buffer tiles_buffer;
 	Render_Buffer ui_buffer;
+	Render_Buffer sound_buffer;
 
-	u32 test_sample_index;
 	Loaded_Sound test_sound;
+
+	Playing_Sound *first_playing_sound;
+	Playing_Sound *first_free_playing_sound;
 };
 
 inline b32
