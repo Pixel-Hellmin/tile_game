@@ -781,8 +781,8 @@ extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
 			sample_index < sound_buffer->sample_count;
 			++sample_index)
 		{
-			*sample_out++ = (i16)(*source_0++ + 0.5f);
-			*sample_out++ = (i16)(*source_1++ + 0.5f);
+			*sample_out++ = (i16)clamp(-32768.0f, *source_0++ + 0.5f, 32767.0f);
+			*sample_out++ = (i16)clamp(-32768.0f, *source_1++ + 0.5f, 32767.0f);
 		}
 	}
 }
