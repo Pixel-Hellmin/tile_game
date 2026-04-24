@@ -4,7 +4,7 @@
 
 struct Buffer
 {
-    size_t count; // bytes
+    size_t size; // bytes
     u8 *data;
 };
 
@@ -14,7 +14,7 @@ static Buffer allocate_buffer(size_t count)
     result.data = (u8 *)VirtualAlloc(0, count, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
     if(result.data)
     {
-        result.count = count;
+        result.size = count;
     }
     else
     {

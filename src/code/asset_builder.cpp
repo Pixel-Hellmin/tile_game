@@ -39,10 +39,10 @@ static Buffer read_file(const char *file_name)
 
     if (result.data)
     {
-        size_t bytes_read = fread(result.data, sizeof(char), result.count, file);
-        if ((bytes_read + 1) != result.count)
+        size_t bytes_read = fread(result.data, sizeof(char), result.size, file);
+        if ((bytes_read + 1) != result.size)
         {
-            fprintf(stderr, "Error: Failed to read %s\nfile_size: %zu, bytes_read: %zu\n", file_name, result.count, bytes_read);
+            fprintf(stderr, "Error: Failed to read %s\nfile_size: %zu, bytes_read: %zu\n", file_name, result.size, bytes_read);
 
             free_buffer(&result);
             fclose(file);
@@ -51,7 +51,7 @@ static Buffer read_file(const char *file_name)
         }
 
         // Null-terminate the buffer
-        result.data[result.count] = '\0';
+        result.data[result.size] = '\0';
     }
     else
     {

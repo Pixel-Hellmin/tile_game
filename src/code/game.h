@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <stdarg.h> // move to shared?
 #include "asset.h"
+#include "audio.h"
 
 union Tile
 {
@@ -63,14 +64,6 @@ struct Particle
     f32 d_rotation;
 };
 
-struct Playing_Sound
-{
-	f32 volume[2];
-	Loaded_Sound *id; // TODO: Stop using *Loaded_Sound and use an ID
-	i32 samples_played;
-	Playing_Sound *next;
-};
-
 struct Game_State
 {
     Random_Series entropy;
@@ -108,12 +101,10 @@ struct Game_State
 	// This is bad, lets work on a general solution for memory
 	Render_Buffer tiles_buffer;
 	Render_Buffer ui_buffer;
-	Render_Buffer sound_buffer;
 
 	Loaded_Sound test_sound;
-
-	Playing_Sound *first_playing_sound;
-	Playing_Sound *first_free_playing_sound;
+	Playing_Sound *test_music;
+	Game_Audio_State audio_state;
 };
 
 inline b32
@@ -199,7 +190,7 @@ push_quad(Render_Buffer *render_buffer, V3 *corners, u32 texture_id, V4 color)
     u32 result = render_buffer->count;
 
     // NOTE(Fermin): Check if we have enough space for another Quad
-    assert((result+1) * sizeof(Quad) <= render_buffer->buffer.count);
+    assert((result+1) * sizeof(Quad) <= render_buffer->buffer.size);
 
     Quad *pushed_quad = (Quad *)render_buffer->buffer.data + render_buffer->count++;
     pushed_quad->corners[0] = corners[0];
@@ -221,7 +212,7 @@ push_tile(Render_Buffer *render_buffer, Tile *tile, V4 color = {1.0, 1.0, 1.0, 1
     u32 result = render_buffer->count;
 
     // NOTE(Fermin): Check if we have enough space for another Tile
-    assert((result+1) * sizeof(Tile) <= render_buffer->buffer.count);
+    assert((result+1) * sizeof(Tile) <= render_buffer->buffer.size);
 
     Tile *pushed_tile = (Tile *)render_buffer->buffer.data + render_buffer->count++;
     pushed_tile->world_index = tile->world_index;
