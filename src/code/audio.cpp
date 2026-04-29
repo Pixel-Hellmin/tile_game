@@ -1,3 +1,9 @@
+static void
+change_pitch(Game_Audio_State *audio_state, Playing_Sound *sound, f32 dsample)
+{
+	sound->dsample = dsample;
+}
+
 static Playing_Sound*
 push_sound(Render_Buffer *sound_buffer)
 {
@@ -22,10 +28,11 @@ play_sound(Game_Audio_State *audio_state, Loaded_Sound *sound_id)
 	Playing_Sound *playing_sound = audio_state->first_free_playing_sound;
 	audio_state->first_free_playing_sound = playing_sound->next;
 
-	playing_sound->samples_played = 0;
+	playing_sound->samples_played = 0.0f;
 	playing_sound->current_volume = playing_sound->target_volume = V2{1.0f, 1.0f};
 	playing_sound->dcurrent_volume_per_second = V2{0.0f, 0.0f};
 	playing_sound->id = sound_id;
+	playing_sound->dsample = 1.0f;
 
 	playing_sound->next = audio_state->first_playing_sound;
 	audio_state->first_playing_sound = playing_sound;
@@ -84,13 +91,17 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 			// TODO: handle stereo
 			V2 current_volume = playing_sound->current_volume;
 			V2 dvolume_per_sample = playing_sound->dcurrent_volume_per_second * seconds_per_sample;
+			f32 dsample = playing_sound->dsample;
+
 			f32 *dest_0 = real_channel_0;
 			f32 *dest_1 = real_channel_1;
 
-			assert(playing_sound->samples_played >= 0);
+			assert(playing_sound->samples_played >= 0.0f);
 
 			u32 samples_to_mix = sound_output_buffer->sample_count;
-			u32 samples_remaining_in_sound = loaded_sound->sample_count - playing_sound->samples_played;
+			f32 real_samples_remaining_in_sound =
+				(loaded_sound->sample_count - round_f32_to_i32(playing_sound->samples_played)) / dsample;
+			u32 samples_remaining_in_sound = round_f32_to_i32(real_samples_remaining_in_sound);
 			if(samples_to_mix > samples_remaining_in_sound)
 			{
 				samples_to_mix = samples_remaining_in_sound;
@@ -114,15 +125,30 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 				}
 			}
 
-			for(u32 sample_index = playing_sound->samples_played;
-				sample_index < (playing_sound->samples_played + samples_to_mix);
-				++sample_index)
+			f32 sample_position = playing_sound->samples_played;
+			for(u32 loop_index = 0;
+				loop_index < samples_to_mix;
+				++loop_index)
 			{
+				// NOTE(Fermin): Can't tell the difference between these two
+#if 1
+				// NOTE(Fermin): We interpolate between samples for pitch shift.
+				u32 sample_index = floor_f32_to_i32(sample_position);
+				f32 frac = sample_position - (f32)sample_index;
+				f32 sample_0 = (f32)loaded_sound->samples[0][sample_index];
+				f32 sample_1 = (f32)loaded_sound->samples[0][sample_index + 1];
+				f32 sample_value = lerp(sample_0, frac, sample_1);
+#else
+				// NOTE(Fermin): We don't interpolate between samples.
+				u32 sample_index = round_f32_to_i32(sample_position);
 				f32 sample_value = loaded_sound->samples[0][sample_index];
+#endif
+
 				*dest_0++ += audio_state->master_volume.e[0] * current_volume.e[0] * sample_value;
 				*dest_1++ += audio_state->master_volume.e[1] * current_volume.e[1] * sample_value;
 
 				current_volume += dvolume_per_sample;
+				sample_position += dsample;
 			}
 
 			playing_sound->current_volume = current_volume;
@@ -141,8 +167,8 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 
 			// NOTE: Shouldnt we add samples played before checking if its finished?
 			// This will keep the Playing_Sound for one more frame before freeing it. Why?
-			sound_finished = ((u32)playing_sound->samples_played == loaded_sound->sample_count);
-			playing_sound->samples_played += samples_to_mix;
+			sound_finished = (round_f32_to_i32(playing_sound->samples_played) == loaded_sound->sample_count);
+			playing_sound->samples_played = sample_position;
 		}
 		else
 		{

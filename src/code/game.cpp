@@ -436,6 +436,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         game_state->initialized = 1;
     }
+	change_pitch(&game_state->audio_state, game_state->test_music, 1.1f);
 
 	game_state->window_width = game_memory->window_width;
 	game_state->window_height = game_memory->window_height;

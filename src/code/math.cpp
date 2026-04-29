@@ -1,5 +1,6 @@
 #if !defined(MATH_CPP)
 
+// TODO(Fermin): Remove cmath
 #include <cmath>
 
 // NOTE(Fermin): This is the start of the code that should go in an intrinsics file
@@ -16,6 +17,14 @@ i32 round_f32_to_i32(f32 float32)
     i32 result = (i32)(float32 + 0.5f);
     return result;
 }
+
+static inline
+i32 floor_f32_to_i32(f32 float32)
+{
+    i32 result = (i32)floorf(float32);
+    return result;
+}
+
 // NOTE(Fermin): THis is the end of the intrinsics file
 inline f32
 lerp(f32 a, f32 t, f32 b)

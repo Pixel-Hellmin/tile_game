@@ -176,6 +176,10 @@ win32_init_dsound(HWND window, i32 samples_per_second, i32 buffer_size)
 			DSBUFFERDESC buffer_description = {};
 			buffer_description.dwSize = sizeof(buffer_description);
 			buffer_description.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
+#if 1
+			// NOTE(Fermin): Play audio when app is not focused. Toggleable setting?
+			buffer_description.dwFlags |= DSBCAPS_GLOBALFOCUS;
+#endif
 			buffer_description.dwBufferBytes = buffer_size;
 			buffer_description.lpwfxFormat = &wave_format;
 			HRESULT error = direct_sound->CreateSoundBuffer(&buffer_description, &secondary_buffer, 0);

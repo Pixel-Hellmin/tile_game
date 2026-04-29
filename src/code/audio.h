@@ -4,13 +4,15 @@
 
 struct Playing_Sound
 {
-	// NOTE(Fermin): Left and right channels
+	// NOTE(Fermin): V2 are the Left and right channels
 	V2 current_volume;
 	V2 dcurrent_volume_per_second;
 	V2 target_volume;
 
+	f32 dsample;
+
 	Loaded_Sound *id; // TODO: Stop using *Loaded_Sound and use an ID
-	i32 samples_played;
+	f32 samples_played;
 	Playing_Sound *next;
 };
 
