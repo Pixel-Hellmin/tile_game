@@ -3,6 +3,11 @@
 #include <cstdint>
 #include <cstdio>
 
+// NOTE(Fermin): Intel Intrinsics Guide
+// NOTE(Fermin): support others?
+#include <xmmintrin.h>
+#include <emmintrin.h>
+
 typedef int16_t    i16;
 typedef int32_t    i32;
 typedef int64_t    i64;
@@ -28,6 +33,8 @@ typedef int32_t    b32;
 #define assert(expression) if(!(expression)) {*(int *)0 = 0;}
 #define invalid_code_path assert(!"invalid_code_path")
 #define array_count(array) (sizeof(array) / sizeof((array)[0]))
+#define align_pow2(value, alignment) ((value + ((alignment) - 1)) & ~((alignment) - 1))
+#define align4(value) align_pow2(value, 4)
 
 // NOTE(Fermin): This is used to store u32 as a (void *) type.
 // Not actual pointers, useful when using u32 and pointers as

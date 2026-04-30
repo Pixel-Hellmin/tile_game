@@ -12,7 +12,7 @@ struct Playing_Sound
 	f32 dsample;
 
 	Loaded_Sound *id; // TODO: Stop using *Loaded_Sound and use an ID
-	f32 samples_played;
+	f32 samples_played; // NOTE: Should this be f64
 	Playing_Sound *next;
 };
 

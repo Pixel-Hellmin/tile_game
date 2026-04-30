@@ -743,7 +743,8 @@ int main()
 			b32 sound_is_valid = false;
 
 			// TODO(Fermin): Place this where it makes sense
-			i16 *samples = (i16 *)VirtualAlloc(0, sound_output.secondary_buffer_size,
+			u32 max_possible_overrun = 2 * 4 * sizeof(u16);
+			i16 *samples = (i16 *)VirtualAlloc(0, sound_output.secondary_buffer_size + max_possible_overrun,
 											   MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 
             win32_running = 1;

@@ -1,6 +1,8 @@
 static void
 change_pitch(Game_Audio_State *audio_state, Playing_Sound *sound, f32 dsample)
 {
+	// NOTE(Fermin): To avoid precision errors we should try to switch the
+	// pitch by a power of 2.
 	sound->dsample = dsample;
 }
 
@@ -58,22 +60,32 @@ change_volume(Playing_Sound *sound, f32 fade_duration_in_seconds, V2 volume)
 static void
 output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *sound_output_buffer, void *temp_storage)
 {
-	f32 *real_channel_0 = (f32 *)temp_storage;
-	f32 *real_channel_1 = real_channel_0 + sizeof(f32)*sound_output_buffer->sample_count;
-	assert((real_channel_1 - real_channel_0) == (sizeof(f32) * sound_output_buffer->sample_count))
+	u32 sample_count_4_aligned = align4(sound_output_buffer->sample_count);
+	u32 sample_count_by_4 = sample_count_4_aligned / 4;
+
+	// TODO(Fermin): Memory_Arena
+	size_t alignment_offset = get_alignment_offset((size_t)temp_storage, 4);
+	__m128 *real_channel_0 = (__m128 *)(((size_t *)temp_storage) + alignment_offset);
+	__m128 *real_channel_1 = real_channel_0 + sizeof(__m128)*sample_count_by_4;
+
+	//f32 *real_channel_0 = (f32 *)(((size_t *)temp_storage) + alignment_offset);
+	//f32 *real_channel_1 = real_channel_0 + sizeof(f32)*sound_output_buffer->sample_count;
+
+	assert((real_channel_1 - real_channel_0) == (sizeof(__m128) * sample_count_by_4))
 
 	f32 seconds_per_sample = 1.0f / (f32)sound_output_buffer->samples_per_second;
 
 	// Clear out the mixer channels
+	__m128 zero = _mm_set1_ps(0.0f);
 	{
-		f32 *dest_0 = real_channel_0;
-		f32 *dest_1 = real_channel_1;
-		for(i32 sample_index = 0;
-			sample_index < sound_output_buffer->sample_count;
+		__m128 *dest_0 = real_channel_0;
+		__m128 *dest_1 = real_channel_1;
+		for(u32 sample_index = 0;
+			sample_index < sample_count_by_4;
 			++sample_index)
 		{
-			*dest_0++ = 0.0f;
-			*dest_1++ = 0.0f;
+			_mm_store_ps((float *)dest_0++, zero);
+			_mm_store_ps((float *)dest_1++, zero);
 		}
 	}
 
@@ -93,8 +105,8 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 			V2 dvolume_per_sample = playing_sound->dcurrent_volume_per_second * seconds_per_sample;
 			f32 dsample = playing_sound->dsample;
 
-			f32 *dest_0 = real_channel_0;
-			f32 *dest_1 = real_channel_1;
+			f32 *dest_0 = (f32 *)real_channel_0;
+			f32 *dest_1 = (f32 *)real_channel_1;
 
 			assert(playing_sound->samples_played >= 0.0f);
 
@@ -125,13 +137,12 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 				}
 			}
 
-			f32 sample_position = playing_sound->samples_played;
 			for(u32 loop_index = 0;
 				loop_index < samples_to_mix;
 				++loop_index)
 			{
-				// NOTE(Fermin): Can't tell the difference between these two
-#if 1
+				f32 sample_position = playing_sound->samples_played + (loop_index * dsample);
+#if 1			// NOTE(Fermin): Can't tell the difference between these two
 				// NOTE(Fermin): We interpolate between samples for pitch shift.
 				u32 sample_index = floor_f32_to_i32(sample_position);
 				f32 frac = sample_position - (f32)sample_index;
@@ -148,7 +159,6 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 				*dest_1++ += audio_state->master_volume.e[1] * current_volume.e[1] * sample_value;
 
 				current_volume += dvolume_per_sample;
-				sample_position += dsample;
 			}
 
 			playing_sound->current_volume = current_volume;
@@ -165,10 +175,9 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 				}
 			}
 
-			// NOTE: Shouldnt we add samples played before checking if its finished?
-			// This will keep the Playing_Sound for one more frame before freeing it. Why?
-			sound_finished = (round_f32_to_i32(playing_sound->samples_played) == loaded_sound->sample_count);
-			playing_sound->samples_played = sample_position;
+			playing_sound->samples_played += samples_to_mix * dsample;
+			sound_finished = ((u32)playing_sound->samples_played == loaded_sound->sample_count);
+			assert((u32)playing_sound->samples_played <= loaded_sound->sample_count)
 		}
 		else
 		{
@@ -189,15 +198,32 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 
 	// convert to 16-bit
 	{
-		f32 *source_0 = real_channel_0;
-		f32 *source_1 = real_channel_1;
-		i16 *sample_out = sound_output_buffer->samples;
-		for(int sample_index = 0;
-			sample_index < sound_output_buffer->sample_count;
+		__m128 *source_0 = real_channel_0;
+		__m128 *source_1 = real_channel_1;
+
+		__m128i *sample_out = (__m128i *)sound_output_buffer->samples;
+		for(u32 sample_index = 0;
+			sample_index < sample_count_by_4;
 			++sample_index)
 		{
-			*sample_out++ = (i16)clamp(-32768.0f, *source_0++ + 0.5f, 32767.0f);
-			*sample_out++ = (i16)clamp(-32768.0f, *source_1++ + 0.5f, 32767.0f);
+			// load
+			__m128 s0 = _mm_load_ps((f32 *)source_0++);
+			__m128 s1 = _mm_load_ps((f32 *)source_1++);
+
+			// convert from float to int
+			__m128i left =  _mm_cvtps_epi32(s0);
+			__m128i right = _mm_cvtps_epi32(s1);
+
+			// unpack and interleave 32-bit ints from the low half
+			__m128i left_right0 = _mm_unpacklo_epi32(left, right);
+			// unpack and interleave 32-bit ints from the high half
+			__m128i left_right1 = _mm_unpackhi_epi32(left, right);
+
+			// convert packed 32-bit ints to packed 16-bit ints using signed saturation
+			__m128i s01 = _mm_packs_epi32(left_right0, left_right1);
+
+			// no need to clamp because convertion is saturated 
+			*sample_out++ = s01;
 		}
 	}
 }
