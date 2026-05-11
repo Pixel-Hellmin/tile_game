@@ -886,7 +886,8 @@ int main()
 
 					Game_Sound_Output_Buffer sound_buffer = {};
 					sound_buffer.samples_per_second = sound_output.samples_per_second;
-					sound_buffer.sample_count = bytes_to_write / sound_output.bytes_per_sample;
+					sound_buffer.sample_count = align_pow2((bytes_to_write / sound_output.bytes_per_sample), 4);
+					bytes_to_write = sound_buffer.sample_count * sound_output.bytes_per_sample;
 					sound_buffer.samples = samples;
                     game.get_sound_samples(&game_memory, &sound_buffer);
 
