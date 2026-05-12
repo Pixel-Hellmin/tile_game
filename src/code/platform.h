@@ -50,20 +50,9 @@ global_variable const f32 font_point_size = 64.0f;
 
 struct Quad
 {
-	// NOTE(Fermin): This is how we store tiles in the Render_Buffer.
-	// Ready to pass down to opengl
 	V3 corners[4];
 	V4 color;
 	i32 texture_id;
-};
-
-struct Render_Buffer
-{
-    // NOTE(Fermin): May need to eventually add a type here when we have more than one type of render object.
-    // For now we only store Quads.
-    u32 count;
-    u32 cached;
-    Buffer buffer;
 };
 
 struct Memory_Arena
@@ -134,7 +123,7 @@ struct Game_Memory
 	b32 debug_initialized;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Render_Buffer *render_buffer, Input_Keys *input)
+#define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Memory_Arena *render_arena, Input_Keys *input)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {

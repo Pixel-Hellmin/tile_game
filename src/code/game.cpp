@@ -19,22 +19,6 @@ set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 te
 }
 
 static void
-set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Render_Buffer *render_buffer)
-{
-    Tile *tile;
-    for(u32 x = x_start; x <= x_end; x++)
-    {
-        for(u32 y = y_start; y <= y_end; y++)
-        {
-            if(get_tile(&render_buffer->buffer, cols, rows, x, y, &tile))
-            {
-                tile->texture_id = texture_id;
-            }
-        }
-    }
-}
-
-static void
 generate_level(Game_State *game_state, f32 map_z)
 {
 #define rooms_in_x 4
@@ -294,7 +278,7 @@ generate_level(Game_State *game_state, f32 map_z)
 }
 
 static void
-render_tiles(Game_State *game_state, Render_Buffer *render_buffer)
+render_tiles(Game_State *game_state, Memory_Arena *render_arena)
 {
 	// NOTE(Fermin): @Speed - We should only render the tiles that are visible on screen
 
@@ -348,20 +332,24 @@ render_tiles(Game_State *game_state, Render_Buffer *render_buffer)
 		corners[2].xy += half_window;
 		corners[3].xy += half_window;
 
-		push_quad(render_buffer, corners, tile->texture_id, tile->color);
+		Quad *quad = push_struct(render_arena, Quad);
+		quad->corners[0] = corners[0];
+		quad->corners[1] = corners[1];
+		quad->corners[2] = corners[2];
+		quad->corners[3] = corners[3];
+		quad->texture_id = tile->texture_id;
+		quad->color = tile->color;
 	}
 }
 
 static void
-render_ui(Game_State *game_state, Render_Buffer *ui_buffer, Render_Buffer *render_buffer)
+render_ui(Game_State *game_state, Memory_Arena *render_arena)
 {
-	Tile *ui_rects = (Tile *)ui_buffer->buffer.data;
-	for(u32 index = ui_buffer->cached; index < ui_buffer->count; index++)
+	Tile *tiles = (Tile *)game_state->ui_arena.base;
+	u32 tiles_count = (u32)(game_state->ui_arena.used / sizeof(Tile));
+	for(u32 index = 0; index < tiles_count; index++)
 	{
-		// NOTE(Fermin): IMPORTANT - Its important to note here we skip all of our
-		// cached tiles. We currently do not cache any UI tiles and since we reuse
-		// the tile buffer for the ui, we need to skip the cached tiles.
-		Tile *tile = ui_rects + index;
+		Tile *tile = tiles + index;
 
 		// rotate axis. Perp.
 		V2 x_axis = V2{_cos(tile->rotation), _sin(tile->rotation)};
@@ -384,14 +372,14 @@ render_ui(Game_State *game_state, Render_Buffer *ui_buffer, Render_Buffer *rende
 		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
 		corners[3].z = origin.z;
 
-		push_quad(render_buffer, corners, tile->texture_id, tile->color);
+		Quad *quad = push_struct(render_arena, Quad);
+		quad->corners[0] = corners[0];
+		quad->corners[1] = corners[1];
+		quad->corners[2] = corners[2];
+		quad->corners[3] = corners[3];
+		quad->texture_id = tile->texture_id;
+		quad->color = tile->color;
 	}
-}
-
-static void
-reset_non_cached_memory(Render_Buffer *buffer)
-{
-	buffer->count = buffer->cached;
 }
 
 static void
@@ -401,18 +389,16 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 
 
 	initialize_arena(&game_state->world_arena, gigabytes(1),
-					 game_memory->permanent_storage.data + sizeof(Game_State));
+					 game_memory->permanent_storage.data + total_memory_partitioned);
 	total_memory_partitioned += game_state->world_arena.size;
 
-	//initialize_arena(&game_state->ui_arena, gigabytes(1),
-					 //game_state->world_arena.base + game_state->world_arena.size);
-	game_state->ui_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
-	game_state->ui_buffer.buffer.size = gigabytes(1);
-	total_memory_partitioned += game_state->ui_buffer.buffer.size;
+	initialize_arena(&game_state->ui_arena, gigabytes(1),
+					 game_memory->permanent_storage.data + total_memory_partitioned);
+	total_memory_partitioned += game_state->ui_arena.size;
 
-	game_state->audio_state.sound_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
-	game_state->audio_state.sound_buffer.buffer.size = game_memory->permanent_storage.size - total_memory_partitioned;
-	total_memory_partitioned += game_state->audio_state.sound_buffer.buffer.size;
+	initialize_arena(&game_state->audio_state.arena, (game_memory->permanent_storage.size - total_memory_partitioned),
+					 game_memory->permanent_storage.data + total_memory_partitioned);
+	total_memory_partitioned += game_state->audio_state.arena.size;
 
 	size_t total_memory_available = game_memory->permanent_storage.size;
 	assert(total_memory_partitioned == total_memory_available)
@@ -432,15 +418,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     assert(game_memory->permanent_storage.size >= sizeof(Game_State));
 	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
 	Tile *dude = &game_state->dude;
-	Render_Buffer *ui_buffer = &game_state->ui_buffer;
-	Render_Buffer *sound_buffer = &game_state->audio_state.sound_buffer;
 	debug_print_font = &game_memory->debug_font_consola;
 
-	f64 last_frame_render_buffer_used = (f64)render_buffer->count;
-	f64 last_frame_ui_buffer_used = (f64)ui_buffer->count;
-	reset_non_cached_memory(ui_buffer);
-	reset_non_cached_memory(render_buffer);
+	f64 last_frame_render_buffer_used = (f64)render_arena->used;
+	f64 last_frame_ui_buffer_used = (f64)game_state->ui_arena.used;
 	game_state->world_arena.used = game_state->world_arena.cached;
+	game_state->ui_arena.used = game_state->ui_arena.cached;
 
     if(!game_state->initialized)
     {
@@ -638,36 +621,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	// TODO(Fermin): This is better but still needs to improve.
 	// Explore a macro/const/dest implementation?
 	debug_print_line = game_state->window_height;
-	print_debug_text(ui_buffer, "[f]   [ms]");
-	print_debug_text(ui_buffer, "%i  %.3f", round_f32_to_i32(1.0f/new_input.dt_in_seconds),
+	print_debug_text(&game_state->ui_arena, "[f]   [ms]");
+	print_debug_text(&game_state->ui_arena, "%i  %.3f", round_f32_to_i32(1.0f/new_input.dt_in_seconds),
 											new_input.dt_in_seconds*1000.0f);
 
 	if(is_set(game_state, game_state_flag_prints))
 	{
-		// --------------- Tiles Buffer ---------------
-		f64 tiles_max_capacity = (f64)game_state->world_arena.size/(f64)sizeof(Tile);
-		u64 tiles_bytes = (u64)game_state->world_arena.used;
-		print_debug_text(ui_buffer, "Tiles buffer:");
-		print_debug_text(ui_buffer, "   %i/%llu Tiles", tiles_bytes/(f64)sizeof(Tile), (u64)tiles_max_capacity);
-		print_debug_text(ui_buffer, "   %llu/%zu Bytes", tiles_bytes, game_state->world_arena.size);
-
-		// --------------- UI Buffer ---------------
-		f64 ui_max_capacity = (f64)ui_buffer->buffer.size/(f64)sizeof(Tile);
-		u64 ui_render_bytes = (u64)last_frame_ui_buffer_used * (u64)sizeof(Tile);
-		print_debug_text(ui_buffer, "UI buffer:");
-		print_debug_text(ui_buffer, "   %llu/%llu Tiles", (u64)last_frame_ui_buffer_used, (u64)ui_max_capacity);
-		print_debug_text(ui_buffer, "   %llu/%zu Bytes", ui_render_bytes, ui_buffer->buffer.size);
-		
-		// --------------- Game Memory ---------------
-		print_debug_text(ui_buffer, "Game Memory:");
-
-		// --------------- Render Buffer ---------------
-		print_debug_text(ui_buffer, "Render buffer:");
-
-		// --------------- Dude ---------------
-		print_debug_text(ui_buffer, "dude world_index:");
-		print_debug_text(ui_buffer, "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
-
 		if(game_state->editing_tile)
 		{
 			// NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
@@ -679,17 +638,40 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 			   game_state->editing_tile_y,
 			   &editing))
 			{
-				print_debug_text(ui_buffer, "Editing tile:");
-				print_debug_text(ui_buffer, "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
-				print_debug_text(ui_buffer, "   texture_id: %i", editing->texture_id);
+				print_debug_text(&game_state->ui_arena, "selected tile:");
+				print_debug_text(&game_state->ui_arena, "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
+				print_debug_text(&game_state->ui_arena, "   texture_id: %i", editing->texture_id);
 			}
 		}
+
+		// --------------- Dude ---------------
+		print_debug_text(&game_state->ui_arena, "dude world_index:");
+		print_debug_text(&game_state->ui_arena, "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
+
+		// --------------- Game Memory ---------------
+		print_debug_text(&game_state->ui_arena, "game memory (b):");
+		print_debug_text(&game_state->ui_arena, "   size   %zu", game_memory->permanent_storage.size);
+
+		// --------------- World Arena ---------------
+		print_debug_arena(&game_state->ui_arena, "world arena (b):", &game_state->world_arena);
+
+		// --------------- Audio Arena ---------------
+		print_debug_arena(&game_state->ui_arena, "audio arena (b):", &game_state->audio_state.arena);
+
+		// --------------- Render Buffer ---------------
+		print_debug_arena(&game_state->ui_arena, "render arena (b):", render_arena);
+
+		// --------------- UI Arena ---------------
+		print_debug_arena(&game_state->ui_arena, "ui arena (b):", &game_state->ui_arena);
 	}
 	// ------------------ DEBUG PRINTS ------------------
 
-	assert(render_buffer->count == 0)
-	render_tiles(game_state, render_buffer);
-	render_ui(game_state, ui_buffer, render_buffer);
+	render_arena->used = render_arena->cached;
+	assert(render_arena->used == 0)
+
+	// TODO(Fermin): Can we combine these two since both render Tiles?
+	render_tiles(game_state, render_arena);
+	render_ui(game_state, render_arena);
 }
 
 extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
@@ -701,5 +683,4 @@ extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
 	assert(game_memory->temporary_storage.size >= (sizeof(f32) * sound_output_buffer->sample_count * audio_state_output_channel_count))
 
 	output_playing_sounds(audio_state, sound_output_buffer, temp_storage);
-
 }

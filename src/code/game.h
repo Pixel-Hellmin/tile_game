@@ -110,9 +110,6 @@ struct Game_State
 
 	Tile dude;
 
-	// NOTE(Fermin): We only push Tiles to these buffers
-	// This is bad, lets work on a general solution for memory
-	Render_Buffer ui_buffer;
 	Memory_Arena world_arena;
 	Memory_Arena ui_arena;
 
@@ -216,46 +213,6 @@ world_coord_to_tile_index(V3 *world_pos, f32 tile_size_in_meters, i32 *index_x, 
     *index_y = (i32)floor(world_y / tile_size_in_meters); //TODO(Fermin): math.cpp/instrinsics
 }
 
-static u32
-push_quad(Render_Buffer *render_buffer, V3 *corners, u32 texture_id, V4 color)
-{
-    u32 result = render_buffer->count;
-
-    // NOTE(Fermin): Check if we have enough space for another Quad
-    assert((result+1) * sizeof(Quad) <= render_buffer->buffer.size);
-
-    Quad *pushed_quad = (Quad *)render_buffer->buffer.data + render_buffer->count++;
-    pushed_quad->corners[0] = corners[0];
-    pushed_quad->corners[1] = corners[1];
-    pushed_quad->corners[2] = corners[2];
-    pushed_quad->corners[3] = corners[3];
-    pushed_quad->texture_id = texture_id;
-    pushed_quad->color = color;
-
-    return result;
-}
-
-static u32
-push_tile(Render_Buffer *render_buffer, Tile *tile, V4 color = {1.0, 1.0, 1.0, 1.0})
-{
-    // NOTE(Fermin): This is error prone since we have to update this function each time we change Tile struct
-    static_assert(sizeof(Tile) == 44, "Pushing out of date Tile");
-
-    u32 result = render_buffer->count;
-
-    // NOTE(Fermin): Check if we have enough space for another Tile
-    assert((result+1) * sizeof(Tile) <= render_buffer->buffer.size);
-
-    Tile *pushed_tile = (Tile *)render_buffer->buffer.data + render_buffer->count++;
-    pushed_tile->world_index = tile->world_index;
-    pushed_tile->dim_in_tiles = tile->dim_in_tiles;
-    pushed_tile->color = color;
-    pushed_tile->texture_id = tile->texture_id;
-    pushed_tile->rotation = tile->rotation;
-
-    return result;
-}
-
 static void
 get_character_metadata(char character, Glyph_Metadata *out, Font *font) // here for now. where should it go?
 {
@@ -274,7 +231,7 @@ get_character_metadata(char character, Glyph_Metadata *out, Font *font) // here 
 global_variable f32 debug_print_line = 0.0f;
 global_variable Font *debug_print_font = {};
 static void
-print_debug_text(char *string, Render_Buffer *ui_buffer, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // move to shared?
+print_debug_text(char *string, Memory_Arena *arena, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // move to shared?
 {
 	assert(debug_print_font)
 
@@ -302,12 +259,12 @@ print_debug_text(char *string, Render_Buffer *ui_buffer, V4 color = {0.0f, 1.0f,
             f32 advance = glyph_info.advance * max_scale;
 
 
-            Tile glyph = {};
-            glyph.pos_in_screen.xy = V2{x, y};
-            glyph.dim_in_px = V2{w, h};
-            glyph.texture_id = font->glyph_texture_ids[*c - font_first_character];
-
-            push_tile(ui_buffer, &glyph, color);
+            Tile *glyph = push_struct(arena, Tile);
+            glyph->pos_in_screen.xy = V2{x, y};
+            glyph->dim_in_px = V2{w, h};
+            glyph->texture_id = font->glyph_texture_ids[*c - font_first_character];
+            glyph->color = color;
+            glyph->rotation = 0.0f;
 
             x += advance;
         }
@@ -319,7 +276,7 @@ print_debug_text(char *string, Render_Buffer *ui_buffer, V4 color = {0.0f, 1.0f,
 }
 
 static void
-print_debug_text(Render_Buffer *ui_buffer, char *format, ...)
+print_debug_text(Memory_Arena *arena, char *format, ...)
 {
 	char text_buffer[256];
 	assert(sizeof(format) <= sizeof(text_buffer))
@@ -327,8 +284,17 @@ print_debug_text(Render_Buffer *ui_buffer, char *format, ...)
     va_list args;
     va_start(args, format);
     _vsnprintf_s(text_buffer, sizeof(text_buffer), _TRUNCATE, format, args);
-	print_debug_text(text_buffer, ui_buffer);
+	print_debug_text(text_buffer, arena);
     va_end(args);
+}
+
+static void
+print_debug_arena(Memory_Arena *ui_arena, char *header, Memory_Arena *arena)
+{
+	print_debug_text(ui_arena, header);
+	print_debug_text(ui_arena, "   cached %zu", arena->cached);
+	print_debug_text(ui_arena, "   used   %zu", arena->used);
+	print_debug_text(ui_arena, "   size   %zu", arena->size);
 }
 
 #define GAME_H

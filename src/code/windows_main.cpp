@@ -12,7 +12,7 @@ global_variable Opengl opengl = {};
 #include "windows_opengl.cpp"
 
 // NOTE(Fermin): Start moving these globals to where they belong
-global_variable Render_Buffer render_buffer = {};
+global_variable Memory_Arena render_arena = {};
 global_variable LPDIRECTSOUNDBUFFER secondary_buffer;
 global_variable u32 bytes_per_pixel = 4;
 global_variable b32 win32_running;
@@ -309,9 +309,9 @@ win32_resize_DIB_section(i32 width, i32 height)
 }
 
 static void
-win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Render_Buffer *render_buffer)
+win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Memory_Arena *render_arena)
 {
-    opengl_render(window_width, window_height, render_buffer);
+    opengl_render(window_width, window_height, render_arena);
 
     {
         // NOTE(Fermin): This takes most of the time because of V-Sync.
@@ -365,7 +365,7 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             PAINTSTRUCT paint;
             HDC device_context = BeginPaint(window, &paint);
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
-            win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
+            win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_arena);
             EndPaint(window, &paint);
         } break;
 
@@ -781,7 +781,8 @@ int main()
             init_font(&game_memory.debug_font_consola, "src\\misc\\assets\\consola.font");
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
-            render_buffer.buffer = allocate_buffer(gigabytes(1));
+            Buffer render_buffer = allocate_buffer(gigabytes(1));
+			initialize_arena(&render_arena, render_buffer.size, render_buffer.data);
             // NOTE(Fermin): Game things end
 
             u32 expected_frames_per_update = 1;
@@ -825,7 +826,7 @@ int main()
                 {
                     time_block("game.update_and_render");
 					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
-                    game.update_and_render(&game_memory, &render_buffer, input);
+                    game.update_and_render(&game_memory, &render_arena, input);
                 }
 
 				// NOTE(Fermin): audio
@@ -909,7 +910,7 @@ int main()
 				}
 
                 HDC device_context = GetDC(window);
-                win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_buffer);
+                win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_arena);
 
 				*old_input = *new_input;
 

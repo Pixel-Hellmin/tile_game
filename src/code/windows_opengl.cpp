@@ -290,7 +290,7 @@ opengl_load_texture(char *path, u32 format)
 }
 
 static void
-opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
+opengl_render(i32 window_width, i32 window_height, Memory_Arena* render_arena)
 {
     time_function;
 
@@ -322,8 +322,9 @@ opengl_render(i32 window_width, i32 window_height, Render_Buffer* render_buffer)
     ortho.m[2].w = 1.0f; // Enables perspective divide by z
     glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
 
-    Quad *quads = (Quad *)render_buffer->buffer.data;
-    for(u32 index = 0; index < render_buffer->count; index++)
+    Quad *quads = (Quad *)render_arena->base;
+	u32 quad_count = render_arena->used / sizeof(Quad);
+    for(u32 index = 0; index < quad_count; index++)
     {
         Quad *quad = quads + index;
         opengl_rectangle(quad->corners, quad->color, quad->texture_id);

@@ -7,23 +7,12 @@ change_pitch(Game_Audio_State *audio_state, Playing_Sound *sound, f32 dsample)
 }
 
 static Playing_Sound*
-push_sound(Render_Buffer *sound_buffer)
-{
-    // NOTE(Fermin): Check if we have enough space for another Playing_Sound
-    assert((sound_buffer->count+1) * sizeof(Playing_Sound) <= sound_buffer->buffer.size);
-
-    Playing_Sound *pushed_sound = (Playing_Sound *)sound_buffer->buffer.data + sound_buffer->count++;
-
-    return pushed_sound;
-}
-
-static Playing_Sound*
 play_sound(Game_Audio_State *audio_state, Loaded_Sound *sound_id)
 {
 	// Create the idea of sound ids instead of Loaded_Sound
 	if(!audio_state->first_free_playing_sound)
 	{
-		audio_state->first_free_playing_sound = push_sound(&audio_state->sound_buffer);
+		audio_state->first_free_playing_sound = push_struct(&audio_state->arena, Playing_Sound);
 		audio_state->first_free_playing_sound->next = 0;
 	}
 
@@ -286,7 +275,7 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 static void
 initialize_audio_state(Game_Audio_State *audio_state)
 {
-	assert(audio_state->sound_buffer.buffer.size != 0)
+	assert(audio_state->arena.size != 0)
 
 	audio_state->first_playing_sound = 0;
 	audio_state->first_free_playing_sound = 0;

@@ -18,7 +18,7 @@ struct Playing_Sound
 
 struct Game_Audio_State
 {
-	Render_Buffer sound_buffer;
+	Memory_Arena arena;
 	Playing_Sound *first_playing_sound;
 	Playing_Sound *first_free_playing_sound;
 	V2 master_volume;
