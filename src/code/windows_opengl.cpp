@@ -178,6 +178,7 @@ opengl_rectangle(V3 *corners, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 
     f32 z = corners[0].z;
 
     glBindTexture(GL_TEXTURE_2D, texture_id);
+    //glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
 
     glBegin(GL_TRIANGLES);

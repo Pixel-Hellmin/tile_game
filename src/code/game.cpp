@@ -3,6 +3,22 @@
 #include "audio.cpp"
 
 static void
+set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Memory_Arena *arena)
+{
+    Tile *tile;
+    for(u32 x = x_start; x <= x_end; x++)
+    {
+        for(u32 y = y_start; y <= y_end; y++)
+        {
+            if(get_tile(arena, cols, rows, x, y, &tile))
+            {
+                tile->texture_id = texture_id;
+            }
+        }
+    }
+}
+
+static void
 set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Render_Buffer *render_buffer)
 {
     Tile *tile;
@@ -19,84 +35,89 @@ set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 te
 }
 
 static void
-generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
+generate_level(Game_State *game_state, f32 map_z)
 {
-#define rooms_in_x 30
-#define rooms_in_y 30
+#define rooms_in_x 4
+#define rooms_in_y 4
     u32 room_width = 6; // tiles
 
     // NOTE(Fermin): We add 3 because of the additional roof and wall tiles
     game_state->level_cols = room_width * rooms_in_x + 3; 
     game_state->level_rows = room_width * rooms_in_y + 3;
 
+	push_array(&game_state->world_arena,
+			   (game_state->level_cols * game_state->level_rows),
+			   Tile);
+
     // NOTE(Fermin): This only draws a grid, which will be turned into a maze later.
     for(i32 row = 0; row < game_state->level_rows; row++)
     {
         for(i32 col = 0; col < game_state->level_cols; col++)
         {
-            Tile tile = {};
-            tile.world_index = V3{(f32)col, (f32)row, map_z};
-            tile.dim_in_tiles = V2{1.0f, 1.0f};
+            Tile *tile = (Tile *)game_state->world_arena.base + col + row * game_state->level_rows;
+            tile->world_index = V3{(f32)col, (f32)row, map_z};
+            tile->dim_in_tiles = V2{1.0f, 1.0f};
+            tile->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
 
             // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
             if(col == 0 || row == 0 || col == game_state->level_cols - 1 || row == game_state->level_rows - 1) // Roof all around
             {
-                tile.texture_id = game_state->roof_texture_id;
+                tile->texture_id = game_state->roof_texture_id;
 
                 if(col == 0) // First col
                 {
-                    tile.rotation = Pi32/2.0f;
+                    tile->rotation = Pi32/2.0f;
                 }
                 else if(col == game_state->level_cols - 1) // Last col
                 {
-                    tile.rotation = -Pi32/2.0f;
+                    tile->rotation = -Pi32/2.0f;
                 }
                 else if(row == 0) // First row
                 {
-                    tile.rotation = Pi32;
+                    tile->rotation = Pi32;
                 }
             }
             else if(row == 1 || row == game_state->level_rows - 2) // Wall top and bottom
             {
                 if((col - 1) % room_width != 0)
                 {
-                    tile.texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->wall_texture_id;
                     if(row == 1)
                     {
-                        tile.rotation = Pi32;
+                        tile->rotation = Pi32;
                     }
                 }
                 else
             {
-                    tile.texture_id = game_state->roof_texture_id; // Roof for grid
+                    tile->texture_id = game_state->roof_texture_id; // Roof for grid
                 }
             }
             else if(col == 1 || col == game_state->level_cols - 2) // Wall left and right
             {
                 if((row - 1) % room_width != 0)
                 {
-                    tile.texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->wall_texture_id;
                     if(col == 1)
                     {
-                        tile.rotation = Pi32/2.0f;
+                        tile->rotation = Pi32/2.0f;
                     }
                     else
                 {
-                        tile.rotation = -Pi32/2.0f;
+                        tile->rotation = -Pi32/2.0f;
                     }
                 }
                 else
             {
-                    tile.texture_id = game_state->roof_texture_id; // Roof for grid
+                    tile->texture_id = game_state->roof_texture_id; // Roof for grid
                 }
             }
             else if((col - 1) % room_width == 0 || (row - 1) % room_width == 0)
             {
-                tile.texture_id = game_state->roof_texture_id; // Roof for grid
+                tile->texture_id = game_state->roof_texture_id; // Roof for grid
             }
             else
         {
-                tile.texture_id = game_state->floor_texture_id;
+                tile->texture_id = game_state->floor_texture_id;
             }
 
             // Corners
@@ -105,10 +126,8 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
                 (col == game_state->level_cols - 2 && row == 1) ||
                 (col == game_state->level_cols - 2 && row == game_state->level_rows - 2))
             { 
-                tile.texture_id = game_state->wall_texture_id; 
+                tile->texture_id = game_state->wall_texture_id; 
             }
-
-            push_tile(tiles_buffer, &tile);
         }
     }
 
@@ -193,7 +212,9 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
             if(x_start == 2) // Left
             {
                 Tile *tile;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start-1, y_start, &tile))
+                if(get_tile(&game_state->world_arena,
+							game_state->level_cols, game_state->level_rows,
+							x_start-1, y_start, &tile))
                 {
                     tile->texture_id = game_state->wall_texture_id;
                     tile->rotation = Pi32/2.0f;
@@ -202,7 +223,9 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
             if(x_end == game_state->level_cols - 3) // Right
             {
                 Tile *tile;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_end+1, y_end, &tile))
+                if(get_tile(&game_state->world_arena,
+							game_state->level_cols, game_state->level_rows,
+							x_end+1, y_end, &tile))
                 {
                     tile->texture_id = game_state->wall_texture_id;
                     tile->rotation = -Pi32/2.0f;
@@ -211,7 +234,9 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
             if(y_start == 2) // Bottom
             {
                 Tile *tile;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_start-1, &tile))
+                if(get_tile(&game_state->world_arena,
+							game_state->level_cols, game_state->level_rows,
+							x_start, y_start-1, &tile))
                 {
                     tile->texture_id = game_state->wall_texture_id;
                     tile->rotation = Pi32;
@@ -220,15 +245,20 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
             if(y_end == game_state->level_rows - 3) // Top
             {
                 Tile *tile;
-                if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, x_start, y_end+1, &tile))
+                if(get_tile(&game_state->world_arena,
+							game_state->level_cols, game_state->level_rows,
+							x_start, y_end+1, &tile))
                 {
                     tile->texture_id = game_state->wall_texture_id;
                 }
             }
 
             // NOTE(Fermin): If this room hasn't been visited before, remove wall
-            set_texture_to_tile_range(x_start, x_end, y_start, y_end, game_state->floor_texture_id,
-                                      game_state->level_cols, game_state->level_rows, tiles_buffer);
+            set_texture_to_tile_range(x_start, x_end, y_start, y_end,
+									  game_state->floor_texture_id,
+                                      game_state->level_cols,
+									  game_state->level_rows,
+									  &game_state->world_arena);
 
             rooms[current_room_x][current_room_y] = 1;
             visited++;
@@ -242,12 +272,12 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
         for(i32 col = 2; col <= game_state->level_cols - 2; col++)
         {
             Tile *test_roof_tile = {};
-            if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row, &test_roof_tile))
+            if(get_tile(&game_state->world_arena, game_state->level_cols, game_state->level_rows, col, row, &test_roof_tile))
             {
                 if(test_roof_tile->texture_id == game_state->roof_texture_id)
                 {
                     Tile *wall_tile = {};
-                    if(get_tile(&tiles_buffer->buffer, game_state->level_cols, game_state->level_rows, col, row-1, &wall_tile))
+                    if(get_tile(&game_state->world_arena, game_state->level_cols, game_state->level_rows, col, row-1, &wall_tile))
                     {
                         if(wall_tile->texture_id == game_state->floor_texture_id)
                         {
@@ -258,10 +288,13 @@ generate_level(Game_State *game_state, Render_Buffer *tiles_buffer, f32 map_z)
             }
         }
     }
+
+	// NOTE(Fermin): Cache the level
+	game_state->world_arena.cached = game_state->world_arena.used;
 }
 
 static void
-render_tiles(Game_State *game_state, Render_Buffer *tiles_buffer, Render_Buffer *render_buffer)
+render_tiles(Game_State *game_state, Render_Buffer *render_buffer)
 {
 	// NOTE(Fermin): @Speed - We should only render the tiles that are visible on screen
 
@@ -275,8 +308,9 @@ render_tiles(Game_State *game_state, Render_Buffer *tiles_buffer, Render_Buffer 
         ((f32)game_state->window_height) / 2.0f
     };
 
-	Tile *tiles = (Tile *)tiles_buffer->buffer.data;
-	for(u32 index = 0; index < tiles_buffer->count; index++)
+	Tile *tiles = (Tile *)game_state->world_arena.base;
+	u32 tiles_count = (u32)(game_state->world_arena.used / sizeof(Tile));
+	for(u32 index = 0; index < tiles_count; index++)
 	{
 		Tile *tile = tiles + index;
 
@@ -365,10 +399,13 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 {
 	size_t total_memory_partitioned = sizeof(Game_State);
 
-	game_state->tiles_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
-	game_state->tiles_buffer.buffer.size = gigabytes(1);
-	total_memory_partitioned += game_state->tiles_buffer.buffer.size;
 
+	initialize_arena(&game_state->world_arena, gigabytes(1),
+					 game_memory->permanent_storage.data + sizeof(Game_State));
+	total_memory_partitioned += game_state->world_arena.size;
+
+	//initialize_arena(&game_state->ui_arena, gigabytes(1),
+					 //game_state->world_arena.base + game_state->world_arena.size);
 	game_state->ui_buffer.buffer.data = (u8 *)(game_memory->permanent_storage.data + total_memory_partitioned);
 	game_state->ui_buffer.buffer.size = gigabytes(1);
 	total_memory_partitioned += game_state->ui_buffer.buffer.size;
@@ -394,21 +431,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     assert(game_memory->permanent_storage.size >= sizeof(Game_State));
 	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
-	Render_Buffer *tiles_buffer = &game_state->tiles_buffer;
+	Tile *dude = &game_state->dude;
 	Render_Buffer *ui_buffer = &game_state->ui_buffer;
 	Render_Buffer *sound_buffer = &game_state->audio_state.sound_buffer;
-	Tile *dude = &game_state->dude;
 	debug_print_font = &game_memory->debug_font_consola;
 
 	f64 last_frame_render_buffer_used = (f64)render_buffer->count;
 	f64 last_frame_ui_buffer_used = (f64)ui_buffer->count;
-	reset_non_cached_memory(tiles_buffer);
 	reset_non_cached_memory(ui_buffer);
 	reset_non_cached_memory(render_buffer);
+	game_state->world_arena.used = game_state->world_arena.cached;
 
     if(!game_state->initialized)
     {
-        assert(tiles_buffer->count == 0);
+        //assert(tiles_buffer->count == 0);
 
 		game_state->entropy.index = 666;
 		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
@@ -422,12 +458,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		dude->world_index = V3{0.0f, 0.0f, 0.0f};
 		dude->dim_in_tiles = V2{1.0f, 1.0f};
 		dude->texture_id = game_memory->dude_texture_id;
+		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
 
 		partition_memory(game_state, game_memory);
 		initialize_audio_state(&game_state->audio_state);
 
-        generate_level(game_state, tiles_buffer, map_z);
-		tiles_buffer->cached = tiles_buffer->count; // NOTE(Fermin): Cache the level
+        generate_level(game_state, map_z);
 
 		set_flag(game_state, game_state_flag_prints);
 
@@ -573,13 +609,12 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
         particle->rotation += new_input.dt_in_seconds * particle->d_rotation;
 
-        Tile part = {};
-        part.world_index = particle->p;
-        part.dim_in_tiles = V2{0.4, 0.4};
-        part.rotation = particle->rotation;
-        part.texture_id = game_state->wall_texture_id;
-
-        push_tile(tiles_buffer, &part, color_trans);
+        Tile *part = push_struct(&game_state->world_arena, Tile);
+        part->world_index = particle->p;
+        part->dim_in_tiles = V2{0.4, 0.4};
+        part->rotation = particle->rotation;
+        part->texture_id = game_state->wall_texture_id;
+        part->color = color_trans;
     }
     // NOTE(Fermin): Experimental particle system logic END
     
@@ -587,16 +622,17 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if(game_state->editing_tile)
     {
         // NOTE(Fermin): We can avoid doing this if we use the z coord
-        Tile highlight = {};
-        highlight.world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, map_z};
-        highlight.dim_in_tiles = V2{1.0f, 1.0f};
-        highlight.texture_id = game_state->highlight_texture_id;
-
-        push_tile(tiles_buffer, &highlight, V4{0.0f, 1.0f, 0.0f, 1.0f});
+        Tile *highlight = push_struct(&game_state->world_arena, Tile);
+        highlight->world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, map_z};
+        highlight->dim_in_tiles = V2{1.0f, 1.0f};
+        highlight->texture_id = game_state->highlight_texture_id;
+		highlight->color = V4{0.0f, 1.0f, 0.0f, 1.0f};
+		highlight->rotation = 0.0f;
     }
 
     dude->rotation += dt_in_seconds;
-    push_tile(tiles_buffer, dude);
+	Tile *pushed_dude = push_struct(&game_state->world_arena, Tile);
+	*pushed_dude = *dude;
 	
 	// ------------------ DEBUG PRINTS ------------------
 	// TODO(Fermin): This is better but still needs to improve.
@@ -609,11 +645,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	if(is_set(game_state, game_state_flag_prints))
 	{
 		// --------------- Tiles Buffer ---------------
-		f64 tiles_max_capacity = (f64)tiles_buffer->buffer.size/(f64)sizeof(Tile);
-		u64 tiles_bytes = (u64)tiles_buffer->count * (u64)sizeof(Tile);
+		f64 tiles_max_capacity = (f64)game_state->world_arena.size/(f64)sizeof(Tile);
+		u64 tiles_bytes = (u64)game_state->world_arena.used;
 		print_debug_text(ui_buffer, "Tiles buffer:");
-		print_debug_text(ui_buffer, "   %i/%llu Tiles", tiles_buffer->count, (u64)tiles_max_capacity);
-		print_debug_text(ui_buffer, "   %llu/%zu Bytes", tiles_bytes, tiles_buffer->buffer.size);
+		print_debug_text(ui_buffer, "   %i/%llu Tiles", tiles_bytes/(f64)sizeof(Tile), (u64)tiles_max_capacity);
+		print_debug_text(ui_buffer, "   %llu/%zu Bytes", tiles_bytes, game_state->world_arena.size);
 
 		// --------------- UI Buffer ---------------
 		f64 ui_max_capacity = (f64)ui_buffer->buffer.size/(f64)sizeof(Tile);
@@ -623,16 +659,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		print_debug_text(ui_buffer, "   %llu/%zu Bytes", ui_render_bytes, ui_buffer->buffer.size);
 		
 		// --------------- Game Memory ---------------
-		u64 game_memory_used = (u64)tiles_buffer->count*sizeof(Tile) + sizeof(Game_State) + (u64)last_frame_ui_buffer_used*sizeof(Tile);
 		print_debug_text(ui_buffer, "Game Memory:");
-		print_debug_text(ui_buffer, "   %llu/%zu Bytes", game_memory_used, game_memory->permanent_storage.size);
 
 		// --------------- Render Buffer ---------------
-		f64 quads_max_capacity = (f64)render_buffer->buffer.size/(f64)sizeof(Quad);
-		u64 render_bytes = (u64)last_frame_render_buffer_used * (u64)sizeof(Quad);
 		print_debug_text(ui_buffer, "Render buffer:");
-		print_debug_text(ui_buffer, "   %llu/%llu Quads", (u64)last_frame_render_buffer_used, (u64)quads_max_capacity);
-		print_debug_text(ui_buffer, "   %llu/%zu Bytes", render_bytes, tiles_buffer->buffer.size);
 
 		// --------------- Dude ---------------
 		print_debug_text(ui_buffer, "dude world_index:");
@@ -642,7 +672,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		{
 			// NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
 			Tile *editing;
-			if(get_tile(&tiles_buffer->buffer,
+			if(get_tile(&game_state->world_arena,
 			   game_state->level_cols,
 			   game_state->level_rows,
 			   game_state->editing_tile_x,
@@ -658,7 +688,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 	// ------------------ DEBUG PRINTS ------------------
 
 	assert(render_buffer->count == 0)
-	render_tiles(game_state, tiles_buffer, render_buffer);
+	render_tiles(game_state, render_buffer);
 	render_ui(game_state, ui_buffer, render_buffer);
 }
 

@@ -66,6 +66,14 @@ struct Render_Buffer
     Buffer buffer;
 };
 
+struct Memory_Arena
+{
+	size_t size;
+	size_t used;
+	size_t cached;
+	u8* base;
+};
+
 struct Input_Keys
 {
     b32 w;
@@ -135,6 +143,40 @@ GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 #define GAME_GET_SOUND_SAMPLES(name) void name(Game_Memory *game_memory, Game_Sound_Output_Buffer *sound_output_buffer)
 typedef GAME_GET_SOUND_SAMPLES(Game_Get_Sound_Samples);
 GAME_GET_SOUND_SAMPLES(game_get_sound_samples_stub)
+{
+}
+
+static void
+initialize_arena(Memory_Arena *arena, size_t size, u8 *base)
+{
+	arena->size = size;
+	arena->base = base;
+	arena->used = 0;
+	arena->cached = 0;
+}
+
+#define push_struct(arena, Type) (Type *)push_size_(arena, sizeof(Type))
+#define push_array(arena, count, Type) (Type *)push_size_(arena, (count)*sizeof(Type))
+static void *
+push_size_(Memory_Arena *arena, size_t size)
+{
+	assert((arena->used + size) <= arena->size);
+	void *cached = arena->base + arena->cached;
+	void *result = arena->base + arena->used;
+
+	if((size_t)result < (size_t)cached)
+	{
+		arena->used = arena->cached;
+		result = arena->base + arena->used;
+	}
+
+	arena->used += size;
+
+	return result;
+}
+
+static void *
+push_array_()
 {
 }
 

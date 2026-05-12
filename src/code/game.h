@@ -112,8 +112,9 @@ struct Game_State
 
 	// NOTE(Fermin): We only push Tiles to these buffers
 	// This is bad, lets work on a general solution for memory
-	Render_Buffer tiles_buffer;
 	Render_Buffer ui_buffer;
+	Memory_Arena world_arena;
+	Memory_Arena ui_arena;
 
 	Loaded_Sound test_sound;
 	Playing_Sound *test_music;
@@ -124,6 +125,24 @@ inline b32
 is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
 {
     b32 result = (x >= 0 && x < cols && y >= 0 && y < rows);
+
+    return result;
+}
+
+inline b32
+get_tile(Memory_Arena *arena, i32 cols, i32 rows, i32 x, i32 y, Tile **out)
+{
+    // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
+    // have null pointers and can instead check on that pointer instead of 
+    // returning a success/fail result?
+    b32 result = 0;
+
+    if(is_tile_index_valid(x, y, cols, rows))
+    {
+        Tile *tiles = (Tile *)arena->base;
+        *out = tiles + x + y * cols;
+        result = 1;
+    }
 
     return result;
 }
