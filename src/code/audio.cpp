@@ -61,7 +61,8 @@ static void
 output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *sound_output_buffer, void *temp_storage)
 {
 	assert((sound_output_buffer->sample_count & 3) == 0);
-	u32 chunk_count = sound_output_buffer->sample_count / 4;
+	u32 samples_per_chunk = 4;
+	u32 chunk_count = sound_output_buffer->sample_count / samples_per_chunk;
 
 	// TODO(Fermin): Memory_Arena
 	size_t alignment_offset = get_alignment_offset((size_t)temp_storage, 4);
@@ -101,9 +102,9 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 			// TODO: handle stereo
 			V2 current_volume = playing_sound->current_volume;
 			V2 dvolume_per_sample = playing_sound->dcurrent_volume_per_second * seconds_per_sample;
-			V2 dvolume_per_chunk = dvolume_per_sample * 4.0f;
+			V2 dvolume_per_chunk = dvolume_per_sample * (f32)samples_per_chunk;
 			f32 dsample = playing_sound->dsample;
-			f32 dsample_per_chunk = playing_sound->dsample * 4.0f;
+			f32 dsample_per_chunk = playing_sound->dsample * (f32)samples_per_chunk;
 
 			__m128 *dest_0 = real_channel_0;
 			__m128 *dest_1 = real_channel_1;
@@ -149,8 +150,13 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 					u32 volume_chunk_count = (u32)((delta_volume / dvolume_per_chunk.e[channel_index]) + 0.5f);
 					if(chunks_to_mix > volume_chunk_count)
 					{
-						// NOTE(Fermin): There is a bug here
-						chunks_to_mix = volume_chunk_count;
+						// NOTE(Fermin): There is a bug here. We can't cut the chunks_to_mix short if the change
+						// in volume ends but the sound is still playing, we hear clipping.
+						// On the other hand if we mix more chunks than the chunks needed for the volume change
+						// we will overshoot the change in volume.
+						// I rather have the change in volume not be precise than clipping.
+						
+						//chunks_to_mix = volume_chunk_count;
 						volume_ended[channel_index] = true;
 					}
 				}
@@ -158,12 +164,11 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 
 			f32 begin_sample_position = playing_sound->samples_played;
 			f32 end_sample_position = begin_sample_position + chunks_to_mix * dsample_per_chunk;
-			f32 loop_index_c = (end_sample_position - begin_sample_position) / (f32)chunks_to_mix;
 			for(u32 loop_index = 0;
 				loop_index < chunks_to_mix;
 				++loop_index)
 			{
-				f32 sample_position = begin_sample_position + loop_index_c * (f32)loop_index;
+				f32 sample_position = begin_sample_position + dsample_per_chunk * (f32)loop_index;
 
 #if 1			// NOTE(Fermin): Can't tell the difference between these two
 				// NOTE(Fermin): We interpolate between samples for pitch shift.

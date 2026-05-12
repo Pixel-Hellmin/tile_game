@@ -455,18 +455,19 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if(new_input.f3 && !old_input.f3)
     {
         toggle_flag(game_state, game_state_flag_free_cam_mode);
+		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
     }
 
     V3 d_pos = {};
     if(new_input.w)
     {
         d_pos.y = 1.0f; 
-		change_volume(game_state->test_music, 10.0f, V2{1.0f, 1.0f});
+		change_volume(game_state->test_music, 2.0f, V2{1.0f, 1.0f});
     }
     if(new_input.s)
     {
         d_pos.y = -1.0f; 
-		change_volume(game_state->test_music, 10.0f, V2{0.0f, 0.0f});
+		change_volume(game_state->test_music, 2.0f, V2{0.0f, 0.0f});
     }
     if(new_input.a)
     {
