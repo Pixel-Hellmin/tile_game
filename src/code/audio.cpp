@@ -47,18 +47,18 @@ change_volume(Playing_Sound *sound, f32 fade_duration_in_seconds, V2 volume)
 }
 
 static void
-output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *sound_output_buffer, void *temp_storage)
+output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *sound_output_buffer, Memory_Arena *tmp_arena)
 {
+	assert((tmp_arena->size - tmp_arena->used) >= (sizeof(f32) * sound_output_buffer->sample_count * audio_state_output_channel_count))
+
+	Tmp_Memory mixer_memory = begin_tmp_memory(tmp_arena);
+
 	assert((sound_output_buffer->sample_count & 3) == 0);
 	u32 samples_per_chunk = 4;
 	u32 chunk_count = sound_output_buffer->sample_count / samples_per_chunk;
 
-	// TODO(Fermin): Memory_Arena
-	size_t alignment_offset = get_alignment_offset((size_t)temp_storage, 4);
-	__m128 *real_channel_0 = (__m128 *)(((size_t *)temp_storage) + alignment_offset);
-	__m128 *real_channel_1 = real_channel_0 + sizeof(__m128)*chunk_count;
-
-	assert((real_channel_1 - real_channel_0) == (sizeof(__m128) * chunk_count))
+	__m128 *real_channel_0 = push_array(tmp_arena, chunk_count, __m128, 4);
+	__m128 *real_channel_1 = push_array(tmp_arena, chunk_count, __m128, 4);
 
 	f32 seconds_per_sample = 1.0f / (f32)sound_output_buffer->samples_per_second;
 
@@ -270,6 +270,8 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 			*sample_out++ = s01;
 		}
 	}
+
+	end_tmp_memory(mixer_memory);
 }
 
 static void

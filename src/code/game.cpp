@@ -294,6 +294,8 @@ render_tiles(Game_State *game_state, Memory_Arena *render_arena)
 
 	Tile *tiles = (Tile *)game_state->world_arena.base;
 	u32 tiles_count = (u32)(game_state->world_arena.used / sizeof(Tile));
+	Quad *quad = push_array(render_arena, tiles_count, Quad);
+
 	for(u32 index = 0; index < tiles_count; index++)
 	{
 		Tile *tile = tiles + index;
@@ -332,13 +334,13 @@ render_tiles(Game_State *game_state, Memory_Arena *render_arena)
 		corners[2].xy += half_window;
 		corners[3].xy += half_window;
 
-		Quad *quad = push_struct(render_arena, Quad);
 		quad->corners[0] = corners[0];
 		quad->corners[1] = corners[1];
 		quad->corners[2] = corners[2];
 		quad->corners[3] = corners[3];
 		quad->texture_id = tile->texture_id;
 		quad->color = tile->color;
+		++quad;
 	}
 }
 
@@ -347,6 +349,8 @@ render_ui(Game_State *game_state, Memory_Arena *render_arena)
 {
 	Tile *tiles = (Tile *)game_state->ui_arena.base;
 	u32 tiles_count = (u32)(game_state->ui_arena.used / sizeof(Tile));
+	Quad *quad = push_array(render_arena, tiles_count, Quad);
+
 	for(u32 index = 0; index < tiles_count; index++)
 	{
 		Tile *tile = tiles + index;
@@ -372,13 +376,13 @@ render_ui(Game_State *game_state, Memory_Arena *render_arena)
 		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
 		corners[3].z = origin.z;
 
-		Quad *quad = push_struct(render_arena, Quad);
 		quad->corners[0] = corners[0];
 		quad->corners[1] = corners[1];
 		quad->corners[2] = corners[2];
 		quad->corners[3] = corners[3];
 		quad->texture_id = tile->texture_id;
 		quad->color = tile->color;
+		++quad;
 	}
 }
 
@@ -427,8 +431,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(!game_state->initialized)
     {
-        //assert(tiles_buffer->count == 0);
-
 		game_state->entropy.index = 666;
 		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
 		game_state->tile_size_in_px = 64.0f;
@@ -444,6 +446,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
 
 		partition_memory(game_state, game_memory);
+		initialize_arena(&game_state->tmp_arena,
+						 game_memory->temporary_storage.size,
+						 game_memory->temporary_storage.data);
+
 		initialize_audio_state(&game_state->audio_state);
 
         generate_level(game_state, map_z);
@@ -678,9 +684,6 @@ extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
 {
 	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
 	Game_Audio_State *audio_state = &game_state->audio_state;
-	void *temp_storage = (void *)game_memory->temporary_storage.data;
 
-	assert(game_memory->temporary_storage.size >= (sizeof(f32) * sound_output_buffer->sample_count * audio_state_output_channel_count))
-
-	output_playing_sounds(audio_state, sound_output_buffer, temp_storage);
+	output_playing_sounds(audio_state, sound_output_buffer, &game_state->tmp_arena);
 }

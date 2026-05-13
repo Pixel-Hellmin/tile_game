@@ -8,19 +8,6 @@
 #include "asset.h"
 #include "audio.h"
 
-inline size_t
-get_alignment_offset(size_t ptr_value, size_t alignment)
-{
-	size_t alignment_offset = 0;
-	size_t alignment_mask = alignment - 1;
-	if(ptr_value & alignment_mask)
-	{
-		alignment_offset = alignment - (ptr_value & alignment_mask);
-	}
-
-	return alignment_offset;
-}
-
 union Tile
 {
 	// NOTE(Fermin): This is how we store tiles in the game memory. Later these
@@ -110,6 +97,7 @@ struct Game_State
 
 	Tile dude;
 
+	Memory_Arena tmp_arena;
 	Memory_Arena world_arena;
 	Memory_Arena ui_arena;
 
