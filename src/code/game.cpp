@@ -440,11 +440,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_state->roof_texture_id      = game_memory->roof_texture_id;
 		game_state->highlight_texture_id = game_memory->highlight_texture_id;
 
-		dude->world_index = V3{0.0f, 0.0f, 0.0f};
-		dude->dim_in_tiles = V2{1.0f, 1.0f};
-		dude->texture_id = game_memory->dude_texture_id;
-		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
-
 		partition_memory(game_state, game_memory);
 		initialize_arena(&game_state->tmp_arena,
 						 game_memory->temporary_storage.size,
@@ -458,6 +453,25 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		game_state->test_sound = DEBUG_load_WAV("src\\misc\\assets\\sounds\\test_music.wav");
 		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
+
+		dude->world_index = V3{0.0f, 0.0f, 0.0f};
+		dude->dim_in_tiles = V2{1.0f, 1.0f};
+		dude->texture_id = game_memory->dude_texture_id;
+		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
+
+		// TODO(Fermin): Proper initialization of flipbooks
+		game_state->dude_next_sprite_index = 1;
+		game_state->dude_flipbook_size = 3;
+		game_state->dude_current_sprite_timer_in_seconds = 0.0f;
+		game_state->dude_animation_sprite_ids = push_array(&game_state->tmp_arena,
+														   game_state->dude_flipbook_size,
+														   u32);
+		u32 *id = game_state->dude_animation_sprite_ids;
+		*id = game_memory->dude_texture_id;
+		id++;
+		*id = game_memory->highlight_texture_id;
+		id++;
+		*id = game_memory->floor_texture_id;
 
         game_state->initialized = 1;
     }
@@ -619,6 +633,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		highlight->rotation = 0.0f;
     }
 
+
+	// NOTE(Fermin): Test flipbook logic
+	{
+		game_state->dude_flipbook_fps = 6;
+		game_state->dude_current_sprite_timer_in_seconds += dt_in_seconds;
+		f32 seconds_per_frame = 1.0f / (f32)game_state->dude_flipbook_fps;
+		if(game_state->dude_current_sprite_timer_in_seconds >= seconds_per_frame)
+		{
+			dude->texture_id = *(game_state->dude_animation_sprite_ids + game_state->dude_next_sprite_index);
+			game_state->dude_next_sprite_index = ++game_state->dude_next_sprite_index % game_state->dude_flipbook_size;
+			game_state->dude_current_sprite_timer_in_seconds = 0.0f;
+		}
+	}
+
     dude->rotation += dt_in_seconds;
 	Tile *pushed_dude = push_struct(&game_state->world_arena, Tile);
 	*pushed_dude = *dude;
@@ -660,6 +688,9 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		// --------------- World Arena ---------------
 		print_debug_arena(&game_state->ui_arena, "world arena (b):", &game_state->world_arena);
+
+		// --------------- Tmp Arena ---------------
+		print_debug_arena(&game_state->ui_arena, "tmp arena (b):", &game_state->tmp_arena);
 
 		// --------------- Audio Arena ---------------
 		print_debug_arena(&game_state->ui_arena, "audio arena (b):", &game_state->audio_state.arena);

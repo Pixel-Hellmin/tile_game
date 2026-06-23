@@ -96,6 +96,11 @@ struct Game_State
     Particle particles[64];
 
 	Tile dude;
+	u32 dude_next_sprite_index;
+	u32 *dude_animation_sprite_ids;
+	u32 dude_flipbook_size;
+	u32 dude_flipbook_fps; // What's the best unit to store this info?
+	f32 dude_current_sprite_timer_in_seconds;
 
 	Memory_Arena tmp_arena;
 	Memory_Arena world_arena;
