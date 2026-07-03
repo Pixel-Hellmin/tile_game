@@ -103,6 +103,7 @@ DEBUG_load_WAV(char *file_name)
 	// NOTE(Fermin): This would go in the asset pipeline
 	Loaded_Sound result = {};
 
+	// TODO(Fermin): Ready file should be a platform api call?
 	Buffer read_result = read_file(file_name);
 	if(read_result.data)
 	{

@@ -245,13 +245,17 @@ opengl_allocate_texture(u32 width, u32 height, void *data)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 }
 
-static u32
-opengl_load_texture(u8 *data, i32 width, i32 height, u32 format)
+static void
+opengl_load_texture(u8 *data, i32 width, i32 height, u32 *id, u32 format)
 {
+	// NOTE(Fermin): Use glDeleteTextures(1, id); if we want to explicitly
+	// unload the texture
 
-    u32 result;
-    glGenTextures(1, &result);  
-    glBindTexture(GL_TEXTURE_2D, result);  
+	if(*id == 0)
+	{
+		glGenTextures(1, id);  
+	}
+    glBindTexture(GL_TEXTURE_2D, *id);  
 
     // set the texture wrapping/filtering options (on the currently bound texture object)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -267,16 +271,12 @@ opengl_load_texture(u8 *data, i32 width, i32 height, u32 format)
                      width, height, 0, format, GL_UNSIGNED_BYTE, data);
         //glGenerateMipmap(GL_TEXTURE_2D);
     }
-
-    return result;
 }
 
-static u32
-opengl_load_texture(char *path, u32 format)
+static void
+opengl_load_texture(char *path, u32 *id, u32 format)
 {
     // TODO(Fermin): Maybe use opengl.default_internal_texture_format here?
-    u32 result;
-
     Buffer buffer = read_file(path);
 
     i32 width =    *(i32 *)buffer.data;
@@ -284,9 +284,7 @@ opengl_load_texture(char *path, u32 format)
     i32 channels = *(((i32 *)buffer.data) + 2);
     u8 *data = buffer.data + sizeof(i32)*3;
 
-    result = opengl_load_texture(data, width, height, format);
-
-    return result;
+    opengl_load_texture(data, width, height, id, format);
 }
 
 static void

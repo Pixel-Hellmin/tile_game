@@ -11,16 +11,17 @@
 #define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
 
 // NOTE(Fermin): Got these from https://registry.khronos.org/OpenGL/api/GL/glcorearb.h
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-#define GL_SRGB8_ALPHA8                   0x8C43
-#define GL_SHADING_LANGUAGE_VERSION       0x8B8C
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FRAGMENT_SHADER                0x8B30
-#define GL_COMPILE_STATUS                 0x8B81
-#define GL_LINK_STATUS                    0x8B82
-#define GL_VALIDATE_STATUS                0x8B83
-#define GL_MAX_COLOR_TEXTURE_SAMPLES      0x910E
-#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
+#define GL_FRAMEBUFFER_SRGB							  0x8DB9
+#define GL_SRGB8_ALPHA8                   			  0x8C43
+#define GL_SHADING_LANGUAGE_VERSION       			  0x8B8C
+#define GL_VERTEX_SHADER                  			  0x8B31
+#define GL_FRAGMENT_SHADER                			  0x8B30
+#define GL_COMPILE_STATUS                 			  0x8B81
+#define GL_LINK_STATUS                    			  0x8B82
+#define GL_VALIDATE_STATUS                			  0x8B83
+#define GL_MAX_COLOR_TEXTURE_SAMPLES      			  0x910E
+#define GL_TEXTURE_2D_MULTISAMPLE         			  0x9100
+#define GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX  0x9049
 
 typedef char   GLchar;
 typedef void   Gl_Attach_Shader(GLuint program, GLuint shader);

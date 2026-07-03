@@ -640,7 +640,7 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
             }
         }
 
-        font->glyph_texture_ids[index] = opengl_load_texture(character_buffer.data, width, height, GL_RGBA);
+		opengl_load_texture(character_buffer.data, width, height, &font->glyph_texture_ids[index], GL_RGBA);
 
         free_buffer(&character_buffer);
     }
@@ -650,10 +650,7 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
 
 static PLATFORM_LOAD_TEXTURE(load_texture)
 {
-	u32 result;
-	result = opengl_load_texture(text, GL_RGBA);
-
-	return result;
+	opengl_load_texture(path, id, GL_RGBA);
 }
 
 int main()
@@ -771,7 +768,7 @@ int main()
 
 			game_memory.platform_API.load_texture = load_texture;
 			
-            init_font(&game_memory.debug_font_consola, "src\\misc\\assets\\consola.font");
+            init_font(&game_memory.debug_font_consola, "..\\src\\misc\\assets\\consola.font");
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             Buffer render_buffer = allocate_buffer(gigabytes(1));

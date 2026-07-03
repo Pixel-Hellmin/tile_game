@@ -64,6 +64,13 @@ struct Particle
     f32 d_rotation;
 };
 
+struct Level_Assets
+{
+    u32 floor_texture_id;
+    u32 wall_texture_id;
+    u32 roof_texture_id;
+};
+
 struct Game_State
 {
     Random_Series entropy;
@@ -84,11 +91,9 @@ struct Game_State
     i32 level_rows;
     i32 level_cols;
 
-    u32 highlight_texture_id;
-    u32 floor_texture_id;
-    u32 wall_texture_id;
-    u32 roof_texture_id;
+	Level_Assets level_assets;
     u32 dude_texture_id;
+    u32 highlight_texture_id;
 
     b32 initialized;
 

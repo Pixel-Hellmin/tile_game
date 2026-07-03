@@ -46,7 +46,7 @@ generate_level(Game_State *game_state, f32 map_z)
             // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
             if(col == 0 || row == 0 || col == game_state->level_cols - 1 || row == game_state->level_rows - 1) // Roof all around
             {
-                tile->texture_id = game_state->roof_texture_id;
+                tile->texture_id = game_state->level_assets.roof_texture_id;
 
                 if(col == 0) // First col
                 {
@@ -65,7 +65,7 @@ generate_level(Game_State *game_state, f32 map_z)
             {
                 if((col - 1) % room_width != 0)
                 {
-                    tile->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->level_assets.wall_texture_id;
                     if(row == 1)
                     {
                         tile->rotation = Pi32;
@@ -73,14 +73,14 @@ generate_level(Game_State *game_state, f32 map_z)
                 }
                 else
             {
-                    tile->texture_id = game_state->roof_texture_id; // Roof for grid
+                    tile->texture_id = game_state->level_assets.roof_texture_id; // Roof for grid
                 }
             }
             else if(col == 1 || col == game_state->level_cols - 2) // Wall left and right
             {
                 if((row - 1) % room_width != 0)
                 {
-                    tile->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->level_assets.wall_texture_id;
                     if(col == 1)
                     {
                         tile->rotation = Pi32/2.0f;
@@ -92,16 +92,16 @@ generate_level(Game_State *game_state, f32 map_z)
                 }
                 else
             {
-                    tile->texture_id = game_state->roof_texture_id; // Roof for grid
+                    tile->texture_id = game_state->level_assets.roof_texture_id; // Roof for grid
                 }
             }
             else if((col - 1) % room_width == 0 || (row - 1) % room_width == 0)
             {
-                tile->texture_id = game_state->roof_texture_id; // Roof for grid
+                tile->texture_id = game_state->level_assets.roof_texture_id; // Roof for grid
             }
             else
         {
-                tile->texture_id = game_state->floor_texture_id;
+                tile->texture_id = game_state->level_assets.floor_texture_id;
             }
 
             // Corners
@@ -110,7 +110,7 @@ generate_level(Game_State *game_state, f32 map_z)
                 (col == game_state->level_cols - 2 && row == 1) ||
                 (col == game_state->level_cols - 2 && row == game_state->level_rows - 2))
             { 
-                tile->texture_id = game_state->wall_texture_id; 
+                tile->texture_id = game_state->level_assets.wall_texture_id; 
             }
         }
     }
@@ -200,7 +200,7 @@ generate_level(Game_State *game_state, f32 map_z)
 							game_state->level_cols, game_state->level_rows,
 							x_start-1, y_start, &tile))
                 {
-                    tile->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->level_assets.wall_texture_id;
                     tile->rotation = Pi32/2.0f;
                 }
             }
@@ -211,7 +211,7 @@ generate_level(Game_State *game_state, f32 map_z)
 							game_state->level_cols, game_state->level_rows,
 							x_end+1, y_end, &tile))
                 {
-                    tile->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->level_assets.wall_texture_id;
                     tile->rotation = -Pi32/2.0f;
                 }
             }
@@ -222,7 +222,7 @@ generate_level(Game_State *game_state, f32 map_z)
 							game_state->level_cols, game_state->level_rows,
 							x_start, y_start-1, &tile))
                 {
-                    tile->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->level_assets.wall_texture_id;
                     tile->rotation = Pi32;
                 }
             }
@@ -233,13 +233,13 @@ generate_level(Game_State *game_state, f32 map_z)
 							game_state->level_cols, game_state->level_rows,
 							x_start, y_end+1, &tile))
                 {
-                    tile->texture_id = game_state->wall_texture_id;
+                    tile->texture_id = game_state->level_assets.wall_texture_id;
                 }
             }
 
             // NOTE(Fermin): If this room hasn't been visited before, remove wall
             set_texture_to_tile_range(x_start, x_end, y_start, y_end,
-									  game_state->floor_texture_id,
+									  game_state->level_assets.floor_texture_id,
                                       game_state->level_cols,
 									  game_state->level_rows,
 									  &game_state->world_arena);
@@ -258,14 +258,14 @@ generate_level(Game_State *game_state, f32 map_z)
             Tile *test_roof_tile = {};
             if(get_tile(&game_state->world_arena, game_state->level_cols, game_state->level_rows, col, row, &test_roof_tile))
             {
-                if(test_roof_tile->texture_id == game_state->roof_texture_id)
+                if(test_roof_tile->texture_id == game_state->level_assets.roof_texture_id)
                 {
                     Tile *wall_tile = {};
                     if(get_tile(&game_state->world_arena, game_state->level_cols, game_state->level_rows, col, row-1, &wall_tile))
                     {
-                        if(wall_tile->texture_id == game_state->floor_texture_id)
+                        if(wall_tile->texture_id == game_state->level_assets.floor_texture_id)
                         {
-                            wall_tile->texture_id = game_state->wall_texture_id;
+                            wall_tile->texture_id = game_state->level_assets.wall_texture_id;
                         }
                     }
                 }
@@ -391,7 +391,6 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 {
 	size_t total_memory_partitioned = sizeof(Game_State);
 
-
 	initialize_arena(&game_state->world_arena, gigabytes(1),
 					 game_memory->permanent_storage.data + total_memory_partitioned);
 	total_memory_partitioned += game_state->world_arena.size;
@@ -431,16 +430,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(!game_state->initialized)
     {
-
 		game_state->entropy.index = 666;
 		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
 		game_state->tile_size_in_px = 64.0f;
 		// TODO(Fermin): Handle assets properly. How?
-		game_state->floor_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\floor.texture");
-		game_state->wall_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\wall.texture");
-		game_state->roof_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\roof.texture");
-		game_state->highlight_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\highlight.texture");
-		game_state->dude_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\direction.texture");
+		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\floor.texture",
+											   &game_state->level_assets.floor_texture_id);
+		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\wall.texture",
+											   &game_state->level_assets.wall_texture_id);
+		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\roof.texture",
+											   &game_state->level_assets.roof_texture_id);
+		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\highlight.texture",
+											   &game_state->highlight_texture_id);
+		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\direction.texture",
+											   &game_state->dude_texture_id);
 
 		partition_memory(game_state, game_memory);
 		initialize_arena(&game_state->tmp_arena,
@@ -453,7 +456,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		set_flag(game_state, game_state_flag_prints);
 
-		game_state->test_sound = DEBUG_load_WAV("src\\misc\\assets\\sounds\\test_music.wav");
+		game_state->test_sound = DEBUG_load_WAV("..\\src\\misc\\assets\\sounds\\test_music.wav");
 		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
 
 		dude->world_index = V3{0.0f, 0.0f, 0.0f};
@@ -473,7 +476,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		id++;
 		*id = game_state->highlight_texture_id;
 		id++;
-		*id = game_state->floor_texture_id;
+		*id = game_state->level_assets.floor_texture_id;
 
         game_state->initialized = 1;
     }
@@ -618,7 +621,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         part->world_index = particle->p;
         part->dim_in_tiles = V2{0.4, 0.4};
         part->rotation = particle->rotation;
-        part->texture_id = game_state->wall_texture_id;
+        part->texture_id = game_state->level_assets.wall_texture_id;
         part->color = color_trans;
     }
     // NOTE(Fermin): Experimental particle system logic END

@@ -96,7 +96,7 @@ struct Game_Sound_Output_Buffer
 	i16 *samples;
 };
 
-#define PLATFORM_LOAD_TEXTURE(name) u32 name(char *text)
+#define PLATFORM_LOAD_TEXTURE(name) void name(char *path, u32 *id)
 typedef PLATFORM_LOAD_TEXTURE(Platform_Load_Texture);
 struct Platform_API
 {
