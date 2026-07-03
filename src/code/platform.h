@@ -96,6 +96,13 @@ struct Game_Sound_Output_Buffer
 	i16 *samples;
 };
 
+#define PLATFORM_PRINT(name) void name(char *text)
+typedef PLATFORM_PRINT(Platform_Print);
+struct Platform_API
+{
+	Platform_Print *test_print;
+};
+
 struct Game_Memory
 {
 	// USE this instead of all the buffers in win layer
@@ -114,6 +121,8 @@ struct Game_Memory
 	Font debug_font_consola;
 
 	b32 debug_initialized;
+
+	Platform_API platform_API;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Memory_Arena *render_arena, Input_Keys *input)

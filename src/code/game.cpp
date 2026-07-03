@@ -431,6 +431,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(!game_state->initialized)
     {
+		game_memory->platform_API.test_print("Hello world from game");
+
 		game_state->entropy.index = 666;
 		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
 		game_state->tile_size_in_px = 64.0f;

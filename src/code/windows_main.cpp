@@ -648,6 +648,11 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
     free_buffer(&data);
 }
 
+static PLATFORM_PRINT(test_print)
+{
+	printf(text);
+}
+
 int main()
 {
     begin_profile();
@@ -777,6 +782,8 @@ int main()
             game_memory.roof_texture_id      = roof_texture_id;
             game_memory.highlight_texture_id = highlight_texture_id;
             game_memory.dude_texture_id      = dude_texture_id;
+
+			game_memory.platform_API.test_print = test_print;
 			
             init_font(&game_memory.debug_font_consola, "src\\misc\\assets\\consola.font");
 
