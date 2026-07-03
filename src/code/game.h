@@ -88,6 +88,7 @@ struct Game_State
     u32 floor_texture_id;
     u32 wall_texture_id;
     u32 roof_texture_id;
+    u32 dude_texture_id;
 
     b32 initialized;
 

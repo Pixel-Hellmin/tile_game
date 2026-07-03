@@ -96,11 +96,11 @@ struct Game_Sound_Output_Buffer
 	i16 *samples;
 };
 
-#define PLATFORM_PRINT(name) void name(char *text)
-typedef PLATFORM_PRINT(Platform_Print);
+#define PLATFORM_LOAD_TEXTURE(name) u32 name(char *text)
+typedef PLATFORM_LOAD_TEXTURE(Platform_Load_Texture);
 struct Platform_API
 {
-	Platform_Print *test_print;
+	Platform_Load_Texture *load_texture;
 };
 
 struct Game_Memory
@@ -113,11 +113,6 @@ struct Game_Memory
 	i32 window_height;
 
 	// debug assets
-    u32 highlight_texture_id;
-    u32 floor_texture_id;
-    u32 wall_texture_id;
-    u32 roof_texture_id;
-	u32 dude_texture_id;
 	Font debug_font_consola;
 
 	b32 debug_initialized;

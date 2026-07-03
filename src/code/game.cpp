@@ -431,16 +431,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
     if(!game_state->initialized)
     {
-		game_memory->platform_API.test_print("Hello world from game");
 
 		game_state->entropy.index = 666;
 		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
 		game_state->tile_size_in_px = 64.0f;
 		// TODO(Fermin): Handle assets properly. How?
-		game_state->floor_texture_id     = game_memory->floor_texture_id;
-		game_state->wall_texture_id      = game_memory->wall_texture_id;
-		game_state->roof_texture_id      = game_memory->roof_texture_id;
-		game_state->highlight_texture_id = game_memory->highlight_texture_id;
+		game_state->floor_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\floor.texture");
+		game_state->wall_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\wall.texture");
+		game_state->roof_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\roof.texture");
+		game_state->highlight_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\highlight.texture");
+		game_state->dude_texture_id = game_memory->platform_API.load_texture("src\\misc\\assets\\textures\\direction.texture");
 
 		partition_memory(game_state, game_memory);
 		initialize_arena(&game_state->tmp_arena,
@@ -458,7 +458,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		dude->world_index = V3{0.0f, 0.0f, 0.0f};
 		dude->dim_in_tiles = V2{1.0f, 1.0f};
-		dude->texture_id = game_memory->dude_texture_id;
+		dude->texture_id = game_state->dude_texture_id;
 		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
 
 		// TODO(Fermin): Proper initialization of flipbooks
@@ -469,11 +469,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 														   game_state->dude_flipbook_size,
 														   u32);
 		u32 *id = game_state->dude_animation_sprite_ids;
-		*id = game_memory->dude_texture_id;
+		*id = game_state->dude_texture_id;
 		id++;
-		*id = game_memory->highlight_texture_id;
+		*id = game_state->highlight_texture_id;
 		id++;
-		*id = game_memory->floor_texture_id;
+		*id = game_state->floor_texture_id;
 
         game_state->initialized = 1;
     }

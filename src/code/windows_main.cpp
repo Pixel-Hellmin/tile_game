@@ -648,9 +648,12 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
     free_buffer(&data);
 }
 
-static PLATFORM_PRINT(test_print)
+static PLATFORM_LOAD_TEXTURE(load_texture)
 {
-	printf(text);
+	u32 result;
+	result = opengl_load_texture(text, GL_RGBA);
+
+	return result;
 }
 
 int main()
@@ -754,16 +757,6 @@ int main()
 
             win32_running = 1;
 
-            // TODO(Fermin): We'll need some sort of asset streaming. Do this when we load level?
-            // NOTE(Fermin) | Start | Textures
-            u32 floor_texture_id     = opengl_load_texture("src\\misc\\assets\\textures\\floor.texture",     GL_RGBA);
-            u32 wall_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\wall.texture",      GL_RGBA);
-            u32 roof_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\roof.texture",      GL_RGBA);
-            //u32 highlight_texture_id = opengl_load_texture("src\\misc\\assets\\textures\\direction.texture", GL_RGBA);
-            u32 highlight_texture_id = opengl_load_texture("src\\misc\\assets\\textures\\highlight.texture", GL_RGBA);
-            u32 dude_texture_id      = opengl_load_texture("src\\misc\\assets\\textures\\direction.texture",      GL_RGBA);
-            // NOTE(Fermin) | End | Texture
-
             // NOTE(Fermin): Game things start
             Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
                                                   tmp_game_code_dll_full_path);
@@ -776,14 +769,7 @@ int main()
             game_memory.permanent_storage = allocate_buffer(gigabytes(3));
             game_memory.temporary_storage = allocate_buffer(gigabytes(1));
 
-			// NOTE(Fermin): Figure out what to do with game assets
-            game_memory.floor_texture_id     = floor_texture_id;
-            game_memory.wall_texture_id      = wall_texture_id;
-            game_memory.roof_texture_id      = roof_texture_id;
-            game_memory.highlight_texture_id = highlight_texture_id;
-            game_memory.dude_texture_id      = dude_texture_id;
-
-			game_memory.platform_API.test_print = test_print;
+			game_memory.platform_API.load_texture = load_texture;
 			
             init_font(&game_memory.debug_font_consola, "src\\misc\\assets\\consola.font");
 
