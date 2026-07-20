@@ -12,6 +12,7 @@
 
 // NOTE(Fermin): Got these from https://registry.khronos.org/OpenGL/api/GL/glcorearb.h
 #define GL_FRAMEBUFFER_SRGB							  0x8DB9
+#define GL_FRAMEBUFFER								  0x8D40
 #define GL_SRGB8_ALPHA8                   			  0x8C43
 #define GL_SHADING_LANGUAGE_VERSION       			  0x8B8C
 #define GL_VERTEX_SHADER                  			  0x8B31
@@ -22,6 +23,11 @@
 #define GL_MAX_COLOR_TEXTURE_SAMPLES      			  0x910E
 #define GL_TEXTURE_2D_MULTISAMPLE         			  0x9100
 #define GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX  0x9049
+#define GL_COLOR_ATTACHMENT0						  0x8CE0
+#define GL_RENDERBUFFER								  0x8D41
+#define GL_DEPTH_ATTACHMENT							  0x8D00
+#define GL_FRAMEBUFFER_COMPLETE						  0x8CD5
+#define GL_TEXTURE0									  0x84C0
 
 typedef char   GLchar;
 typedef void   Gl_Attach_Shader(GLuint program, GLuint shader);
@@ -36,9 +42,20 @@ typedef void   Gl_Get_Program_Info_Log(GLuint program, GLsizei bufSize, GLsizei 
 typedef void   Gl_Uniform_Matrix_4vf(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void   Gl_Uniform_1i(GLint location, GLint v0);
 typedef void   Gl_Tex_Image_2D_Multisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
+typedef void   GL_Bind_Framebuffer(GLenum target, GLuint framebuffer);
+typedef void   GL_Gen_Framebuffers(GLsizei n, GLuint *ids);
+typedef void   GL_Framebuffer_Texture_2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+typedef void   GL_Gen_Renderbuffers(GLsizei n, GLuint *renderbuffers);
+typedef void   GL_Bind_Renderbuffer(GLenum target, GLuint renderbuffer);
+typedef void   GL_Renderbuffer_Storage(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
+typedef void   GL_Framebuffer_Renderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+typedef void   GL_Delete_Framebuffers(GLsizei n, GLuint *framebuffers);
+typedef void   GL_Delete_Renderbuffers(GLsizei n, GLuint *renderbuffers);
+typedef void   GL_Active_Texture(GLenum texture);
 typedef GLuint Gl_Create_Program(void);
 typedef GLuint Gl_Create_Shader(GLenum type);
 typedef GLint  Gl_Get_Uniform_Location(GLuint program, const GLchar *name);
+typedef GLenum GL_Check_Framebuffer_Status(GLenum target);
 
 global_variable Gl_Attach_Shader			*glAttachShader;
 global_variable Gl_Compile_Shader			*glCompileShader;
@@ -55,13 +72,29 @@ global_variable Gl_Get_Uniform_Location 	*glGetUniformLocation;
 global_variable Gl_Uniform_Matrix_4vf	    *glUniformMatrix4fv;
 global_variable Gl_Uniform_1i				*glUniform1i;
 global_variable Gl_Tex_Image_2D_Multisample *glTexImage2DMultisample;
- 
+global_variable GL_Bind_Framebuffer         *glBindFramebuffer;
+global_variable GL_Gen_Framebuffers         *glGenFramebuffers;
+global_variable GL_Framebuffer_Texture_2D   *glFramebufferTexture2D;
+global_variable GL_Gen_Framebuffers         *glGenRenderbuffers;
+global_variable GL_Bind_Renderbuffer		*glBindRenderbuffer;
+global_variable GL_Renderbuffer_Storage		*glRenderbufferStorage;
+global_variable GL_Framebuffer_Renderbuffer *glFramebufferRenderbuffer;
+global_variable GL_Check_Framebuffer_Status *glCheckFramebufferStatus;
+global_variable GL_Delete_Framebuffers	    *glDeleteFramebuffers;
+global_variable GL_Delete_Renderbuffers     *glDeleteRenderbuffers;
+global_variable GL_Active_Texture			*glActiveTexture;
+
 struct Opengl {
     GLuint program;
     GLuint transform_id;
     GLuint texture_sampler_id;
     GLuint default_internal_texture_format;
-    GLint max_multisample_count;
+	GLuint fbo;
+	GLuint fbo_texture;
+	GLuint fbo_depth;
+    GLuint filter_program;
+    GLuint filter_texture_sampler_id;
+    GLint  max_multisample_count;
 };
 
 struct Opengl_Info

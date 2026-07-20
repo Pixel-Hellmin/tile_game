@@ -170,7 +170,75 @@ opengl_init(Opengl_Info info)
     opengl.program = opengl_create_program(defines, header_code, vertex_code, fragment_code);
     opengl.transform_id = glGetUniformLocation(opengl.program, "transform");
     opengl.texture_sampler_id = glGetUniformLocation(opengl.program, "texture_sampler");
+
+	char *filter_vertex_code = R"FOO(
+		smooth out vec2 frag_uv;
+	    void main(void)
+	    {
+	        gl_Position = gl_Vertex;
+	        frag_uv = gl_MultiTexCoord0.xy;
+	    }
+	)FOO";
+
+	char *filter_fragment_code = R"FOO(
+		uniform sampler2D texture_sampler;
+		smooth in vec2 frag_uv;
+		out vec4 result_color;
+		void main(void)
+		{
+			vec4 color = texture(texture_sampler, frag_uv);
+			
+			// scanlines
+			float scanline = sin(frag_uv.y * 800.0) * 0.04;
+			color.rgb -= scanline;
+			
+			// slight vignette
+			vec2 uv_centered = frag_uv - 0.5;
+			float vignette = 1.0 - dot(uv_centered, uv_centered) * 2.0;
+			color.rgb *= vignette;
+			
+			// green tint
+			color.rgb *= vec3(0.8, 1.1, 0.8);
+			
+			result_color = color;
+		}
+	)FOO";
+
+	opengl.filter_program = opengl_create_program(defines, header_code, filter_vertex_code, filter_fragment_code);
+	opengl.filter_texture_sampler_id = glGetUniformLocation(opengl.filter_program, "texture_sampler");
 }
+
+static void
+opengl_init_fbo(i32 window_width, i32 window_height)
+{
+	if(opengl.fbo != 0)
+	{
+		glDeleteFramebuffers(1, &opengl.fbo);
+		glDeleteTextures(1, &opengl.fbo_texture);
+		glDeleteRenderbuffers(1, &opengl.fbo_depth);
+	}
+
+	glGenFramebuffers(1, &opengl.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, opengl.fbo);
+
+	// color texture
+	glGenTextures(1, &opengl.fbo_texture);
+	glBindTexture(GL_TEXTURE_2D, opengl.fbo_texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format, window_width, window_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, opengl.fbo_texture, 0);
+
+	// depth renderbuffer
+	glGenRenderbuffers(1, &opengl.fbo_depth);
+	glBindRenderbuffer(GL_RENDERBUFFER, opengl.fbo_depth);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, window_width, window_height);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, opengl.fbo_depth);
+
+	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 
 inline void
 opengl_rectangle(V3 *corners, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
@@ -295,6 +363,7 @@ opengl_render(i32 window_width, i32 window_height, Memory_Arena* render_arena)
     M4 ortho = {};
     ortho = orthogonal((f32)window_width, (f32)window_height);
 
+	glBindFramebuffer(GL_FRAMEBUFFER, opengl.fbo); // NOTE(Fermin): Render to frame buffer
     glViewport(0, 0, window_width, window_height);
 	//glScissor(0, 0, window_width, window_height);
 
@@ -329,4 +398,30 @@ opengl_render(i32 window_width, i32 window_height, Memory_Arena* render_arena)
     }
 
     glUseProgram(0);
+}
+
+static void
+opengl_render_to_screen()
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // 0 = back to screen
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_BLEND);
+	glUseProgram(opengl.filter_program);
+	glUniform1i(opengl.filter_texture_sampler_id, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, opengl.fbo_texture);
+	glBegin(GL_TRIANGLES);
+
+    // lower triangle
+    glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+    glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
+    glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
+    // upper triangle
+    glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+    glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
+    glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
+
+    glEnd();
+	glUseProgram(0);
+	glEnable(GL_BLEND);
 }

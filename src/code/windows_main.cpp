@@ -26,6 +26,19 @@ global_variable Wgl_Swap_Interval_Ext *wgl_swap_interval;
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
 
+static Win32_Window_Dimension
+win32_get_window_dimension(HWND window)
+{
+    Win32_Window_Dimension result;
+
+    RECT client_rect;
+    GetClientRect(window, &client_rect);
+    result.width = client_rect.right - client_rect.left;
+    result.height = client_rect.bottom - client_rect.top;
+
+    return result;
+}
+
 static void
 win32_init_opengl(HWND window)
 {
@@ -105,6 +118,17 @@ win32_init_opengl(HWND window)
         glUniformMatrix4fv = (Gl_Uniform_Matrix_4vf *)wglGetProcAddress("glUniformMatrix4fv");
         glUniform1i = (Gl_Uniform_1i *)wglGetProcAddress("glUniform1i");
         glTexImage2DMultisample = (Gl_Tex_Image_2D_Multisample  *)wglGetProcAddress("glTexImage2DMultisample");
+        glBindFramebuffer = (GL_Bind_Framebuffer  *)wglGetProcAddress("glBindFramebuffer");
+        glGenFramebuffers = (GL_Gen_Framebuffers  *)wglGetProcAddress("glGenFramebuffers");
+        glFramebufferTexture2D = (GL_Framebuffer_Texture_2D  *)wglGetProcAddress("glFramebufferTexture2D");
+        glGenRenderbuffers = (GL_Gen_Framebuffers  *)wglGetProcAddress("glGenRenderbuffers");
+        glBindRenderbuffer = (GL_Bind_Renderbuffer  *)wglGetProcAddress("glBindRenderbuffer");
+        glRenderbufferStorage = (GL_Renderbuffer_Storage  *)wglGetProcAddress("glRenderbufferStorage");
+        glFramebufferRenderbuffer = (GL_Framebuffer_Renderbuffer  *)wglGetProcAddress("glFramebufferRenderbuffer");
+        glCheckFramebufferStatus = (GL_Check_Framebuffer_Status  *)wglGetProcAddress("glCheckFramebufferStatus");
+        glDeleteFramebuffers = (GL_Delete_Framebuffers  *)wglGetProcAddress("glDeleteFramebuffers");
+        glDeleteRenderbuffers = (GL_Delete_Renderbuffers  *)wglGetProcAddress("glDeleteRenderbuffers");
+        glActiveTexture = (GL_Active_Texture  *)wglGetProcAddress("glActiveTexture");
 
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
@@ -115,6 +139,9 @@ win32_init_opengl(HWND window)
 
         Opengl_Info info = opengl_get_info(modern_context);
         opengl_init(info);
+
+		Win32_Window_Dimension dimension = win32_get_window_dimension(window);
+		opengl_init_fbo(dimension.width, dimension.height);
     }
     else
     {
@@ -272,19 +299,6 @@ win32_fill_sound_buffer(Win32_Sound_Output *sound_output, DWORD byte_to_lock,
 	}
 }
 
-static Win32_Window_Dimension
-win32_get_window_dimension(HWND window)
-{
-    Win32_Window_Dimension result;
-
-    RECT client_rect;
-    GetClientRect(window, &client_rect);
-    result.width = client_rect.right - client_rect.left;
-    result.height = client_rect.bottom - client_rect.top;
-
-    return result;
-}
-
 static void
 win32_resize_DIB_section(i32 width, i32 height)
 {
@@ -311,7 +325,8 @@ win32_resize_DIB_section(i32 width, i32 height)
 static void
 win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Memory_Arena *render_arena)
 {
-    opengl_render(window_width, window_height, render_arena);
+    opengl_render(window_width, window_height, render_arena); // renders to fbo before post-processing
+	opengl_render_to_screen(); // renders to screen through post-processing shader
 
     {
         // NOTE(Fermin): This takes most of the time because of V-Sync.
@@ -367,6 +382,15 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
             win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_arena);
             EndPaint(window, &paint);
+        } break;
+
+        case WM_SIZE:
+        {
+			if(opengl.program != 0) // NOTE(Fermin): Check if opengl has been initialized
+			{
+				Win32_Window_Dimension dimension = win32_get_window_dimension(window);
+				opengl_init_fbo(dimension.width, dimension.height);
+			}
         } break;
 
         default:
