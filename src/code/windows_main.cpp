@@ -325,8 +325,17 @@ win32_resize_DIB_section(i32 width, i32 height)
 static void
 win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Memory_Arena *render_arena)
 {
-    opengl_render(window_width, window_height, render_arena); // renders to fbo before post-processing
-	opengl_render_to_screen(); // renders to screen through post-processing shader
+	if(opengl.post_processing_enabled)
+	{
+		// renders to fbo before post-processing
+		opengl_render(window_width, window_height, render_arena, opengl.fbo);
+		opengl_render_to_screen(); // renders to screen through post-processing shader
+	}
+	else
+	{
+		// renders directly to screen
+		opengl_render(window_width, window_height, render_arena, 0);
+	}
 
     {
         // NOTE(Fermin): This takes most of the time because of V-Sync.

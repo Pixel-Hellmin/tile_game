@@ -237,6 +237,7 @@ opengl_init_fbo(i32 window_width, i32 window_height)
 
 	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	opengl.post_processing_enabled = 1;
 }
 
 
@@ -356,14 +357,14 @@ opengl_load_texture(char *path, u32 *id, u32 format)
 }
 
 static void
-opengl_render(i32 window_width, i32 window_height, Memory_Arena* render_arena)
+opengl_render(i32 window_width, i32 window_height, Memory_Arena* render_arena, GLuint buffer)
 {
     time_function;
 
     M4 ortho = {};
     ortho = orthogonal((f32)window_width, (f32)window_height);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, opengl.fbo); // NOTE(Fermin): Render to frame buffer
+	glBindFramebuffer(GL_FRAMEBUFFER, buffer);
     glViewport(0, 0, window_width, window_height);
 	//glScissor(0, 0, window_width, window_height);
 

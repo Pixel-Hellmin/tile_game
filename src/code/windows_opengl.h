@@ -73,6 +73,7 @@ struct Opengl {
     GLuint filter_program;
     GLuint filter_texture_sampler_id;
     GLint  max_multisample_count;
+	b32 post_processing_enabled;
 };
 
 struct Opengl_Info
