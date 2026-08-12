@@ -20,7 +20,7 @@ typedef float      f32;
 typedef double     f64;
 typedef int32_t    b32;
 
-#define global_variable static
+#define global static
 
 #define Pi32 3.14159265359f
 
@@ -43,7 +43,7 @@ typedef int32_t    b32;
 #define pointer_from_u32(type, value) (type *)((size_t)value)
 
 // NOTE(Fermin): This shouldnt be here
-global_variable const f32 font_point_size = 64.0f;
+global const f32 font_point_size = 64.0f;
 
 #include "math.cpp"
 #include "buffer.cpp"
@@ -80,9 +80,9 @@ struct Glyph_Metadata // here for now. where should it go?
     i32 advance;
 };
 
-global_variable const u32 font_first_character = '!';
-global_variable const u32 font_last_character = '~';
-global_variable const u32 font_character_count = font_last_character - font_first_character + 1;
+global const u32 font_first_character = '!';
+global const u32 font_last_character = '~';
+global const u32 font_character_count = font_last_character - font_first_character + 1;
 struct Font // here for now. where should it go?
 {
     u32 glyph_texture_ids[font_character_count];

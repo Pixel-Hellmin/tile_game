@@ -23,8 +23,8 @@ struct profile_anchor
     u64 processed_byte_count;
     char const *label;
 };
-global_variable profile_anchor global_profiler_anchors[4096];
-global_variable u32 global_profiler_parent;
+global profile_anchor global_profiler_anchors[4096];
+global u32 global_profiler_parent;
 
 struct profile_block
 {
@@ -126,7 +126,7 @@ struct profiler
     u64 start_TSC;
     u64 end_TSC;
 };
-global_variable profiler global_profiler;
+global profiler global_profiler;
 
 #define time_block(name) time_bandwidth(name, 0);
 #define time_function time_block(__func__)

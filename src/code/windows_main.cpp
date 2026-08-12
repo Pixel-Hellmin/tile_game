@@ -8,20 +8,15 @@
 #include "shared.h"
 #include "windows_opengl.h"
 
-global_variable Opengl opengl = {};
+global Opengl opengl = {};
 #include "windows_opengl.cpp"
 
 // NOTE(Fermin): Start moving these globals to where they belong
-global_variable Memory_Arena render_arena = {};
-global_variable LPDIRECTSOUNDBUFFER secondary_buffer;
-global_variable u32 bytes_per_pixel = 4;
-global_variable b32 win32_running;
-global_variable f32 global_perf_count_frequency;
-global_variable Win32_Offscreen_Buffer global_back_buffer;
-
-typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
-typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
-global_variable Wgl_Swap_Interval_Ext *wgl_swap_interval;
+global Memory_Arena render_arena = {};
+global LPDIRECTSOUNDBUFFER secondary_buffer;
+global b32 win32_running;
+global f32 global_perf_count_frequency;
+global Win32_Offscreen_Buffer global_back_buffer;
 
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
@@ -103,32 +98,34 @@ win32_init_opengl(HWND window)
             // NOTE(Fermin): Antiquated verson of openGL
         }
 
-        glAttachShader = (Gl_Attach_Shader *)wglGetProcAddress("glAttachShader");
-        glCompileShader = (Gl_Compile_Shader *)wglGetProcAddress("glCompileShader");
-        glCreateProgram = (Gl_Create_Program *)wglGetProcAddress("glCreateProgram");
-        glCreateShader = (Gl_Create_Shader *)wglGetProcAddress("glCreateShader");
-        glLinkProgram = (Gl_Link_Program *)wglGetProcAddress("glLinkProgram");
-        glShaderSource = (Gl_Shader_Source *)wglGetProcAddress("glShaderSource");
-        glUseProgram = (Gl_Use_Program *)wglGetProcAddress("glUseProgram");
-        glValidateProgram = (Gl_Validate_Program *)wglGetProcAddress("glValidateProgram");
-        glGetProgramiv = (Gl_Get_Programiv *)wglGetProcAddress("glGetProgramiv");
-        glGetShaderInfoLog = (Gl_Get_Shader_Info_Log *)wglGetProcAddress("glGetShaderInfoLog");
-        glGetProgramInfoLog = (Gl_Get_Program_Info_Log *)wglGetProcAddress("glGetProgramInfoLog");
-        glGetUniformLocation = (Gl_Get_Uniform_Location *)wglGetProcAddress("glGetUniformLocation");
-        glUniformMatrix4fv = (Gl_Uniform_Matrix_4vf *)wglGetProcAddress("glUniformMatrix4fv");
-        glUniform1i = (Gl_Uniform_1i *)wglGetProcAddress("glUniform1i");
-        glTexImage2DMultisample = (Gl_Tex_Image_2D_Multisample  *)wglGetProcAddress("glTexImage2DMultisample");
-        glBindFramebuffer = (GL_Bind_Framebuffer  *)wglGetProcAddress("glBindFramebuffer");
-        glGenFramebuffers = (GL_Gen_Framebuffers  *)wglGetProcAddress("glGenFramebuffers");
-        glFramebufferTexture2D = (GL_Framebuffer_Texture_2D  *)wglGetProcAddress("glFramebufferTexture2D");
-        glGenRenderbuffers = (GL_Gen_Framebuffers  *)wglGetProcAddress("glGenRenderbuffers");
-        glBindRenderbuffer = (GL_Bind_Renderbuffer  *)wglGetProcAddress("glBindRenderbuffer");
-        glRenderbufferStorage = (GL_Renderbuffer_Storage  *)wglGetProcAddress("glRenderbufferStorage");
-        glFramebufferRenderbuffer = (GL_Framebuffer_Renderbuffer  *)wglGetProcAddress("glFramebufferRenderbuffer");
-        glCheckFramebufferStatus = (GL_Check_Framebuffer_Status  *)wglGetProcAddress("glCheckFramebufferStatus");
-        glDeleteFramebuffers = (GL_Delete_Framebuffers  *)wglGetProcAddress("glDeleteFramebuffers");
-        glDeleteRenderbuffers = (GL_Delete_Renderbuffers  *)wglGetProcAddress("glDeleteRenderbuffers");
-        glActiveTexture = (GL_Active_Texture  *)wglGetProcAddress("glActiveTexture");
+#define win32_get_opengl_function(type, name) opengl.name = (type *)wglGetProcAddress(#name);
+
+		win32_get_opengl_function(Gl_Attach_Shader,            glAttachShader)
+		win32_get_opengl_function(Gl_Compile_Shader,           glCompileShader)
+		win32_get_opengl_function(Gl_Create_Program,           glCreateProgram)
+		win32_get_opengl_function(Gl_Create_Shader,            glCreateShader)
+		win32_get_opengl_function(Gl_Link_Program,             glLinkProgram)
+		win32_get_opengl_function(Gl_Shader_Source,            glShaderSource)
+		win32_get_opengl_function(Gl_Use_Program,              glUseProgram)
+		win32_get_opengl_function(Gl_Validate_Program,         glValidateProgram)
+		win32_get_opengl_function(Gl_Get_Programiv,            glGetProgramiv)
+		win32_get_opengl_function(Gl_Get_Shader_Info_Log,      glGetShaderInfoLog)
+		win32_get_opengl_function(Gl_Get_Program_Info_Log,     glGetProgramInfoLog)
+		win32_get_opengl_function(Gl_Get_Uniform_Location,     glGetUniformLocation)
+		win32_get_opengl_function(Gl_Uniform_Matrix_4vf,       glUniformMatrix4fv)
+		win32_get_opengl_function(Gl_Uniform_1i,               glUniform1i)
+		win32_get_opengl_function(Gl_Tex_Image_2D_Multisample, glTexImage2DMultisample)
+		win32_get_opengl_function(GL_Bind_Framebuffer,         glBindFramebuffer)
+		win32_get_opengl_function(GL_Gen_Framebuffers,         glGenFramebuffers)
+		win32_get_opengl_function(GL_Framebuffer_Texture_2D,   glFramebufferTexture2D)
+		win32_get_opengl_function(GL_Gen_Renderbuffers,        glGenRenderbuffers)
+		win32_get_opengl_function(GL_Bind_Renderbuffer,        glBindRenderbuffer)
+		win32_get_opengl_function(GL_Renderbuffer_Storage,     glRenderbufferStorage)
+		win32_get_opengl_function(GL_Framebuffer_Renderbuffer, glFramebufferRenderbuffer)
+		win32_get_opengl_function(GL_Check_Framebuffer_Status, glCheckFramebufferStatus)
+		win32_get_opengl_function(GL_Delete_Framebuffers,      glDeleteFramebuffers)
+		win32_get_opengl_function(GL_Delete_Renderbuffers,     glDeleteRenderbuffers)
+		win32_get_opengl_function(GL_Active_Texture,           glActiveTexture)
 
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
@@ -309,7 +306,7 @@ win32_resize_DIB_section(i32 width, i32 height)
 
     global_back_buffer.width = width;
     global_back_buffer.height = height;
-    global_back_buffer.bytes_per_pixel = bytes_per_pixel;
+    global_back_buffer.bytes_per_pixel = 4;
     global_back_buffer.pitch = width * global_back_buffer.bytes_per_pixel;
     global_back_buffer.info.bmiHeader.biSize = sizeof(global_back_buffer.info.bmiHeader);
     global_back_buffer.info.bmiHeader.biWidth = global_back_buffer.width;
@@ -329,7 +326,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 	{
 		// renders to fbo before post-processing
 		opengl_render(window_width, window_height, render_arena, opengl.fbo);
-		opengl_render_to_screen(); // renders to screen through post-processing shader
+		opengl_post_process_and_render_to_screen(); // renders to screen through post-processing shader
 	}
 	else
 	{
@@ -789,7 +786,7 @@ int main()
 
             // NOTE(Fermin): Game things start
             Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
-                                                  tmp_game_code_dll_full_path);
+														tmp_game_code_dll_full_path);
 
 			Input_Keys input[2] = {};
 			Input_Keys *new_input = &input[0];

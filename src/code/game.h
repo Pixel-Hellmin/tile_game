@@ -227,8 +227,8 @@ get_character_metadata(char character, Glyph_Metadata *out, Font *font) // here 
 }
 
 // NOTE: where should these variables go?
-global_variable f32 debug_print_line = 0.0f;
-global_variable Font *debug_print_font = {};
+global f32 debug_print_line = 0.0f;
+global Font *debug_print_font = {};
 static void
 print_debug_text(char *string, Memory_Arena *arena, V4 color = {0.0f, 1.0f, 0.0f, 1.0f}) // move to shared?
 {

@@ -29,38 +29,42 @@
 #define GL_FRAMEBUFFER_COMPLETE						  0x8CD5
 #define GL_TEXTURE0									  0x84C0
 
-#define Opengl_Binding(return, name, type, ...) \
+#define opengl_binding(return, name, type, ...) \
 	typedef return name(__VA_ARGS__); \
-	global_variable name *type;
 
 typedef char GLchar;
-Opengl_Binding(void,   Gl_Attach_Shader,            glAttachShader,            GLuint program, GLuint shader)
-Opengl_Binding(void,   Gl_Compile_Shader,           glCompileShader,           GLuint shader)
-Opengl_Binding(void,   Gl_Link_Program,             glLinkProgram,             GLuint program)
-Opengl_Binding(void,   Gl_Shader_Source,            glShaderSource,            GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length)
-Opengl_Binding(void,   Gl_Use_Program,              glUseProgram,              GLuint program)
-Opengl_Binding(void,   Gl_Validate_Program,         glValidateProgram,         GLuint program)
-Opengl_Binding(void,   Gl_Get_Programiv,            glGetProgramiv,            GLuint program, GLenum pname, GLint *params)
-Opengl_Binding(void,   Gl_Get_Shader_Info_Log,      glGetShaderInfoLog,        GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog)
-Opengl_Binding(void,   Gl_Get_Program_Info_Log,     glGetProgramInfoLog,       GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog)
-Opengl_Binding(void,   Gl_Uniform_Matrix_4vf,       glUniformMatrix4fv,        GLint location, GLsizei count, GLboolean transpose, const GLfloat *value)
-Opengl_Binding(void,   Gl_Uniform_1i,               glUniform1i,               GLint location, GLint v0)
-Opengl_Binding(void,   Gl_Tex_Image_2D_Multisample, glTexImage2DMultisample,   GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)
-Opengl_Binding(void,   GL_Bind_Framebuffer,         glBindFramebuffer,         GLenum target, GLuint framebuffer)
-Opengl_Binding(void,   GL_Gen_Framebuffers,         glGenFramebuffers,         GLsizei n, GLuint *ids)
-Opengl_Binding(void,   GL_Framebuffer_Texture_2D,   glFramebufferTexture2D,    GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)
-Opengl_Binding(void,   GL_Gen_Renderbuffers,        glGenRenderbuffers,        GLsizei n, GLuint *renderbuffers)
-Opengl_Binding(void,   GL_Bind_Renderbuffer,        glBindRenderbuffer,        GLenum target, GLuint renderbuffer)
-Opengl_Binding(void,   GL_Renderbuffer_Storage,     glRenderbufferStorage,     GLenum target, GLenum internalformat, GLsizei width, GLsizei height)
-Opengl_Binding(void,   GL_Framebuffer_Renderbuffer, glFramebufferRenderbuffer, GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)
-Opengl_Binding(void,   GL_Delete_Framebuffers,      glDeleteFramebuffers,      GLsizei n, GLuint *framebuffers)
-Opengl_Binding(void,   GL_Delete_Renderbuffers,     glDeleteRenderbuffers,     GLsizei n, GLuint *renderbuffers)
-Opengl_Binding(void,   GL_Active_Texture,           glActiveTexture,           GLenum texture)
-Opengl_Binding(GLuint, Gl_Create_Program,           glCreateProgram,           void)
-Opengl_Binding(GLuint, Gl_Create_Shader,            glCreateShader,            GLenum type)
-Opengl_Binding(GLint,  Gl_Get_Uniform_Location,     glGetUniformLocation,      GLuint program, const GLchar *name)
-Opengl_Binding(GLenum, GL_Check_Framebuffer_Status, glCheckFramebufferStatus,  GLenum target)
-#undef Opengl_Binding
+opengl_binding(void,   Gl_Attach_Shader,            glAttachShader,            GLuint program, GLuint shader)
+opengl_binding(void,   Gl_Compile_Shader,           glCompileShader,           GLuint shader)
+opengl_binding(void,   Gl_Link_Program,             glLinkProgram,             GLuint program)
+opengl_binding(void,   Gl_Shader_Source,            glShaderSource,            GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length)
+opengl_binding(void,   Gl_Use_Program,              glUseProgram,              GLuint program)
+opengl_binding(void,   Gl_Validate_Program,         glValidateProgram,         GLuint program)
+opengl_binding(void,   Gl_Get_Programiv,            glGetProgramiv,            GLuint program, GLenum pname, GLint *params)
+opengl_binding(void,   Gl_Get_Shader_Info_Log,      glGetShaderInfoLog,        GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog)
+opengl_binding(void,   Gl_Get_Program_Info_Log,     glGetProgramInfoLog,       GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog)
+opengl_binding(void,   Gl_Uniform_Matrix_4vf,       glUniformMatrix4fv,        GLint location, GLsizei count, GLboolean transpose, const GLfloat *value)
+opengl_binding(void,   Gl_Uniform_1i,               glUniform1i,               GLint location, GLint v0)
+opengl_binding(void,   Gl_Tex_Image_2D_Multisample, glTexImage2DMultisample,   GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)
+opengl_binding(void,   GL_Bind_Framebuffer,         glBindFramebuffer,         GLenum target, GLuint framebuffer)
+opengl_binding(void,   GL_Gen_Framebuffers,         glGenFramebuffers,         GLsizei n, GLuint *ids)
+opengl_binding(void,   GL_Framebuffer_Texture_2D,   glFramebufferTexture2D,    GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)
+opengl_binding(void,   GL_Gen_Renderbuffers,        glGenRenderbuffers,        GLsizei n, GLuint *renderbuffers)
+opengl_binding(void,   GL_Bind_Renderbuffer,        glBindRenderbuffer,        GLenum target, GLuint renderbuffer)
+opengl_binding(void,   GL_Renderbuffer_Storage,     glRenderbufferStorage,     GLenum target, GLenum internalformat, GLsizei width, GLsizei height)
+opengl_binding(void,   GL_Framebuffer_Renderbuffer, glFramebufferRenderbuffer, GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)
+opengl_binding(void,   GL_Delete_Framebuffers,      glDeleteFramebuffers,      GLsizei n, GLuint *framebuffers)
+opengl_binding(void,   GL_Delete_Renderbuffers,     glDeleteRenderbuffers,     GLsizei n, GLuint *renderbuffers)
+opengl_binding(void,   GL_Active_Texture,           glActiveTexture,           GLenum texture)
+opengl_binding(GLuint, Gl_Create_Program,           glCreateProgram,           void)
+opengl_binding(GLuint, Gl_Create_Shader,            glCreateShader,            GLenum type)
+opengl_binding(GLint,  Gl_Get_Uniform_Location,     glGetUniformLocation,      GLuint program, const GLchar *name)
+opengl_binding(GLenum, GL_Check_Framebuffer_Status, glCheckFramebufferStatus,  GLenum target)
+#undef opengl_binding
+
+typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
+typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
+
+global Wgl_Swap_Interval_Ext *wgl_swap_interval;
 
 struct Opengl {
     GLuint program;
@@ -73,7 +77,34 @@ struct Opengl {
     GLuint filter_program;
     GLuint filter_texture_sampler_id;
     GLint  max_multisample_count;
-	b32 post_processing_enabled;
+	b32    post_processing_enabled;
+
+	Gl_Attach_Shader            *glAttachShader;
+	Gl_Compile_Shader           *glCompileShader;
+	Gl_Create_Program           *glCreateProgram;
+	Gl_Create_Shader            *glCreateShader;
+	Gl_Link_Program             *glLinkProgram;
+	Gl_Shader_Source            *glShaderSource;
+	Gl_Use_Program              *glUseProgram;
+	Gl_Validate_Program         *glValidateProgram;
+	Gl_Get_Programiv            *glGetProgramiv;
+	Gl_Get_Shader_Info_Log      *glGetShaderInfoLog;
+	Gl_Get_Program_Info_Log     *glGetProgramInfoLog;
+	Gl_Get_Uniform_Location     *glGetUniformLocation;
+	Gl_Uniform_Matrix_4vf       *glUniformMatrix4fv;
+	Gl_Uniform_1i               *glUniform1i;
+	Gl_Tex_Image_2D_Multisample *glTexImage2DMultisample;
+	GL_Bind_Framebuffer         *glBindFramebuffer;
+	GL_Gen_Framebuffers         *glGenFramebuffers;
+	GL_Framebuffer_Texture_2D   *glFramebufferTexture2D;
+	GL_Gen_Renderbuffers        *glGenRenderbuffers;
+	GL_Bind_Renderbuffer        *glBindRenderbuffer;
+	GL_Renderbuffer_Storage     *glRenderbufferStorage;
+	GL_Framebuffer_Renderbuffer *glFramebufferRenderbuffer;
+	GL_Check_Framebuffer_Status *glCheckFramebufferStatus;
+	GL_Delete_Framebuffers      *glDeleteFramebuffers;
+	GL_Delete_Renderbuffers     *glDeleteRenderbuffers;
+	GL_Active_Texture           *glActiveTexture;
 };
 
 struct Opengl_Info
