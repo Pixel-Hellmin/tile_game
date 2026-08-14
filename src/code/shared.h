@@ -114,4 +114,3 @@ cat_strings(size_t source_a_count, char *source_a,
 
 #define SHARED_H
 #endif
-

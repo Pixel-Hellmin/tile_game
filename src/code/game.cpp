@@ -433,7 +433,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_state->entropy.index = 666;
 		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
 		game_state->tile_size_in_px = 64.0f;
-		// TODO(Fermin): Handle assets properly. How?
+		// TODO(Fermin): Handle assets properly. How? Dont load right now, but queue and let the
+		// platform layer handle it?
 		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\floor.texture",
 											   &game_state->level_assets.floor_texture_id);
 		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\wall.texture",

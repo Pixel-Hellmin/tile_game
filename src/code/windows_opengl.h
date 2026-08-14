@@ -64,8 +64,6 @@ opengl_binding(GLenum, GL_Check_Framebuffer_Status, glCheckFramebufferStatus,  G
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
 typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
 
-global Wgl_Swap_Interval_Ext *wgl_swap_interval;
-
 struct Opengl {
     GLuint program;
     GLuint transform_id;
@@ -119,6 +117,9 @@ struct Opengl_Info
     b32 GL_EXT_texture_sRGB;
     b32 GL_EXT_framebuffer_sRGB;
 };
+
+global Opengl opengl;
+global Wgl_Swap_Interval_Ext *wgl_swap_interval;
 
 #define OPENGL_H
 #endif

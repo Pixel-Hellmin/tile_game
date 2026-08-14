@@ -1,22 +1,21 @@
-#include "platform.h"
-
 #include <windows.h>
 #include <dsound.h>
 #include <gl/gl.h>
 
+#include "platform.h"
 #include "windows_main.h"
 #include "shared.h"
-#include "windows_opengl.h"
-
-global Opengl opengl = {};
 #include "windows_opengl.cpp"
 
+global int my_argc;
+global char** my_argv;
+
 // NOTE(Fermin): Start moving these globals to where they belong
-global Memory_Arena render_arena = {};
-global LPDIRECTSOUNDBUFFER secondary_buffer;
+global Memory_Arena render_arena;
 global b32 win32_running;
 global f32 global_perf_count_frequency;
 global Win32_Offscreen_Buffer global_back_buffer;
+global LPDIRECTSOUNDBUFFER secondary_buffer;
 
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
@@ -683,9 +682,12 @@ static PLATFORM_LOAD_TEXTURE(load_texture)
 	opengl_load_texture(path, id, GL_RGBA);
 }
 
-int main()
+int main(int argc, char** argv)
 {
     begin_profile();
+
+    my_argc = argc; 
+    my_argv = argv; 
 
     LARGE_INTEGER perf_count_frequency_result;
     QueryPerformanceFrequency(&perf_count_frequency_result);

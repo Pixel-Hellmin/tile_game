@@ -29,10 +29,16 @@
  * -  Use newtons laws for motion?
  * - Game_State struct redefinition
 */
+/*
+ * Ideas from DOOM
+ * @Cleanup - Init each 'system'(sound, window, etc) and exit early if errors instead of nesting.
+ * @Cleanup - Combine buffer.cpp and memory.h? Get rid of buffer?
+ * @ Use command line args for things
+ *
+*/
+
 
 #if !defined(MAIN_H)
-
-#include "platform.h"
 
 #define PROFILER 1
 //#define READ_BLOCK_TIMER read_OS_timer
