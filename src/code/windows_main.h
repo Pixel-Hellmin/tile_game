@@ -2,9 +2,6 @@
  * COMBACK:
  * - Catch up: 358w, 359w, 360, 361, 362, 363?, 364
  * TODO(Fermin):
- * + Platform struct to pass into the game.
- *	 We can add info like Window, Keys, Etc...
- *	 This data can get updated in(or out) game and the platform reacts.
  * + Instead of:
  *       if(input_state.w)
  *       {
@@ -18,23 +15,41 @@
  *	 is_down, was_pressed, was_released
  *
  * - RNG! search for std::random_device rd;
- * - Store tile indices for dude and for highlighted tile in game state instead of 
- *   what we are doing now. I guess we can follow this logic when we need a tile in the 
- *   platform layer?
  * - Investigate FileSystem::getPath("resources/textures/container.jpg"
- * - Investigate why are the boxes deformed when rotated?
  * - Fix font bearings
  * - Get rid of vc140.pdb when building
- * - Map each input key to an action and make it remapable
- * -  Use newtons laws for motion?
- * - Game_State struct redefinition
 */
+
 /*
  * Ideas from DOOM
  * @Cleanup - Init each 'system'(sound, window, etc) and exit early if errors instead of nesting.
  * @Cleanup - Combine buffer.cpp and memory.h? Get rid of buffer?
+ * @Cleanup - Load assets, including fonts from game only. font.cpp
  * @ Use command line args for things
  *
+ * @Graphics
+ * - Sectors: flat floor/ceiling heights. No slopes.
+ * - Linedefs/Sidedefs: walls between sectors, upper/lower/middle textures
+ * - BSP
+ *		
+ *
+ *			  Linedef (v1 -> v2)
+ *						v1
+ *						|
+ *						|
+ *						|
+ *						|
+ *		Sector A		|		Sector B
+ *		Light 200		|		Light 160, floor 24
+ *		Front sidedef	|		Back sidedef
+ *						|
+ *						|
+ *					   \ /
+ *					    V
+ *						v2
+*
+* the linedef's front sidedef's sector == A → edge direction is v1 → v2
+* the linedef's back sidedef's sector == A → edge direction is v2 → v1 (reversed, since sector S is on the "back" side)
 */
 
 

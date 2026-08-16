@@ -7,6 +7,9 @@
 #include "shared.h"
 #include "windows_opengl.cpp"
 
+// NOTE(Fermin): nocheckin: transition to doom style
+#include "sectors.cpp"
+
 global int my_argc;
 global char** my_argv;
 
@@ -685,6 +688,33 @@ static PLATFORM_LOAD_TEXTURE(load_texture)
 int main(int argc, char** argv)
 {
     begin_profile();
+
+	/* nocheckin: doom style testing
+		*
+		*
+		*
+	*/
+	Memory_Arena debug_arena;
+	Buffer debug_buffer = allocate_buffer(gigabytes(1));
+
+	V2 vertex_positions[] = {
+		{ 0, 0 }, { 64, 0 }, { 64, 64 }, { 0, 64 },       // outer room: 0,1,2,3
+		{ 24, 24 }, { 40, 24 }, { 40, 40 }, { 24, 40 },   // inner pillar: 4,5,6,7
+	};
+
+	Sector_Edge edges[] = {
+		{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   // outer loop, CCW
+		{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
+	};
+
+	initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
+	Chained_Loops chained_loops = chain_edges_to_loops(edges, array_count(edges), &debug_arena);
+	classify_loops(&chained_loops, vertex_positions, &debug_arena);
+	/* nocheckin: doom style testing end
+		*
+		*
+		*
+	*/
 
     my_argc = argc; 
     my_argv = argv; 

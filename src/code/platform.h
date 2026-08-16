@@ -80,6 +80,7 @@ struct Glyph_Metadata // here for now. where should it go?
     i32 advance;
 };
 
+/* @Cleanup: #define font start and font end */
 global const u32 font_first_character = '!';
 global const u32 font_last_character = '~';
 global const u32 font_character_count = font_last_character - font_first_character + 1;
