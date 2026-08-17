@@ -696,6 +696,7 @@ int main(int argc, char** argv)
 	*/
 	Memory_Arena debug_arena;
 	Buffer debug_buffer = allocate_buffer(gigabytes(1));
+	initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
 
 	V2 vertex_positions[] = {
 		{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
@@ -707,14 +708,29 @@ int main(int argc, char** argv)
 		{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
 	};
 
-	initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
 	Chained_Loops chained_loops = chain_edges_to_loops(edges, array_count(edges), &debug_arena);
 	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, &debug_arena);
 	// NOTE(Fermin): For multiple holes call this again with the
 	// previous result as the new outer
 	assert(classified_loops.hole_count == 1);
 	Edge_Loop merged_hole_loop = merge_hole_into_outer(classified_loops.outer, classified_loops.holes, vertex_positions, &debug_arena);
-
+	Triangulated_Loop triangles = triangulate_ear_clip(merged_hole_loop.vertices,
+													   merged_hole_loop.vertex_count,
+													   vertex_positions,
+													   &debug_arena);
+	f32 sector_floor_height = 0.0f;
+	f32 sector_ceiling_height = 256.0f;
+	f32 sector_light_level = 1.0f;
+	Mesh floor_mesh   = build_flat_mesh(&triangles, vertex_positions,
+									    sector_floor_height,
+									    sector_light_level / 255.0f,
+									    false,
+										&debug_arena);
+	Mesh ceiling_mesh = build_flat_mesh(&triangles, vertex_positions,
+										sector_ceiling_height,
+										sector_light_level / 255.0f,
+										true,
+										&debug_arena);
 	/* nocheckin: doom style testing end
 		*
 		*

@@ -34,6 +34,7 @@ struct Bridge_Pair
 
 struct Triangle
 { 
+	// vertex indices
 	u32 a, b, c;
 };
 
@@ -41,6 +42,21 @@ struct Triangulated_Loop
 {
 	Triangle *triangles;
 	u32 triangle_count;
+};
+
+struct Mesh_Vertex
+{
+    V3 position;
+    V2 uv;
+    f32 light;   // flat per-sector light
+};
+
+struct Mesh
+{
+	Mesh_Vertex *vertices;
+	u32 vertex_count;
+	u32 *indices;
+	u32 index_count;
 };
 
 #define INVALID_EDGE_INDEX 0xFFFFFFFF
@@ -140,7 +156,7 @@ classify_loops(Chained_Loops *chained, V2 *vertex_positions, Memory_Arena *arena
         if(loop->signed_area > 0.0f)
         {
             // NOTE(Fermin): convention -> positive area is the outer boundary
-            assert(!result.outer); // NOTE(Fermin): a well-formed sector has exactly one outer loop
+            assert(!result.outer); // a well-formed sector has exactly one outer loop
             result.outer = loop;
         }
         else
@@ -228,6 +244,8 @@ point_in_triangle(V2 p, V2 a, V2 b, V2 c)
     f32 d2 = cross((c - b), (p - b)); // which side of edge b→c is p on?
     f32 d3 = cross((a - c), (p - c)); // which side of edge c→a is p on?
 
+	// NOTE(Fermin): We need to check both because we have triangles wound
+	// clockwise and counter clockwise
     b32 has_neg = (d1 < 0.0f) || (d2 < 0.0f) || (d3 < 0.0f);
     b32 has_pos = (d1 > 0.0f) || (d2 > 0.0f) || (d3 > 0.0f);
 
@@ -236,8 +254,8 @@ point_in_triangle(V2 p, V2 a, V2 b, V2 c)
 
 /*
 *
-* ears are triangles with two sides being the edges of the polygon
-* and the third one completely inside it.
+* an ear is a vertex where you could slice off the triangle formed by it
+* and its two neighbors, and that triangle is entirely part of the polygon's interior
 *     _______
 *     |\    |
 *     | \   |
@@ -255,10 +273,17 @@ point_in_triangle(V2 p, V2 a, V2 b, V2 c)
 static b32
 is_ear(u32 *ring, u32 ring_count, u32 i, V2 *vertex_positions)
 {
+	/*
+	*
+	* i is the index of the current vertex we're testing
+	*
+	*/
     u32 prev_i = (i + ring_count - 1) % ring_count;
     u32 next_i = (i + 1) % ring_count;
 
-    u32 va = ring[prev_i], vb = ring[i], vc = ring[next_i];
+    u32 va = ring[prev_i];
+	u32 vb = ring[i];
+	u32 vc = ring[next_i];
     V2 a = vertex_positions[va];
     V2 b = vertex_positions[vb];
     V2 c = vertex_positions[vc];
@@ -270,9 +295,13 @@ is_ear(u32 *ring, u32 ring_count, u32 i, V2 *vertex_positions)
     for(u32 j = 0; j < ring_count; ++j)
     {
         u32 vj = ring[j];
-        if(vj == va || vj == vb || vj == vc) { continue; } // skip by vertex id, not ring index -- the bridge duplicates a vertex at two ring positions
+
+		// skip by vertex, not ring index -- the bridge duplicates a vertex at two ring positions
+        if(vj == va || vj == vb || vj == vc) { continue; } 
+
         if(point_in_triangle(vertex_positions[vj], a, b, c)) { return false; }
     }
+
     return true;
 }
 
@@ -282,6 +311,12 @@ triangulate_ear_clip(u32 *loop_vertices, u32 loop_vertex_count, V2 *vertex_posit
     Triangulated_Loop result = {};
     result.triangles = push_array(arena, loop_vertex_count - 2, Triangle); // a n-gon always yields n-2 triangles
 
+	/*
+	* ring is the current working polygon boundary as a list of vertex indices.
+	* It starts as all the loop vertices of the merged bridge and it
+	* shrinks by one every time an ear gets clipped until 3 vertices
+	* remain.
+	*/
     u32 *ring = push_array(arena, loop_vertex_count, u32);
     for(u32 i = 0; i < loop_vertex_count; ++i) { ring[i] = loop_vertices[i]; }
     u32 ring_count = loop_vertex_count;
@@ -316,6 +351,39 @@ triangulate_ear_clip(u32 *loop_vertices, u32 loop_vertex_count, V2 *vertex_posit
 
     Triangle *tri = result.triangles + result.triangle_count++;
     tri->a = ring[0]; tri->b = ring[1]; tri->c = ring[2];
+
+    return result;
+}
+
+static Mesh
+build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light, b32 flip_winding, Memory_Arena *arena)
+{
+    Mesh result = {};
+    result.vertex_count = tri->triangle_count * 3;
+    result.vertices = push_array(arena, result.vertex_count, Mesh_Vertex);
+    result.index_count = result.vertex_count;
+    result.indices = push_array(arena, result.index_count, u32);
+
+    for(u32 t = 0; t < tri->triangle_count; ++t)
+    {
+        Triangle *triangle = tri->triangles + t;
+        u32 ids[3] = { triangle->a, triangle->b, triangle->c };
+		// ceiling faces down, needs opposite winding from floor
+        if(flip_winding) { u32 tmp = ids[0]; ids[0] = ids[2]; ids[2] = tmp; } 
+
+        for(u32 k = 0; k < 3; ++k)
+        {
+            V2 p = vertex_positions[ids[k]];
+            u32 out_index = t * 3 + k;
+
+            Mesh_Vertex *v = result.vertices + out_index;
+            v->position = { p.x, p.y, z };
+            v->uv = { (p.x / 64.0f), (p.y / 64.0f) }; // DOOM flats are 64x64, world units map 1:1 to UV at that scale
+            v->light = light;
+
+            result.indices[out_index] = out_index;
+        }
+    }
 
     return result;
 }
