@@ -128,7 +128,12 @@ win32_init_opengl(HWND window)
 		win32_get_opengl_function(GL_Delete_Framebuffers,      glDeleteFramebuffers)
 		win32_get_opengl_function(GL_Delete_Renderbuffers,     glDeleteRenderbuffers)
 		win32_get_opengl_function(GL_Active_Texture,           glActiveTexture)
-
+		win32_get_opengl_function(GL_Gen_Vertex_Arrays,        glGenVertexArrays)
+		win32_get_opengl_function(GL_Gen_Buffers,			   glGenBuffers)
+		win32_get_opengl_function(GL_Bind_Vertex_Array,		   glBindVertexArray)
+		win32_get_opengl_function(GL_Buffer_Data,			   glBufferData)
+		win32_get_opengl_function(GL_Vertex_Attrib_Pointer,	   glVertexAttribPointer)
+		
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
         {
@@ -689,54 +694,6 @@ int main(int argc, char** argv)
 {
     begin_profile();
 
-	/* nocheckin: doom style testing
-		*
-		*
-		*
-	*/
-	Memory_Arena debug_arena;
-	Buffer debug_buffer = allocate_buffer(gigabytes(1));
-	initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
-
-	V2 vertex_positions[] = {
-		{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
-		{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
-	};
-
-	Sector_Edge edges[] = {
-		{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   // outer loop, CCW
-		{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
-	};
-
-	Chained_Loops chained_loops = chain_edges_to_loops(edges, array_count(edges), &debug_arena);
-	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, &debug_arena);
-	// NOTE(Fermin): For multiple holes call this again with the
-	// previous result as the new outer
-	assert(classified_loops.hole_count == 1);
-	Edge_Loop merged_hole_loop = merge_hole_into_outer(classified_loops.outer, classified_loops.holes, vertex_positions, &debug_arena);
-	Triangulated_Loop triangles = triangulate_ear_clip(merged_hole_loop.vertices,
-													   merged_hole_loop.vertex_count,
-													   vertex_positions,
-													   &debug_arena);
-	f32 sector_floor_height = 0.0f;
-	f32 sector_ceiling_height = 256.0f;
-	f32 sector_light_level = 1.0f;
-	Mesh floor_mesh   = build_flat_mesh(&triangles, vertex_positions,
-									    sector_floor_height,
-									    sector_light_level / 255.0f,
-									    false,
-										&debug_arena);
-	Mesh ceiling_mesh = build_flat_mesh(&triangles, vertex_positions,
-										sector_ceiling_height,
-										sector_light_level / 255.0f,
-										true,
-										&debug_arena);
-	/* nocheckin: doom style testing end
-		*
-		*
-		*
-	*/
-
     my_argc = argc; 
     my_argv = argv; 
 
@@ -807,6 +764,33 @@ int main(int argc, char** argv)
         if(window)
         {
             win32_init_opengl(window);
+
+			/* nocheckin: doom style testing
+				*
+				*
+				*
+			*/
+			Memory_Arena debug_arena;
+			Buffer debug_buffer = allocate_buffer(gigabytes(1));
+			initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
+
+			V2 vertex_positions[] = {
+				{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
+				{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
+			};
+
+			Sector_Edge edges[] = {
+				{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   // outer loop, CCW
+				{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
+			};
+
+			debug_generate_geometry(vertex_positions, edges, array_count(edges), &debug_arena);
+
+			/* nocheckin: doom style testing end
+				*
+				*
+				*
+			*/
 
             i32 monitor_refresh_hz = 60;
             HDC refresh_dc = GetDC(window);

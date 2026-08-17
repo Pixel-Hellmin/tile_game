@@ -27,7 +27,7 @@ struct Classified_Sector_Loops
 
 struct Bridge_Pair
 {
-    u32 outer_index;         // index into outer->vertices
+    u32 outer_vertex_index;  // index into outer->vertices
     u32 hole_vertex_index;   // index into hole->vertices
     f32 dist_sq;
 };
@@ -46,7 +46,7 @@ struct Triangulated_Loop
 
 struct Mesh_Vertex
 {
-    V3 position;
+    V3 position; // in the world
     V2 uv;
     f32 light;   // flat per-sector light
 };
@@ -55,7 +55,7 @@ struct Mesh
 {
 	Mesh_Vertex *vertices;
 	u32 vertex_count;
-	u32 *indices;
+	u32 *indices; // @Cleanup: Whats the point of these?
 	u32 index_count;
 };
 
@@ -87,7 +87,9 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
     }
 
     b32 *visited = push_array(arena, edge_count, b32);
-    Edge_Loop *loops = push_array(arena, edge_count, Edge_Loop);
+	// @Cleanup: why edge_count edge loops? over-allocating. We cant know
+	// the number of loops. Can we do better?
+    Edge_Loop *loops = push_array(arena, edge_count, Edge_Loop); 
 
 	// NOTE(Fermin): Walk each unvisited edge until it closes
     for(u32 start_edge_index = 0; start_edge_index < edge_count; ++start_edge_index)
@@ -146,7 +148,9 @@ static Classified_Sector_Loops
 classify_loops(Chained_Loops *chained, V2 *vertex_positions, Memory_Arena *arena)
 {
     Classified_Sector_Loops result = {};
-    result.holes = push_array(arena, chained->loop_count, Edge_Loop);
+	// there is only one outer loop per sector
+	assert(chained->loop_count > 0); // every sector has at least one loop (the outer boundary)
+    result.holes = push_array(arena, (chained->loop_count - 1), Edge_Loop); 
 
     for(u32 loop_index = 0; loop_index < chained->loop_count; ++loop_index)
     {
@@ -186,7 +190,7 @@ find_closest_bridge_pair(Edge_Loop *outer, Edge_Loop *hole, V2 *vertex_positions
             if(dist_sq < result.dist_sq)
             {
                 result.dist_sq = dist_sq;
-                result.outer_index = outer_i;
+                result.outer_vertex_index = outer_i;
                 result.hole_vertex_index = hole_i;
             }
         }
@@ -197,6 +201,11 @@ find_closest_bridge_pair(Edge_Loop *outer, Edge_Loop *hole, V2 *vertex_positions
 static Edge_Loop
 merge_hole_into_outer(Edge_Loop *outer, Edge_Loop *hole, V2 *vertex_positions, Memory_Arena *arena)
 {
+	/*
+	 * Create an Edge_Loop by mergin the outer loop with a hole through their
+	 * closest vertices
+     */
+
     Bridge_Pair bridge = find_closest_bridge_pair(outer, hole, vertex_positions);
 
     u32 merged_capacity = outer->vertex_count + hole->vertex_count + 2; // +2 for the duplicated seam vertices
@@ -204,7 +213,7 @@ merge_hole_into_outer(Edge_Loop *outer, Edge_Loop *hole, V2 *vertex_positions, M
     u32 merged_count = 0;
 
 	// From start to bridge's outer index
-    for(u32 i = 0; i <= bridge.outer_index; ++i)
+    for(u32 i = 0; i <= bridge.outer_vertex_index; ++i)
         merged[merged_count++] = outer->vertices[i];
 
 	// From hole's bridge index until loop
@@ -214,15 +223,16 @@ merge_hole_into_outer(Edge_Loop *outer, Edge_Loop *hole, V2 *vertex_positions, M
         merged[merged_count++] = hole->vertices[hole_i];
     }
 
-    merged[merged_count++] = hole->vertices[bridge.hole_vertex_index]; // close the hole loop, walk back to bridge vertex
-    merged[merged_count++] = outer->vertices[bridge.outer_index]; // close the seam, back onto outer
+    merged[merged_count++] = hole->vertices[bridge.hole_vertex_index];   // close the hole loop, walk back to bridge vertex
+    merged[merged_count++] = outer->vertices[bridge.outer_vertex_index]; // close the seam, back onto outer
 
-    for(u32 i = bridge.outer_index + 1; i < outer->vertex_count; ++i)
+    for(u32 i = bridge.outer_vertex_index + 1; i < outer->vertex_count; ++i)
         merged[merged_count++] = outer->vertices[i];
 
     Edge_Loop result = {};
     result.vertices = merged;
     result.vertex_count = merged_count;
+
     return result;
 }
 
@@ -296,7 +306,7 @@ is_ear(u32 *ring, u32 ring_count, u32 i, V2 *vertex_positions)
     {
         u32 vj = ring[j];
 
-		// skip by vertex, not ring index -- the bridge duplicates a vertex at two ring positions
+		// skip by vertex index, not ring index -- the bridge duplicates a vertex at two ring positions
         if(vj == va || vj == vb || vj == vc) { continue; } 
 
         if(point_in_triangle(vertex_positions[vj], a, b, c)) { return false; }
@@ -308,6 +318,11 @@ is_ear(u32 *ring, u32 ring_count, u32 i, V2 *vertex_positions)
 static Triangulated_Loop
 triangulate_ear_clip(u32 *loop_vertices, u32 loop_vertex_count, V2 *vertex_positions, Memory_Arena *arena)
 {
+	/*
+	 * clips a merged edge loop into triangles
+	 *
+	*/
+
     Triangulated_Loop result = {};
     result.triangles = push_array(arena, loop_vertex_count - 2, Triangle); // a n-gon always yields n-2 triangles
 
@@ -386,4 +401,86 @@ build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light, 
     }
 
     return result;
+}
+
+struct GPU_Mesh // move to opengl
+{
+    GLuint vao;
+    GLuint vbo;
+    GLuint ebo;
+    u32 index_count;
+};
+
+static GPU_Mesh // move to opengl
+upload_mesh_to_gpu(Mesh *mesh)
+{
+	GPU_Mesh result = {};
+	result.index_count = mesh->index_count;
+
+	opengl.glGenVertexArrays(1, &result.vao);
+	opengl.glGenBuffers(1, &result.vbo);
+	opengl.glGenBuffers(1, &result.ebo);
+
+	opengl.glBindVertexArray(result.vao);
+
+	opengl.glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
+	// GL_STATIC_DRAW because sector geometry never changes at runtime -- upload once, draw every frame
+	opengl.glBufferData(GL_ARRAY_BUFFER, mesh->vertex_count * sizeof(Mesh_Vertex), mesh->vertices, GL_STATIC_DRAW);
+
+	opengl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, result.ebo);
+	opengl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_STATIC_DRAW);
+
+	opengl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, position));
+	opengl.glEnableVertexAttribArray(0);
+
+	opengl.glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, uv));
+	opengl.glEnableVertexAttribArray(1);
+
+	opengl.glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, light));
+	opengl.glEnableVertexAttribArray(2);
+
+	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
+	return result;
+}
+
+static void // move to opengl
+draw_gpu_mesh(GPU_Mesh *mesh)
+{
+	opengl.glBindVertexArray(mesh->vao);
+	glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, 0);
+	opengl.glBindVertexArray(0);
+}
+
+static void
+debug_generate_geometry(V2 *vertex_positions, Sector_Edge *edges, u32 edge_count, Memory_Arena *debug_arena)
+{
+	/*
+	* From floor/ceiling vertices and edges to meshes
+	* @Cleanup: Use scratch arena for all intermediate steps
+	* and save only the data we need
+	*/
+
+	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, debug_arena);
+	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, debug_arena);
+	// NOTE(Fermin): For multiple holes call this again with the
+	// previous result as the new outer
+	assert(classified_loops.hole_count == 1);
+	Edge_Loop merged_loop = merge_hole_into_outer(classified_loops.outer, classified_loops.holes, vertex_positions, debug_arena);
+	Triangulated_Loop triangles = triangulate_ear_clip(merged_loop.vertices,
+													   merged_loop.vertex_count,
+													   vertex_positions,
+													   debug_arena);
+	f32 sector_light_level = 1.0f;
+	f32 sector_floor_height = 0.0f;
+	f32 sector_ceiling_height = 256.0f;
+	Mesh floor_mesh   = build_flat_mesh(&triangles, vertex_positions,
+									    sector_floor_height,
+									    sector_light_level / 255.0f,
+									    false,
+										debug_arena);
+	Mesh ceiling_mesh = build_flat_mesh(&triangles, vertex_positions,
+										sector_ceiling_height,
+										sector_light_level / 255.0f,
+										true,
+										debug_arena);
 }
