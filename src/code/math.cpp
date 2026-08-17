@@ -314,6 +314,15 @@ static inline f32 inner(V3 a, V3 b)
     return result;
 }
 
+static inline f32 cross(V2 a, V2 b)
+{
+    f32 result = {};
+
+    result = (a.x * b.y) - (a.y * b.x);
+
+    return result;
+}
+
 static inline V3 cross(V3 a, V3 b)
 {
     V3 result = {};

@@ -698,8 +698,8 @@ int main(int argc, char** argv)
 	Buffer debug_buffer = allocate_buffer(gigabytes(1));
 
 	V2 vertex_positions[] = {
-		{ 0, 0 }, { 64, 0 }, { 64, 64 }, { 0, 64 },       // outer room: 0,1,2,3
-		{ 24, 24 }, { 40, 24 }, { 40, 40 }, { 24, 40 },   // inner pillar: 4,5,6,7
+		{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
+		{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
 	};
 
 	Sector_Edge edges[] = {
@@ -709,7 +709,12 @@ int main(int argc, char** argv)
 
 	initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
 	Chained_Loops chained_loops = chain_edges_to_loops(edges, array_count(edges), &debug_arena);
-	classify_loops(&chained_loops, vertex_positions, &debug_arena);
+	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, &debug_arena);
+	// NOTE(Fermin): For multiple holes call this again with the
+	// previous result as the new outer
+	assert(classified_loops.hole_count == 1);
+	Edge_Loop merged_hole_loop = merge_hole_into_outer(classified_loops.outer, classified_loops.holes, vertex_positions, &debug_arena);
+
 	/* nocheckin: doom style testing end
 		*
 		*

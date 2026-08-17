@@ -23,6 +23,7 @@ typedef int32_t    b32;
 #define global static
 
 #define Pi32 3.14159265359f
+#define F32_MAX 3.402823466e+38f
 
 #define kilobytes(value) ((value)*1024LL)
 #define megabytes(value) (kilobytes(value)*1024LL)
