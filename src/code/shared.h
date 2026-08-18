@@ -50,6 +50,16 @@ read_file(const char *file_name)
     return result;
 }
 
+inline umm
+string_length(char *a)
+{
+	umm result = 0;
+
+    while(*a++) { result++; }
+
+	return result;
+}
+
 inline b32
 strings_are_equal(umm a_length, char *a, char *b)
 {

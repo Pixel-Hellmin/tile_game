@@ -36,7 +36,7 @@
 	typedef return name(__VA_ARGS__); \
 
 typedef char GLchar;
-typedef size_t GLsizeiptr;
+typedef ptrdiff_t GLsizeiptr;
 
 opengl_binding(void,   Gl_Attach_Shader,              glAttachShader,            GLuint program, GLuint shader)
 opengl_binding(void,   Gl_Compile_Shader,             glCompileShader,           GLuint shader)

@@ -452,6 +452,18 @@ draw_gpu_mesh(GPU_Mesh *mesh)
 }
 
 static void
+gl_init_render_state(void)
+{
+	// called once at startup
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS); // standard "nearer wins", GL default anyway -- explicit for clarity
+
+	glEnable(GL_CULL_FACE);
+	glFrontFace(GL_CCW);  // matches build_flat_mesh's winding -- floor CCW-from-above is front-facing
+	glCullFace(GL_BACK);  // don't waste fragment shader work on faces pointing away from the camera
+}
+
+static Triangulated_Loop
 debug_generate_geometry(V2 *vertex_positions, Sector_Edge *edges, u32 edge_count, Memory_Arena *debug_arena)
 {
 	/*
@@ -470,17 +482,5 @@ debug_generate_geometry(V2 *vertex_positions, Sector_Edge *edges, u32 edge_count
 													   merged_loop.vertex_count,
 													   vertex_positions,
 													   debug_arena);
-	f32 sector_light_level = 1.0f;
-	f32 sector_floor_height = 0.0f;
-	f32 sector_ceiling_height = 256.0f;
-	Mesh floor_mesh   = build_flat_mesh(&triangles, vertex_positions,
-									    sector_floor_height,
-									    sector_light_level / 255.0f,
-									    false,
-										debug_arena);
-	Mesh ceiling_mesh = build_flat_mesh(&triangles, vertex_positions,
-										sector_ceiling_height,
-										sector_light_level / 255.0f,
-										true,
-										debug_arena);
+	return triangles;
 }

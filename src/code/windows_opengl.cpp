@@ -125,87 +125,18 @@ opengl_init(Opengl_Info info)
 
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-    char *defines = "#version 130\n";
-    if(false)
-    {
-        defines = R"FOO(
-        #version 130
-        #define example 1
-        )FOO";
-    }
+#include "shaders.h"
 
-    char *header_code = R"FOO(
-    // Header code
-    )FOO";
+    opengl.program = opengl_create_program(defines, header_code, doom_vertex_code, doom_fragment_code);
+    //opengl.transform_id = opengl.glGetUniformLocation(opengl.program, "transform");
+    //opengl.texture_sampler_id = opengl.glGetUniformLocation(opengl.program, "texture_sampler");
+    opengl.transform_id = opengl.glGetUniformLocation(opengl.program, "u_view_proj");
+    opengl.texture_sampler_id = opengl.glGetUniformLocation(opengl.program, "u_flat_texture");
 
-    char *vertex_code = R"FOO(
-    // Vertex code
-    uniform mat4x4 transform;
-    smooth out vec2 frag_uv;
-    smooth out vec4 frag_color;
-    void main(void)
-    {
-        // NOTE(Fermin): This rounding still doesn't fix the gaps between
-        // tiles when they are small. That is when their z is high.
-        gl_Position = transform*round(gl_Vertex);
-
-        frag_uv = gl_MultiTexCoord0.xy;
-        frag_color = gl_Color;
-    }
-    )FOO";
-
-    char *fragment_code = R"FOO(
-    // Fragment code
-    uniform sampler2D texture_sampler;
-    smooth in vec2 frag_uv;
-    smooth in vec4 frag_color;
-    out vec4 result_color;
-    void main(void)
-    {
-        vec4 tex_sample = texture(texture_sampler, frag_uv);
-        result_color = frag_color*tex_sample;
-    }
-    )FOO";
-
-    opengl.program = opengl_create_program(defines, header_code, vertex_code, fragment_code);
-    opengl.transform_id = opengl.glGetUniformLocation(opengl.program, "transform");
-    opengl.texture_sampler_id = opengl.glGetUniformLocation(opengl.program, "texture_sampler");
-
-	char *filter_vertex_code = R"FOO(
-		smooth out vec2 frag_uv;
-	    void main(void)
-	    {
-	        gl_Position = gl_Vertex;
-	        frag_uv = gl_MultiTexCoord0.xy;
-	    }
-	)FOO";
-
-	char *filter_fragment_code = R"FOO(
-		uniform sampler2D texture_sampler;
-		smooth in vec2 frag_uv;
-		out vec4 result_color;
-		void main(void)
-		{
-			vec4 color = texture(texture_sampler, frag_uv);
-			
-			// scanlines
-			float scanline = sin(frag_uv.y * 800.0) * 0.04;
-			color.rgb -= scanline;
-			
-			// slight vignette
-			vec2 uv_centered = frag_uv - 0.5;
-			float vignette = 1.0 - dot(uv_centered, uv_centered) * 2.0;
-			color.rgb *= vignette;
-			
-			// green tint
-			color.rgb *= vec3(0.8, 1.1, 0.8);
-			
-			result_color = color;
-		}
-	)FOO";
-
+	/* This is broken since we are using glsl version 330 instead of 130
 	opengl.filter_program = opengl_create_program(defines, header_code, filter_vertex_code, filter_fragment_code);
 	opengl.filter_texture_sampler_id = opengl.glGetUniformLocation(opengl.filter_program, "texture_sampler");
+	*/
 }
 
 static void
@@ -238,7 +169,7 @@ opengl_init_fbo(i32 window_width, i32 window_height)
 	assert(opengl.glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 	opengl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	opengl.post_processing_enabled = 1;
+	opengl.post_processing_enabled = 0; // fix shader before turning this back on
 }
 
 
@@ -328,12 +259,16 @@ opengl_load_texture(u8 *data, i32 width, i32 height, u32 *id, u32 format)
     glBindTexture(GL_TEXTURE_2D, *id);  
 
     // set the texture wrapping/filtering options (on the currently bound texture object)
+	/* tile game
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	*/
+
+	/* doom */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     if (data)
     {

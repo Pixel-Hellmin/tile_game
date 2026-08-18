@@ -20,8 +20,28 @@ global f32 global_perf_count_frequency;
 global Win32_Offscreen_Buffer global_back_buffer;
 global LPDIRECTSOUNDBUFFER secondary_buffer;
 
+// temp for testing
+global GPU_Mesh floor_gpu;
+global GPU_Mesh ceil_gpu;
+
+
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
+
+static int
+check_param(char *param)
+{
+    int	i;
+	umm length = string_length(param);
+
+    for (i = 1; i < my_argc; i++)
+    {
+		if (strings_are_equal(length, param, my_argv[i]))
+	    return i;
+    }
+
+    return 0;
+}
 
 static Win32_Window_Dimension
 win32_get_window_dimension(HWND window)
@@ -102,37 +122,39 @@ win32_init_opengl(HWND window)
 
 #define win32_get_opengl_function(type, name) opengl.name = (type *)wglGetProcAddress(#name);
 
-		win32_get_opengl_function(Gl_Attach_Shader,            glAttachShader)
-		win32_get_opengl_function(Gl_Compile_Shader,           glCompileShader)
-		win32_get_opengl_function(Gl_Create_Program,           glCreateProgram)
-		win32_get_opengl_function(Gl_Create_Shader,            glCreateShader)
-		win32_get_opengl_function(Gl_Link_Program,             glLinkProgram)
-		win32_get_opengl_function(Gl_Shader_Source,            glShaderSource)
-		win32_get_opengl_function(Gl_Use_Program,              glUseProgram)
-		win32_get_opengl_function(Gl_Validate_Program,         glValidateProgram)
-		win32_get_opengl_function(Gl_Get_Programiv,            glGetProgramiv)
-		win32_get_opengl_function(Gl_Get_Shader_Info_Log,      glGetShaderInfoLog)
-		win32_get_opengl_function(Gl_Get_Program_Info_Log,     glGetProgramInfoLog)
-		win32_get_opengl_function(Gl_Get_Uniform_Location,     glGetUniformLocation)
-		win32_get_opengl_function(Gl_Uniform_Matrix_4vf,       glUniformMatrix4fv)
-		win32_get_opengl_function(Gl_Uniform_1i,               glUniform1i)
-		win32_get_opengl_function(Gl_Tex_Image_2D_Multisample, glTexImage2DMultisample)
-		win32_get_opengl_function(GL_Bind_Framebuffer,         glBindFramebuffer)
-		win32_get_opengl_function(GL_Gen_Framebuffers,         glGenFramebuffers)
-		win32_get_opengl_function(GL_Framebuffer_Texture_2D,   glFramebufferTexture2D)
-		win32_get_opengl_function(GL_Gen_Renderbuffers,        glGenRenderbuffers)
-		win32_get_opengl_function(GL_Bind_Renderbuffer,        glBindRenderbuffer)
-		win32_get_opengl_function(GL_Renderbuffer_Storage,     glRenderbufferStorage)
-		win32_get_opengl_function(GL_Framebuffer_Renderbuffer, glFramebufferRenderbuffer)
-		win32_get_opengl_function(GL_Check_Framebuffer_Status, glCheckFramebufferStatus)
-		win32_get_opengl_function(GL_Delete_Framebuffers,      glDeleteFramebuffers)
-		win32_get_opengl_function(GL_Delete_Renderbuffers,     glDeleteRenderbuffers)
-		win32_get_opengl_function(GL_Active_Texture,           glActiveTexture)
-		win32_get_opengl_function(GL_Gen_Vertex_Arrays,        glGenVertexArrays)
-		win32_get_opengl_function(GL_Gen_Buffers,			   glGenBuffers)
-		win32_get_opengl_function(GL_Bind_Vertex_Array,		   glBindVertexArray)
-		win32_get_opengl_function(GL_Buffer_Data,			   glBufferData)
-		win32_get_opengl_function(GL_Vertex_Attrib_Pointer,	   glVertexAttribPointer)
+		win32_get_opengl_function(Gl_Attach_Shader,              glAttachShader)
+		win32_get_opengl_function(Gl_Compile_Shader,             glCompileShader)
+		win32_get_opengl_function(Gl_Create_Program,             glCreateProgram)
+		win32_get_opengl_function(Gl_Create_Shader,              glCreateShader)
+		win32_get_opengl_function(Gl_Link_Program,               glLinkProgram)
+		win32_get_opengl_function(Gl_Shader_Source,              glShaderSource)
+		win32_get_opengl_function(Gl_Use_Program,                glUseProgram)
+		win32_get_opengl_function(Gl_Validate_Program,           glValidateProgram)
+		win32_get_opengl_function(Gl_Get_Programiv,              glGetProgramiv)
+		win32_get_opengl_function(Gl_Get_Shader_Info_Log,        glGetShaderInfoLog)
+		win32_get_opengl_function(Gl_Get_Program_Info_Log,       glGetProgramInfoLog)
+		win32_get_opengl_function(Gl_Get_Uniform_Location,       glGetUniformLocation)
+		win32_get_opengl_function(Gl_Uniform_Matrix_4vf,         glUniformMatrix4fv)
+		win32_get_opengl_function(Gl_Uniform_1i,                 glUniform1i)
+		win32_get_opengl_function(Gl_Tex_Image_2D_Multisample,   glTexImage2DMultisample)
+		win32_get_opengl_function(GL_Bind_Framebuffer,           glBindFramebuffer)
+		win32_get_opengl_function(GL_Gen_Framebuffers,           glGenFramebuffers)
+		win32_get_opengl_function(GL_Framebuffer_Texture_2D,     glFramebufferTexture2D)
+		win32_get_opengl_function(GL_Gen_Renderbuffers,          glGenRenderbuffers)
+		win32_get_opengl_function(GL_Bind_Renderbuffer,          glBindRenderbuffer)
+		win32_get_opengl_function(GL_Renderbuffer_Storage,       glRenderbufferStorage)
+		win32_get_opengl_function(GL_Framebuffer_Renderbuffer,   glFramebufferRenderbuffer)
+		win32_get_opengl_function(GL_Check_Framebuffer_Status,   glCheckFramebufferStatus)
+		win32_get_opengl_function(GL_Delete_Framebuffers,        glDeleteFramebuffers)
+		win32_get_opengl_function(GL_Delete_Renderbuffers,       glDeleteRenderbuffers)
+		win32_get_opengl_function(GL_Active_Texture,             glActiveTexture)
+		win32_get_opengl_function(GL_Gen_Vertex_Arrays,          glGenVertexArrays)
+		win32_get_opengl_function(GL_Gen_Buffers,			     glGenBuffers)
+		win32_get_opengl_function(GL_Bind_Vertex_Array,		     glBindVertexArray)
+		win32_get_opengl_function(GL_Bind_Buffer,		         glBindBuffer)
+		win32_get_opengl_function(GL_Buffer_Data,			     glBufferData)
+		win32_get_opengl_function(GL_Vertex_Attrib_Pointer,	     glVertexAttribPointer)
+		win32_get_opengl_function(GL_Enable_Vertex_Attrib_Array, glEnableVertexAttribArray)
 		
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
@@ -329,6 +351,8 @@ win32_resize_DIB_section(i32 width, i32 height)
 static void
 win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Memory_Arena *render_arena)
 {
+
+#if 0 /* tile base rendering */
 	if(opengl.post_processing_enabled)
 	{
 		// renders to fbo before post-processing
@@ -339,6 +363,53 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 	{
 		// renders directly to screen
 		opengl_render(window_width, window_height, render_arena, 0);
+	}
+#endif
+
+	/* doom rendering */
+	{
+		f32 aspect_ratio = (f32)window_width / (f32)window_height;
+		M4 proj = perspective(radians(73.7f), aspect_ratio, 1.0f, 8192.0f);
+
+		f32 player_x = 32.0f;
+		f32 player_y = -80.0f;
+		f32 player_z = 0.0f;
+		f32 player_angle = 1.5707963f;
+		V3 eye_pos    = { player_x, player_y, player_z + 41.0f }; // NOTE(Fermin): DOOM's VIEWHEIGHT = 41 units above the floor
+		V3 forward    = { cosf(player_angle), sinf(player_angle), 0.0f };
+		V3 target     = { eye_pos.x + forward.x, eye_pos.y + forward.y, eye_pos.z };
+		V3 up         = { 0.0f, 0.0f, 1.0f }; // NOTE(Fermin): Z is up, matches build_flat_mesh's v3{p.x,p.y,z}
+		
+		M4 view = look_at(eye_pos, target, up);
+
+		M4 view_proj = proj * view;
+
+		opengl.glBindFramebuffer(GL_FRAMEBUFFER, 0); // render to screen
+		glViewport(0, 0, window_width, window_height);
+
+		glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
+		glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
+
+		opengl.glUseProgram(opengl.program);
+		opengl.glUniformMatrix4fv(opengl.transform_id, 1, GL_TRUE, view_proj.e); // GL_TRUE?
+
+		if(check_param("-edges"))
+		{
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // draw lines between vertices instead of fill triangle
+			glLineWidth(2.0f); 
+		}
+
+		//opengl.glActiveTexture(GL_TEXTURE0);
+		//glBindTexture(GL_TEXTURE_2D, 1); // TODO: textures
+		//opengl.glUniform1i(opengl.texture_sampler_id, 0);
+		draw_gpu_mesh(&floor_gpu);
+
+		//glBindTexture(GL_TEXTURE_2D, 1); // TODO: textures
+		draw_gpu_mesh(&ceil_gpu);
+
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // reset to fill triangle
+
+		opengl.glUseProgram(0);
 	}
 
     {
@@ -784,7 +855,25 @@ int main(int argc, char** argv)
 				{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
 			};
 
-			debug_generate_geometry(vertex_positions, edges, array_count(edges), &debug_arena);
+			Triangulated_Loop triangles = debug_generate_geometry(vertex_positions, edges, array_count(edges), &debug_arena);
+
+			f32 sector_light_level = 1.0f;
+			f32 sector_floor_height = 0.0f;
+			f32 sector_ceiling_height = 64.0f;
+			Mesh floor_mesh   = build_flat_mesh(&triangles, vertex_positions,
+												sector_floor_height,
+												sector_light_level / 255.0f,
+												false,
+												&debug_arena);
+			Mesh ceiling_mesh = build_flat_mesh(&triangles, vertex_positions,
+												sector_ceiling_height,
+												sector_light_level / 255.0f,
+												true,
+												&debug_arena);
+
+			gl_init_render_state();
+			floor_gpu = upload_mesh_to_gpu(&floor_mesh);
+			ceil_gpu  = upload_mesh_to_gpu(&ceiling_mesh);
 
 			/* nocheckin: doom style testing end
 				*
