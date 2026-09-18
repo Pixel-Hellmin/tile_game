@@ -1,6 +1,7 @@
 #include "game.h"
 #include "asset.cpp"
 #include "audio.cpp"
+#include "sectors.cpp"
 
 static void
 set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Memory_Arena *arena)
@@ -407,6 +408,53 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 	assert(total_memory_partitioned == total_memory_available)
 }
 
+static void
+load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory)
+{
+	V2 vertex_positions[] = {
+		{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
+		{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
+	};
+
+	Sector_Edge edges[] = {
+		{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   // outer loop, CCW
+		{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
+	};
+
+	Tmp_Memory tmp_memory = begin_tmp_memory(tmp_arena);
+
+	Chained_Loops chained_loops = chain_edges_to_loops(edges, array_count(edges), tmp_arena);
+
+	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
+
+	// NOTE(Fermin): For multiple holes call this again with the previous result as the new outer
+	assert(classified_loops.hole_count <= 1);
+	Edge_Loop merged_loop = merge_hole_into_outer(classified_loops.outer,
+											      classified_loops.holes,
+											      vertex_positions, tmp_arena);
+
+	Triangulated_Loop floor_triangles = triangulate_ear_clip(merged_loop.vertices,
+													   merged_loop.vertex_count,
+													   vertex_positions, tmp_arena);
+
+	f32 sector_light_level = 1.0f;
+	f32 sector_floor_height = 0.0f;
+	f32 sector_ceiling_height = 64.0f;
+	Mesh floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
+									 sector_floor_height,
+									 sector_light_level / 255.0f,
+									 false, tmp_arena);
+
+	Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
+									 sector_ceiling_height,
+									 sector_light_level / 255.0f,
+									 true, tmp_arena);
+
+	game_memory->platform_API.upload_static_mesh_to_gpu(&floor_mesh, &ceiling_mesh);
+
+	end_tmp_memory(tmp_memory);
+}
+
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
@@ -454,6 +502,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		initialize_audio_state(&game_state->audio_state);
 
         generate_level(game_state, map_z);
+		/*
+		* @Plan: Move sector code to game.cpp.
+		* Platform API call to load static meshes into GPU and discard(meshes) after. 
+		* Do this once per load level.
+		*
+		* Push non-static meshes to a render buffer in platform memory used by 
+		* Opengl to render once per frame.
+		*
+		*/
+		load_level(&game_state->tmp_arena, game_memory);
 
 		set_flag(game_state, game_state_flag_prints);
 

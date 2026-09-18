@@ -137,6 +137,14 @@ struct Opengl_Info
     b32 GL_EXT_framebuffer_sRGB;
 };
 
+struct GPU_Mesh
+{
+    GLuint vao;
+    GLuint vbo;
+    GLuint ebo;
+    u32 index_count;
+};
+
 global Opengl opengl;
 global Wgl_Swap_Interval_Ext *wgl_swap_interval;
 

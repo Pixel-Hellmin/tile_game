@@ -690,15 +690,18 @@ M4 translate(V3 translation)
 
 static inline M4 look_at(V3 pos, V3 target, V3 up)
 {
-    // NOTE(Fermin): For the view matrix's coordinate system we want its z-axis to be positive and because by convention (in OpenGL) the camera points towards the negative z-axis we want to negate the direction vector. If we switch the subtraction order around we now get a vector pointing towards the camera's positive z-axis:
+    // NOTE(Fermin): For the view matrix's coordinate system we want its z-axis
+	// to be positive and because by convention (in OpenGL) the camera
+	// points towards the negative z-axis we want to negate the direction vector.
+	// If we switch the subtraction order around we now get a
+	// vector pointing towards the camera's positive z-axis:
     V3 camera_direction = normalize(pos - target);
     V3 camera_right = normalize(cross(up, camera_direction));
     V3 camera_up = cross(camera_direction, camera_right);
 
     M4 result = {};
 
-    /* ROW MAJOR
-    */
+    /* ROW MAJOR */
     result.m[0].x = camera_right.x;
     result.m[0].y = camera_right.y;
     result.m[0].z = camera_right.z;
@@ -719,7 +722,8 @@ static inline M4 look_at(V3 pos, V3 target, V3 up)
     result.m[3].z = 0;
     result.m[3].w = 1;
 
-    /* COLUMN MAJOR
+    /* COLUMN MAJOR */
+#if 0
     result.m[0].x = camera_right.x;
     result.m[0].y = camera_up.x;
     result.m[0].z = camera_direction.x;
@@ -739,7 +743,7 @@ static inline M4 look_at(V3 pos, V3 target, V3 up)
     result.m[3].y = -inner(camera_up, pos);
     result.m[3].z = -inner(camera_direction, pos);
     result.m[3].w = 1;
-    */
+#endif
 
     return result;
 }

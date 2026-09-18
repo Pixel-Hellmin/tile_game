@@ -20,6 +20,7 @@ struct Chained_Loops
 
 struct Classified_Sector_Loops
 {
+	// NOTE(Fermin): There is always only one outer loop.
     Edge_Loop *outer;
     Edge_Loop *holes;
     u32 hole_count;
@@ -42,21 +43,6 @@ struct Triangulated_Loop
 {
 	Triangle *triangles;
 	u32 triangle_count;
-};
-
-struct Mesh_Vertex
-{
-    V3 position; // in the world
-    V2 uv;
-    f32 light;   // flat per-sector light
-};
-
-struct Mesh
-{
-	Mesh_Vertex *vertices;
-	u32 vertex_count;
-	u32 *indices; // @Cleanup: Whats the point of these?
-	u32 index_count;
 };
 
 #define INVALID_EDGE_INDEX 0xFFFFFFFF
@@ -82,7 +68,9 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
     for(u32 edge_index = 0; edge_index < edge_count; ++edge_index)
     {
 		// table that says: At vertex X we got this edge index
-		// given the vertex you just arrived at, one array lookup tells you the next edge
+		// given the vertex you just arrived at, one array lookup tells you the next edge.
+		// This works because edges[0].v2 = edges[1].v1, so you can use the edge v2 as
+		// index to get the next edge.
         edge_by_start[edges[edge_index].v1] = edge_index;
     }
 
@@ -98,8 +86,8 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
 
         Edge_Loop *loop = loops + result.loop_count++;
         *loop = {};
-		// NOTE(Fermin): upper bound, trim later if you care.
-		// vertices number is edge_count cause v2 of e0 == v1 of e1
+		// @Cleanup: upper bound, trim later if you care.
+		// Over-allocating, edge_count is all loops' edges.
         loop->vertices = push_array(arena, edge_count, u32); 
 
         u32 start_vertex = edges[start_edge_index].v1;
@@ -403,66 +391,6 @@ build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light, 
     return result;
 }
 
-struct GPU_Mesh // move to opengl
-{
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
-    u32 index_count;
-};
-
-static GPU_Mesh // move to opengl
-upload_mesh_to_gpu(Mesh *mesh)
-{
-	GPU_Mesh result = {};
-	result.index_count = mesh->index_count;
-
-	opengl.glGenVertexArrays(1, &result.vao);
-	opengl.glGenBuffers(1, &result.vbo);
-	opengl.glGenBuffers(1, &result.ebo);
-
-	opengl.glBindVertexArray(result.vao);
-
-	opengl.glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
-	// GL_STATIC_DRAW because sector geometry never changes at runtime -- upload once, draw every frame
-	opengl.glBufferData(GL_ARRAY_BUFFER, mesh->vertex_count * sizeof(Mesh_Vertex), mesh->vertices, GL_STATIC_DRAW);
-
-	opengl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, result.ebo);
-	opengl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_STATIC_DRAW);
-
-	opengl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, position));
-	opengl.glEnableVertexAttribArray(0);
-
-	opengl.glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, uv));
-	opengl.glEnableVertexAttribArray(1);
-
-	opengl.glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, light));
-	opengl.glEnableVertexAttribArray(2);
-
-	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
-	return result;
-}
-
-static void // move to opengl
-draw_gpu_mesh(GPU_Mesh *mesh)
-{
-	opengl.glBindVertexArray(mesh->vao);
-	glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, 0);
-	opengl.glBindVertexArray(0);
-}
-
-static void
-gl_init_render_state(void)
-{
-	// called once at startup
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS); // standard "nearer wins", GL default anyway -- explicit for clarity
-
-	glEnable(GL_CULL_FACE);
-	glFrontFace(GL_CCW);  // matches build_flat_mesh's winding -- floor CCW-from-above is front-facing
-	glCullFace(GL_BACK);  // don't waste fragment shader work on faces pointing away from the camera
-}
-
 static Triangulated_Loop
 debug_generate_geometry(V2 *vertex_positions, Sector_Edge *edges, u32 edge_count, Memory_Arena *debug_arena)
 {
@@ -476,7 +404,7 @@ debug_generate_geometry(V2 *vertex_positions, Sector_Edge *edges, u32 edge_count
 	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, debug_arena);
 	// NOTE(Fermin): For multiple holes call this again with the
 	// previous result as the new outer
-	assert(classified_loops.hole_count == 1);
+	assert(classified_loops.hole_count <= 1);
 	Edge_Loop merged_loop = merge_hole_into_outer(classified_loops.outer, classified_loops.holes, vertex_positions, debug_arena);
 	Triangulated_Loop triangles = triangulate_ear_clip(merged_loop.vertices,
 													   merged_loop.vertex_count,

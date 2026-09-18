@@ -7,9 +7,6 @@
 #include "shared.h"
 #include "windows_opengl.cpp"
 
-// NOTE(Fermin): nocheckin: transition to doom style
-#include "sectors.cpp"
-
 global int my_argc;
 global char** my_argv;
 
@@ -168,6 +165,7 @@ win32_init_opengl(HWND window)
 
 		Win32_Window_Dimension dimension = win32_get_window_dimension(window);
 		opengl_init_fbo(dimension.width, dimension.height);
+		opengl_init_render_state();
     }
     else
     {
@@ -368,6 +366,11 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 
 	/* doom rendering */
 	{
+		/*
+		 * There is something very wrong with my matrices operations.
+		 * Check our convention and order of operations.
+		*/
+
 		f32 aspect_ratio = (f32)window_width / (f32)window_height;
 		M4 proj = perspective(radians(73.7f), aspect_ratio, 1.0f, 8192.0f);
 
@@ -395,6 +398,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 
 		if(check_param("-edges"))
 		{
+			// @Cleanup: Check param once and set a variable
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // draw lines between vertices instead of fill triangle
 			glLineWidth(2.0f); 
 		}
@@ -402,10 +406,10 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		//opengl.glActiveTexture(GL_TEXTURE0);
 		//glBindTexture(GL_TEXTURE_2D, 1); // TODO: textures
 		//opengl.glUniform1i(opengl.texture_sampler_id, 0);
-		draw_gpu_mesh(&floor_gpu);
+		opengl_draw_gpu_mesh(&floor_gpu);
 
 		//glBindTexture(GL_TEXTURE_2D, 1); // TODO: textures
-		draw_gpu_mesh(&ceil_gpu);
+		opengl_draw_gpu_mesh(&ceil_gpu);
 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // reset to fill triangle
 
@@ -761,6 +765,13 @@ static PLATFORM_LOAD_TEXTURE(load_texture)
 	opengl_load_texture(path, id, GL_RGBA);
 }
 
+static PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(upload_static_mesh_to_gpu)
+{
+	// TODO: Make this a generic function that doesnt uses globals
+	floor_gpu = opengl_upload_static_mesh_to_gpu(floor_mesh);
+	ceil_gpu  = opengl_upload_static_mesh_to_gpu(ceiling_mesh);
+}
+
 int main(int argc, char** argv)
 {
     begin_profile();
@@ -836,51 +847,6 @@ int main(int argc, char** argv)
         {
             win32_init_opengl(window);
 
-			/* nocheckin: doom style testing
-				*
-				*
-				*
-			*/
-			Memory_Arena debug_arena;
-			Buffer debug_buffer = allocate_buffer(gigabytes(1));
-			initialize_arena(&debug_arena, debug_buffer.size, debug_buffer.data);
-
-			V2 vertex_positions[] = {
-				{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
-				{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
-			};
-
-			Sector_Edge edges[] = {
-				{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   // outer loop, CCW
-				{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
-			};
-
-			Triangulated_Loop triangles = debug_generate_geometry(vertex_positions, edges, array_count(edges), &debug_arena);
-
-			f32 sector_light_level = 1.0f;
-			f32 sector_floor_height = 0.0f;
-			f32 sector_ceiling_height = 64.0f;
-			Mesh floor_mesh   = build_flat_mesh(&triangles, vertex_positions,
-												sector_floor_height,
-												sector_light_level / 255.0f,
-												false,
-												&debug_arena);
-			Mesh ceiling_mesh = build_flat_mesh(&triangles, vertex_positions,
-												sector_ceiling_height,
-												sector_light_level / 255.0f,
-												true,
-												&debug_arena);
-
-			gl_init_render_state();
-			floor_gpu = upload_mesh_to_gpu(&floor_mesh);
-			ceil_gpu  = upload_mesh_to_gpu(&ceiling_mesh);
-
-			/* nocheckin: doom style testing end
-				*
-				*
-				*
-			*/
-
             i32 monitor_refresh_hz = 60;
             HDC refresh_dc = GetDC(window);
             i32 win32_refresh_rate = GetDeviceCaps(refresh_dc, VREFRESH);
@@ -923,6 +889,7 @@ int main(int argc, char** argv)
             game_memory.temporary_storage = allocate_buffer(gigabytes(1));
 
 			game_memory.platform_API.load_texture = load_texture;
+			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
 			
             init_font(&game_memory.debug_font_consola, "..\\src\\misc\\assets\\consola.font");
 

@@ -362,3 +362,55 @@ opengl_post_process_and_render_to_screen()
 	opengl.glUseProgram(0);
 	glEnable(GL_BLEND);
 }
+
+static GPU_Mesh
+opengl_upload_static_mesh_to_gpu(Mesh *mesh)
+{
+	GPU_Mesh result = {};
+	result.index_count = mesh->index_count;
+
+	opengl.glGenVertexArrays(1, &result.vao);
+	opengl.glGenBuffers(1, &result.vbo);
+	opengl.glGenBuffers(1, &result.ebo);
+
+	opengl.glBindVertexArray(result.vao);
+
+	opengl.glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
+	// GL_STATIC_DRAW because sector geometry never changes at runtime -- upload once, draw every frame
+	opengl.glBufferData(GL_ARRAY_BUFFER, mesh->vertex_count * sizeof(Mesh_Vertex), mesh->vertices, GL_STATIC_DRAW);
+
+	opengl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, result.ebo);
+	opengl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_STATIC_DRAW);
+
+	opengl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, position));
+	opengl.glEnableVertexAttribArray(0);
+
+	opengl.glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, uv));
+	opengl.glEnableVertexAttribArray(1);
+
+	opengl.glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, light));
+	opengl.glEnableVertexAttribArray(2);
+
+	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
+	return result;
+}
+
+static void // move to opengl
+opengl_draw_gpu_mesh(GPU_Mesh *mesh)
+{
+	opengl.glBindVertexArray(mesh->vao);
+	glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, 0);
+	opengl.glBindVertexArray(0);
+}
+
+static void
+opengl_init_render_state(void)
+{
+	// called once at startup
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS); // standard "nearer wins", GL default anyway -- explicit for clarity
+
+	glEnable(GL_CULL_FACE);
+	glFrontFace(GL_CCW);  // matches build_flat_mesh's winding -- floor CCW-from-above is front-facing
+	glCullFace(GL_BACK);  // don't waste fragment shader work on faces pointing away from the camera
+}
