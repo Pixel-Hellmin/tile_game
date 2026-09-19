@@ -9,6 +9,7 @@
 
 global int my_argc;
 global char** my_argv;
+global Cmd_Params cmd_params;
 
 // NOTE(Fermin): Start moving these globals to where they belong
 global Memory_Arena render_arena;
@@ -29,7 +30,7 @@ static int
 check_param(char *param)
 {
     int	i;
-	umm length = string_length(param);
+	umm length = null_terminated_string_length(param);
 
     for (i = 1; i < my_argc; i++)
     {
@@ -396,9 +397,8 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		opengl.glUseProgram(opengl.program);
 		opengl.glUniformMatrix4fv(opengl.transform_id, 1, GL_TRUE, view_proj.e); // GL_TRUE?
 
-		if(check_param("-edges"))
+		if(cmd_params.edges)
 		{
-			// @Cleanup: Check param once and set a variable
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // draw lines between vertices instead of fill triangle
 			glLineWidth(2.0f); 
 		}
@@ -767,7 +767,8 @@ static PLATFORM_LOAD_TEXTURE(load_texture)
 
 static PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(upload_static_mesh_to_gpu)
 {
-	// TODO: Make this a generic function that doesnt uses globals
+	// TODO: Make this a generic function that doesnt uses globals.
+	// Maybe return an id later passed with the render command for drawing.
 	floor_gpu = opengl_upload_static_mesh_to_gpu(floor_mesh);
 	ceil_gpu  = opengl_upload_static_mesh_to_gpu(ceiling_mesh);
 }
@@ -778,6 +779,7 @@ int main(int argc, char** argv)
 
     my_argc = argc; 
     my_argv = argv; 
+	cmd_params.edges = check_param("-edges");
 
     LARGE_INTEGER perf_count_frequency_result;
     QueryPerformanceFrequency(&perf_count_frequency_result);

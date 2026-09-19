@@ -50,6 +50,11 @@ global const f32 font_point_size = 64.0f;
 #include "buffer.cpp"
 #include "memory.h"
 
+struct Cmd_Params
+{
+	b32 edges;
+};
+
 struct Quad
 {
 	V3 corners[4];

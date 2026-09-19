@@ -51,7 +51,7 @@ read_file(const char *file_name)
 }
 
 inline umm
-string_length(char *a)
+null_terminated_string_length(char *a)
 {
 	umm result = 0;
 
@@ -74,6 +74,16 @@ strings_are_equal(umm a_length, char *a, char *b)
             return false;
         }
     }
+
+	/* NOTE: This works for null terminated strings only
+	while(*a)
+	{
+        if((*at == 0) || (*a++ != *at++))
+        {
+            return false;
+        }
+	}
+	*/
 
     b32 result = (*at == 0);
     return result;
