@@ -269,6 +269,8 @@ opengl_load_texture(u8 *data, i32 width, i32 height, u32 *id, u32 format)
 	/* doom */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
     if (data)
     {
@@ -368,6 +370,7 @@ opengl_upload_static_mesh_to_gpu(Mesh *mesh)
 {
 	GPU_Mesh result = {};
 	result.index_count = mesh->index_count;
+	result.texture_handle = mesh->texture_handle;
 
 	opengl.glGenVertexArrays(1, &result.vao);
 	opengl.glGenBuffers(1, &result.vbo);
@@ -398,6 +401,9 @@ opengl_upload_static_mesh_to_gpu(Mesh *mesh)
 static void // move to opengl
 opengl_draw_gpu_mesh(GPU_Mesh *mesh)
 {
+	opengl.glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, mesh->texture_handle); // TODO: textures
+	
 	opengl.glBindVertexArray(mesh->vao);
 	glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, 0);
 	opengl.glBindVertexArray(0);

@@ -409,10 +409,11 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 }
 
 static void
-load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory)
+load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level_assets)
 {
 	V2 vertex_positions[] = {
-		{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
+		{ 0,  0  }, { 128, 0  }, { 128, 128 }, { 0,  128 },  // outer: 0,1,2,3
+		//{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
 		{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
 	};
 
@@ -437,18 +438,20 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory)
 													   merged_loop.vertex_count,
 													   vertex_positions, tmp_arena);
 
-	f32 sector_light_level = 1.0f;
+	f32 sector_light_level = 255.0f;
 	f32 sector_floor_height = 0.0f;
 	f32 sector_ceiling_height = 64.0f;
 	Mesh floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
 									 sector_floor_height,
 									 sector_light_level / 255.0f,
 									 false, tmp_arena);
+	floor_mesh.texture_handle = level_assets.floor_texture_id;
 
 	Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
 									 sector_ceiling_height,
 									 sector_light_level / 255.0f,
 									 true, tmp_arena);
+	ceiling_mesh.texture_handle = level_assets.roof_texture_id;
 
 	game_memory->platform_API.upload_static_mesh_to_gpu(&floor_mesh, &ceiling_mesh);
 
@@ -511,7 +514,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		* Opengl to render once per frame.
 		*
 		*/
-		load_level(&game_state->tmp_arena, game_memory);
+		load_level(&game_state->tmp_arena, game_memory, game_state->level_assets);
 
 		set_flag(game_state, game_state_flag_prints);
 

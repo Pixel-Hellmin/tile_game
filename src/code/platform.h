@@ -120,6 +120,7 @@ struct Mesh
 	u32 vertex_count;
 	u32 *indices; // @Cleanup: Whats the point of these? -> glBufferData GL_ELEMENT_ARRAY_BUFFER
 	u32 index_count;
+	u32 texture_handle;
 };
 
 #define PLATFORM_LOAD_TEXTURE(name) void name(char *path, u32 *id)

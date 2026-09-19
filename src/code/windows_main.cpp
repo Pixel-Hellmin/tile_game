@@ -403,12 +403,8 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 			glLineWidth(2.0f); 
 		}
 
-		//opengl.glActiveTexture(GL_TEXTURE0);
-		//glBindTexture(GL_TEXTURE_2D, 1); // TODO: textures
-		//opengl.glUniform1i(opengl.texture_sampler_id, 0);
+		opengl.glUniform1i(opengl.texture_sampler_id, 0);
 		opengl_draw_gpu_mesh(&floor_gpu);
-
-		//glBindTexture(GL_TEXTURE_2D, 1); // TODO: textures
 		opengl_draw_gpu_mesh(&ceil_gpu);
 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // reset to fill triangle
@@ -762,6 +758,7 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
 
 static PLATFORM_LOAD_TEXTURE(load_texture)
 {
+	// @Cleanup: More explicit name; upload text to gpu
 	opengl_load_texture(path, id, GL_RGBA);
 }
 

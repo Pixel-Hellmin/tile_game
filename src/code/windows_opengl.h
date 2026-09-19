@@ -143,6 +143,7 @@ struct GPU_Mesh
     GLuint vbo;
     GLuint ebo;
     u32 index_count;
+	GLuint texture_handle;
 };
 
 global Opengl opengl;
