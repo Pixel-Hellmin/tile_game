@@ -63,9 +63,7 @@ char *doom_fragment_code = R"FOO(
 	void main()
 	{
 		vec4 tex_color = texture(u_flat_texture, v_uv);
-		//out_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-		//out_color = vec4(tex_color.rgb * v_light, tex_color.a);
-		out_color = tex_color;
+		out_color = vec4(tex_color.rgb * v_light, tex_color.a);
 	}
 )FOO";
 

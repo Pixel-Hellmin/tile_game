@@ -411,49 +411,85 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 static void
 load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level_assets)
 {
+	// TODO: Load this from lvl data file
 	V2 vertex_positions[] = {
-		{ 0,  0  }, { 128, 0  }, { 128, 128 }, { 0,  128 },  // outer: 0,1,2,3
-		//{ 0,  0  }, { 64, 0  }, { 64, 64 }, { 0,  64 },  // outer: 0,1,2,3
-		{ 10, 10 }, { 20, 10 }, { 20, 20 }, { 10, 20 },  // pillar, corner-ish: 4,5,6,7
+		{ 0,   0   }, // 0
+		{ 256, 0   }, // 1
+		{ 256, 256 }, // 2
+		{ 0,   256 }, // 3
+		{ 512, 0   }, // 4
+		{ 512, 128 }, // 5
+		{ 96,  64  }, // 6  -- pillar
+		{ 64,  64  }, // 7
+		{ 64,  96  }, // 8
+		{ 96,  96  }, // 9
 	};
 
-	Sector_Edge edges[] = {
-		{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },   // outer loop, CCW
-		{ 5, 4 }, { 6, 5 }, { 7, 6 }, { 4, 7 },   // inner loop, CW (opposite winding)
+	Sector sector_a = {};
+	sector_a.floor_height = 0.0f;
+	sector_a.ceiling_height = 128.0f;
+	sector_a.light_level = 0.8f;
+
+	Sector sector_b = {};
+	sector_b.floor_height = 24.0f;
+	sector_b.ceiling_height = 128.0f;
+	sector_b.light_level = 0.6f;
+
+	Line_Def lines[] = {
+		{ 0, 1, &sector_a, NULL },
+		{ 1, 2, &sector_a, &sector_b }, // NOTE: the shared wall
+		{ 2, 3, &sector_a, NULL },
+		{ 3, 0, &sector_a, NULL },
+		{ 1, 4, &sector_b, NULL },
+		{ 4, 5, &sector_b, NULL },
+		{ 5, 2, &sector_b, NULL },
+		{ 6, 7, &sector_a, NULL }, // pillar
+		{ 7, 8, &sector_a, NULL },
+		{ 8, 9, &sector_a, NULL },
+		{ 9, 6, &sector_a, NULL },
 	};
+
+	// @Cleanup: Over allocation
+	sector_a.lines = push_array(tmp_arena, array_count(lines), Line_Def *);
+	sector_b.lines = push_array(tmp_arena, array_count(lines), Line_Def *);
+	for(u32 i = 0; i < array_count(lines); ++i)
+	{
+		Line_Def line = lines[i];
+		
+		if (line.front_sector == &sector_b || line.back_sector == &sector_b)
+		{
+			sector_b.lines[sector_b.line_count++] = lines + i;
+		}
+		if (line.front_sector == &sector_a || line.back_sector == &sector_a)
+		{
+			sector_a.lines[sector_a.line_count++] = lines + i;
+		}
+	}
 
 	Tmp_Memory tmp_memory = begin_tmp_memory(tmp_arena);
 
-	Chained_Loops chained_loops = chain_edges_to_loops(edges, array_count(edges), tmp_arena);
+	build_sector_render_data(&sector_a, vertex_positions, tmp_arena);
+	sector_a.floor_mesh.texture_handle = level_assets.floor_texture_id;
+	sector_a.ceiling_mesh.texture_handle = level_assets.roof_texture_id;
+	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_a.floor_mesh);
+	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_a.ceiling_mesh);
 
-	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
+	build_sector_render_data(&sector_b, vertex_positions, tmp_arena);
+	sector_b.floor_mesh.texture_handle = level_assets.floor_texture_id;
+	sector_b.ceiling_mesh.texture_handle = level_assets.roof_texture_id;
+	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_b.floor_mesh);
+	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_b.ceiling_mesh);
 
-	// NOTE(Fermin): For multiple holes call this again with the previous result as the new outer
-	assert(classified_loops.hole_count <= 1);
-	Edge_Loop merged_loop = merge_hole_into_outer(classified_loops.outer,
-											      classified_loops.holes,
-											      vertex_positions, tmp_arena);
-
-	Triangulated_Loop floor_triangles = triangulate_ear_clip(merged_loop.vertices,
-													   merged_loop.vertex_count,
-													   vertex_positions, tmp_arena);
-
-	f32 sector_light_level = 255.0f;
-	f32 sector_floor_height = 0.0f;
-	f32 sector_ceiling_height = 64.0f;
-	Mesh floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
-									 sector_floor_height,
-									 sector_light_level / 255.0f,
-									 false, tmp_arena);
-	floor_mesh.texture_handle = level_assets.floor_texture_id;
-
-	Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
-									 sector_ceiling_height,
-									 sector_light_level / 255.0f,
-									 true, tmp_arena);
-	ceiling_mesh.texture_handle = level_assets.roof_texture_id;
-
-	game_memory->platform_API.upload_static_mesh_to_gpu(&floor_mesh, &ceiling_mesh);
+	for(u32 i = 0; i < array_count(lines); ++i)
+	{
+		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, tmp_arena);
+		for(u32 i = 0; i < segment_list.segment_count; ++i)
+		{
+			Mesh mesh = segment_list.segments[i].mesh;
+			mesh.texture_handle = level_assets.wall_texture_id;
+			game_memory->platform_API.upload_static_mesh_to_gpu(&mesh);
+		}
+	}
 
 	end_tmp_memory(tmp_memory);
 }
@@ -525,6 +561,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		dude->dim_in_tiles = V2{1.0f, 1.0f};
 		dude->texture_id = game_state->dude_texture_id;
 		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
+		*game_memory->debug_player_pos = { 32.0f, -80.0f, 0.0f };
+		*game_memory->debug_player_angle = 1.5707963f;
 
 		// TODO(Fermin): Proper initialization of flipbooks
 		game_state->dude_next_sprite_index = 1;
@@ -568,22 +606,34 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if(new_input.w)
     {
         d_pos.y = 1.0f; 
+		game_memory->debug_player_pos->y += 3.0f * dude_speed;
 		change_volume(game_state->test_music, 2.0f, V2{1.0f, 1.0f});
     }
     if(new_input.s)
     {
         d_pos.y = -1.0f; 
+		game_memory->debug_player_pos->y += -3.0f * dude_speed;
 		change_volume(game_state->test_music, 2.0f, V2{0.0f, 0.0f});
     }
     if(new_input.a)
     {
         d_pos.x = -1.0f; 
+		game_memory->debug_player_pos->x += -3.0f * dude_speed;
 		change_volume(game_state->test_music, 5.0f, V2{1.0f, 0.0f});
     }
     if(new_input.d)
     {
         d_pos.x = 1.0f; 
+		game_memory->debug_player_pos->x += 3.0f * dude_speed;
 		change_volume(game_state->test_music, 5.0f, V2{0.0f, 1.0f});
+    }
+    if(new_input.q)
+    {
+		*game_memory->debug_player_angle += 0.5f * dude_speed;
+    }
+    if(new_input.e)
+    {
+		*game_memory->debug_player_angle += -0.5f * dude_speed;
     }
 
     if(!is_set(game_state, game_state_flag_free_cam_mode))

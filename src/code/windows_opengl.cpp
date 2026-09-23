@@ -365,24 +365,23 @@ opengl_post_process_and_render_to_screen()
 	glEnable(GL_BLEND);
 }
 
-static GPU_Mesh
-opengl_upload_static_mesh_to_gpu(Mesh *mesh)
+static void
+opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
 {
-	GPU_Mesh result = {};
-	result.index_count = mesh->index_count;
-	result.texture_handle = mesh->texture_handle;
+	result->index_count = mesh->index_count;
+	result->texture_handle = mesh->texture_handle;
 
-	opengl.glGenVertexArrays(1, &result.vao);
-	opengl.glGenBuffers(1, &result.vbo);
-	opengl.glGenBuffers(1, &result.ebo);
+	opengl.glGenVertexArrays(1, &result->vao);
+	opengl.glGenBuffers(1, &result->vbo);
+	opengl.glGenBuffers(1, &result->ebo);
 
-	opengl.glBindVertexArray(result.vao);
+	opengl.glBindVertexArray(result->vao);
 
-	opengl.glBindBuffer(GL_ARRAY_BUFFER, result.vbo);
+	opengl.glBindBuffer(GL_ARRAY_BUFFER, result->vbo);
 	// GL_STATIC_DRAW because sector geometry never changes at runtime -- upload once, draw every frame
 	opengl.glBufferData(GL_ARRAY_BUFFER, mesh->vertex_count * sizeof(Mesh_Vertex), mesh->vertices, GL_STATIC_DRAW);
 
-	opengl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, result.ebo);
+	opengl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, result->ebo);
 	opengl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_STATIC_DRAW);
 
 	opengl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, position));
@@ -395,7 +394,6 @@ opengl_upload_static_mesh_to_gpu(Mesh *mesh)
 	opengl.glEnableVertexAttribArray(2);
 
 	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
-	return result;
 }
 
 static void // move to opengl

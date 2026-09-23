@@ -191,6 +191,27 @@ inline V2 operator/(V2 a, f32 b)
     return result;
 }
 
+static inline f32 inner(V2 a, V2 b)
+{
+    f32 result = a.x*b.x + a.y*b.y;
+
+    return result;
+}
+
+static inline f32 length_sq(V2 a)
+{
+    f32 result = inner(a, a);
+
+    return result;
+}
+
+static inline f32 length(V2 a)
+{
+    f32 result = square_root(length_sq(a));
+
+    return result;
+}
+
 /*
 * V3
 */

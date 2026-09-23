@@ -68,6 +68,8 @@ struct Input_Keys
     b32 a;
     b32 s;
     b32 d;
+    b32 q;
+    b32 e;
     b32 left_mouse;
     b32 f1;
     b32 f2;
@@ -125,7 +127,7 @@ struct Mesh
 
 #define PLATFORM_LOAD_TEXTURE(name) void name(char *path, u32 *id)
 	typedef PLATFORM_LOAD_TEXTURE(Platform_Load_Texture);
-#define PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(name) void name(Mesh *floor_mesh, Mesh *ceiling_mesh)
+#define PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(name) void name(Mesh *mesh)
 	typedef PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(Platform_Upload_Static_Mesh_To_Gpu);
 struct Platform_API
 {
@@ -142,10 +144,12 @@ struct Game_Memory
 	i32 window_width;
 	i32 window_height;
 
-	// debug assets
 	Font debug_font_consola;
-
 	b32 debug_initialized;
+	// NOTE(Fermin): We need these for opengl matrices.
+	// Should we compute these in the game? Pass down the data? API call?
+	V3 *debug_player_pos;
+	f32 *debug_player_angle;
 
 	Platform_API platform_API;
 };

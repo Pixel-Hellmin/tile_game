@@ -19,9 +19,9 @@ global Win32_Offscreen_Buffer global_back_buffer;
 global LPDIRECTSOUNDBUFFER secondary_buffer;
 
 // temp for testing
-global GPU_Mesh floor_gpu;
-global GPU_Mesh ceil_gpu;
-
+global V3 debug_player_pos;
+global f32 debug_player_angle;
+global Memory_Arena debug_static_gpu_mesh_arena;
 
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
@@ -375,10 +375,10 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		f32 aspect_ratio = (f32)window_width / (f32)window_height;
 		M4 proj = perspective(radians(73.7f), aspect_ratio, 1.0f, 8192.0f);
 
-		f32 player_x = 32.0f;
-		f32 player_y = -80.0f;
-		f32 player_z = 0.0f;
-		f32 player_angle = 1.5707963f;
+		f32 player_x = debug_player_pos.x;
+		f32 player_y = debug_player_pos.y;
+		f32 player_z = debug_player_pos.z;
+		f32 player_angle = debug_player_angle;
 		V3 eye_pos    = { player_x, player_y, player_z + 41.0f }; // NOTE(Fermin): DOOM's VIEWHEIGHT = 41 units above the floor
 		V3 forward    = { cosf(player_angle), sinf(player_angle), 0.0f };
 		V3 target     = { eye_pos.x + forward.x, eye_pos.y + forward.y, eye_pos.z };
@@ -404,8 +404,13 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		}
 
 		opengl.glUniform1i(opengl.texture_sampler_id, 0);
-		opengl_draw_gpu_mesh(&floor_gpu);
-		opengl_draw_gpu_mesh(&ceil_gpu);
+
+		u32 count = debug_static_gpu_mesh_arena.used / sizeof(GPU_Mesh);
+		for(u32 i = 0; i < count; i++)
+		{
+			GPU_Mesh *mesh = (GPU_Mesh *)debug_static_gpu_mesh_arena.base + i;
+			opengl_draw_gpu_mesh(mesh);
+		}
 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // reset to fill triangle
 
@@ -598,11 +603,11 @@ win32_process_pending_messages(Input_Keys *new_input)
                     }
                     else if(vk_code == 'Q')
                     {
-                        //win32_process_keyboard_message(&new_input->w, is_down);
+                        win32_process_keyboard_message(&new_input->q, is_down);
                     }
                     else if(vk_code == 'E')
                     {
-                        //win32_process_keyboard_message(&new_input->w, is_down);
+                        win32_process_keyboard_message(&new_input->e, is_down);
                     }
                     else if(vk_code == VK_UP)
                     {
@@ -764,10 +769,9 @@ static PLATFORM_LOAD_TEXTURE(load_texture)
 
 static PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(upload_static_mesh_to_gpu)
 {
-	// TODO: Make this a generic function that doesnt uses globals.
-	// Maybe return an id later passed with the render command for drawing.
-	floor_gpu = opengl_upload_static_mesh_to_gpu(floor_mesh);
-	ceil_gpu  = opengl_upload_static_mesh_to_gpu(ceiling_mesh);
+	// Maybe return an id later passed with the render command for drawing?
+	GPU_Mesh *pushed = push_struct(&debug_static_gpu_mesh_arena, GPU_Mesh);
+	opengl_upload_static_mesh_to_gpu(pushed, mesh);
 }
 
 int main(int argc, char** argv)
@@ -889,8 +893,16 @@ int main(int argc, char** argv)
 
 			game_memory.platform_API.load_texture = load_texture;
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
+
+			game_memory.debug_player_pos = &debug_player_pos;
+			game_memory.debug_player_angle = &debug_player_angle;
 			
             init_font(&game_memory.debug_font_consola, "..\\src\\misc\\assets\\consola.font");
+
+			Buffer debug_static_gpu_mesh_buffer = allocate_buffer(gigabytes(1));
+			initialize_arena(&debug_static_gpu_mesh_arena,
+							 debug_static_gpu_mesh_buffer.size,
+							 debug_static_gpu_mesh_buffer.data);
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             Buffer render_buffer = allocate_buffer(gigabytes(1));

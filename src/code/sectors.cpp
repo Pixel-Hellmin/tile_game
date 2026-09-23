@@ -45,6 +45,52 @@ struct Triangulated_Loop
 	u32 triangle_count;
 };
 
+struct Wall_Segment
+{
+	Mesh mesh;
+	char *texture_name;
+};
+
+struct Wall_Segment_List
+{
+	Wall_Segment *segments;
+	u32 segment_count;
+};
+
+struct Side_Def
+{
+    char *upper_texture;
+    char *middle_texture;
+    char *lower_texture;
+    f32 x_offset, y_offset;
+};
+
+struct Sector;
+struct Line_Def
+{
+	// NOTE(Fermin): This data comes from the leveel file
+	u32 v1, v2;
+	Sector *front_sector;
+	Sector *back_sector;   // NULL for a one-sided line -- same meaning as sidenum[1] == -1
+	Side_Def front_side;
+	Side_Def back_side;    // only meaningful when back_sector != NULL
+};
+
+struct Sector
+{
+    f32 floor_height;
+    f32 ceiling_height;
+    char floor_texture[9];    // NOTE(Fermin): DOOM lump names are 8 chars + null
+    char ceiling_texture[9];
+    f32 light_level;          // 0..1, normalized from the WAD's 0..255 lightlevel
+
+    Line_Def **lines;         // NOTE(Fermin): every line whose front or back references this sector
+    u32 line_count;
+
+    Mesh floor_mesh;
+    Mesh ceiling_mesh;
+};
+
 #define INVALID_EDGE_INDEX 0xFFFFFFFF
 static Chained_Loops
 chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
@@ -359,7 +405,8 @@ triangulate_ear_clip(u32 *loop_vertices, u32 loop_vertex_count, V2 *vertex_posit
 }
 
 static Mesh
-build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light, b32 flip_winding, Memory_Arena *arena)
+build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light,
+				b32 flip_winding, Memory_Arena *arena)
 {
     Mesh result = {};
     result.vertex_count = tri->triangle_count * 3;
@@ -391,24 +438,127 @@ build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light, 
     return result;
 }
 
-static Triangulated_Loop
-debug_generate_geometry(V2 *vertex_positions, Sector_Edge *edges, u32 edge_count, Memory_Arena *debug_arena)
+static Mesh
+build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
+                 f32 x_offset, f32 y_offset, Memory_Arena *arena)
 {
-	/*
-	* From floor/ceiling vertices and edges to meshes
-	* @Cleanup: Use scratch arena for all intermediate steps
-	* and save only the data we need
-	*/
+    f32 wall_length = length(p2 - p1);
+    f32 wall_height = top_z - bottom_z;
 
-	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, debug_arena);
-	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, debug_arena);
-	// NOTE(Fermin): For multiple holes call this again with the
-	// previous result as the new outer
-	assert(classified_loops.hole_count <= 1);
-	Edge_Loop merged_loop = merge_hole_into_outer(classified_loops.outer, classified_loops.holes, vertex_positions, debug_arena);
-	Triangulated_Loop triangles = triangulate_ear_clip(merged_loop.vertices,
-													   merged_loop.vertex_count,
-													   vertex_positions,
-													   debug_arena);
-	return triangles;
+    V3 positions[4] = {
+        { p1.x, p1.y, bottom_z },
+        { p2.x, p2.y, bottom_z },
+        { p2.x, p2.y, top_z },
+        { p1.x, p1.y, top_z },
+    };
+
+    // NOTE(Fermin): DOOM textures are top-pegged by default -- v=0 at the top edge, growing downward
+    V2 uvs[4] = {
+        { x_offset / 64.0f, (y_offset + wall_height) / 64.0f },
+        { (x_offset + wall_length) / 64.0f, (y_offset + wall_height) / 64.0f },
+        { (x_offset + wall_length) / 64.0f, y_offset / 64.0f },
+        { x_offset / 64.0f, y_offset / 64.0f },
+    };
+
+    Mesh result = {};
+    result.vertex_count = 4;
+    result.vertices = push_array(arena, 4, Mesh_Vertex);
+    for(u32 i = 0; i < 4; ++i)
+    {
+        result.vertices[i].position = positions[i];
+        result.vertices[i].uv = uvs[i];
+        result.vertices[i].light = light;
+    }
+
+	// interior of front_sector is on the LEFT of v1->v2, so the visible
+	// face must point that way, not toward the exterior
+	u32 idx[6] = { 2, 1, 0, 3, 2, 0 }; 
+    result.index_count = 6;
+    result.indices = push_array(arena, 6, u32);
+    for(u32 i = 0; i < 6; ++i) { result.indices[i] = idx[i]; }
+
+    return result;
+}
+
+static Wall_Segment_List
+build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena *arena)
+{
+    Wall_Segment_List result = {};
+    result.segments = push_array(arena, 2, Wall_Segment); // NOTE(Fermin): at most upper + lower for a two-sided line
+
+    V2 p1 = vertex_positions[line->v1];
+    V2 p2 = vertex_positions[line->v2];
+    Sector *front = line->front_sector;
+    Sector *back  = line->back_sector;
+
+    if(!back)
+    {
+        // NOTE(Fermin): one-sided -- sidenum[1] == -1 in the WAD, solid floor-to-ceiling wall
+        Wall_Segment *seg = result.segments + result.segment_count++;
+        seg->mesh = build_wall_quad(p1, p2, front->floor_height, front->ceiling_height, front->light_level,
+                                      line->front_side.x_offset, line->front_side.y_offset, arena);
+        seg->texture_name = line->front_side.middle_texture;
+        return result;
+    }
+
+    if(front->ceiling_height > back->ceiling_height)
+    {
+        // NOTE(Fermin): ceiling drops going from front sector into back sector
+        Wall_Segment *seg = result.segments + result.segment_count++;
+        seg->mesh = build_wall_quad(p1, p2, back->ceiling_height, front->ceiling_height, front->light_level,
+                                      line->front_side.x_offset, line->front_side.y_offset, arena);
+        seg->texture_name = line->front_side.upper_texture;
+    }
+
+    if(back->floor_height > front->floor_height)
+    {
+        // NOTE(Fermin): floor rises going from front sector into back sector
+        Wall_Segment *seg = result.segments + result.segment_count++;
+        seg->mesh = build_wall_quad(p1, p2, front->floor_height, back->floor_height, front->light_level,
+                                      line->front_side.x_offset, line->front_side.y_offset, arena);
+        seg->texture_name = line->front_side.lower_texture;
+    }
+
+    return result;
+}
+
+static void
+build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena)
+{
+	// NOTE: This builds the sector's floor and ceiling mesh
+
+	Sector_Edge *edges = push_array(tmp_arena, sector->line_count, Sector_Edge);
+	u32 edge_count = 0;
+	for(u32 i = 0; i < sector->line_count; ++i)
+	{
+		Line_Def *line = sector->lines[i];
+		if(line->front_sector == sector) { edges[edge_count++] = { line->v1, line->v2 }; }
+		else                             { edges[edge_count++] = { line->v2, line->v1 }; }
+	}
+
+	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, tmp_arena);
+
+	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
+
+	Edge_Loop merged_loop = *classified_loops.outer;
+	for(u32 h = 0; h < classified_loops.hole_count; ++h)
+	{
+		merged_loop = merge_hole_into_outer(&merged_loop,
+										    classified_loops.holes + h,
+										    vertex_positions, tmp_arena);
+	}
+
+	Triangulated_Loop floor_triangles = triangulate_ear_clip(merged_loop.vertices,
+															 merged_loop.vertex_count,
+															 vertex_positions, tmp_arena);
+
+	sector->floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
+										   sector->floor_height,
+										   sector->light_level,
+										   false, tmp_arena);
+
+	sector->ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
+										   sector->ceiling_height,
+										   sector->light_level,
+										   true, tmp_arena);
 }
