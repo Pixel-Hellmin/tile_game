@@ -510,11 +510,31 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         seg->texture_name = line->front_side.upper_texture;
     }
 
+    if(front->floor_height > back->floor_height)
+    {
+        // NOTE(Fermin): Floor drops going from front sector into back sector.
+		// We build the quad facing the back sector, hence the inverted p
+        Wall_Segment *seg = result.segments + result.segment_count++;
+        seg->mesh = build_wall_quad(p2, p1, back->floor_height, front->floor_height, back->light_level,
+                                      line->front_side.x_offset, line->front_side.y_offset, arena);
+        seg->texture_name = line->front_side.lower_texture;
+    }
+
     if(back->floor_height > front->floor_height)
     {
         // NOTE(Fermin): floor rises going from front sector into back sector
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, front->floor_height, back->floor_height, front->light_level,
+                                      line->front_side.x_offset, line->front_side.y_offset, arena);
+        seg->texture_name = line->front_side.lower_texture;
+    }
+
+    if(back->ceiling_height > front->ceiling_height)
+    {
+        // NOTE(Fermin): Ceiling rises going from front sector into back sector
+		// We build the quad facing the back sector, hence the inverted p
+        Wall_Segment *seg = result.segments + result.segment_count++;
+        seg->mesh = build_wall_quad(p2, p1, front->ceiling_height, back->ceiling_height, back->light_level,
                                       line->front_side.x_offset, line->front_side.y_offset, arena);
         seg->texture_name = line->front_side.lower_texture;
     }
