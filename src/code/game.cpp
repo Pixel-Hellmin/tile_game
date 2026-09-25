@@ -2,6 +2,7 @@
 #include "asset.cpp"
 #include "audio.cpp"
 #include "sectors.cpp"
+#include "wad.cpp"
 
 static void
 set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Memory_Arena *arena)
@@ -522,6 +523,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_state->tile_size_in_px = 64.0f;
 		// TODO(Fermin): Handle assets properly. How? Dont load right now, but queue and let the
 		// platform layer handle it?
+		// Refactor this to upload flat to gpu?
 		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\floor.texture",
 											   &game_state->level_assets.floor_texture_id);
 		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\wall.texture",
@@ -541,13 +543,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		initialize_audio_state(&game_state->audio_state);
 
         generate_level(game_state, map_z);
+
 		/*
-		* @Plan: Move sector code to game.cpp.
-		* Platform API call to load static meshes into GPU and discard(meshes) after. 
-		* Do this once per load level.
-		*
-		* Push non-static meshes to a render buffer in platform memory used by 
-		* Opengl to render once per frame.
+		* Textures
+		* Keep the index texture, do the palette lookup in the shader instead of 
+		* uploading a decoded texture to opengl.
 		*
 		*/
 		load_level(&game_state->tmp_arena, game_memory, game_state->level_assets);

@@ -132,5 +132,14 @@ cat_strings(size_t source_a_count, char *source_a,
     *dest++ = 0;
 }
 
+static void
+copy_string(char *src, char *dest, size_t count)
+{
+	for(int i = 0; i < count; ++i)
+	{
+		*dest++ = *src++;
+	}
+}
+
 #define SHARED_H
 #endif

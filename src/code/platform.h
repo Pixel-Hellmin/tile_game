@@ -125,14 +125,32 @@ struct Mesh
 	u32 texture_handle;
 };
 
+struct Decoded_Patch
+{
+	/*
+	 * Three use cases:
+	 *     A piece stamped into a wall texture.
+	 *     A monster/item sprite.
+	 *     A UI graphic.
+	 *
+	*/
+
+	u8 *pixels;    // RGBA8, width*height*4 bytes
+	u32 width, height;
+	i32 left_offset, top_offset;
+};
+
 #define PLATFORM_LOAD_TEXTURE(name) void name(char *path, u32 *id)
 	typedef PLATFORM_LOAD_TEXTURE(Platform_Load_Texture);
 #define PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(name) void name(Mesh *mesh)
 	typedef PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(Platform_Upload_Static_Mesh_To_Gpu);
+#define PLATFORM_UPLOAD_PATCH_TO_GPU(name) void name(Decoded_Patch *patch)
+	typedef PLATFORM_UPLOAD_PATCH_TO_GPU(Platform_Upload_Patch_To_Gpu);
 struct Platform_API
 {
 	Platform_Load_Texture *load_texture;
 	Platform_Upload_Static_Mesh_To_Gpu *upload_static_mesh_to_gpu;
+	Platform_Upload_Patch_To_Gpu *upload_patch_to_gpu;
 };
 
 struct Game_Memory

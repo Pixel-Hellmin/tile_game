@@ -764,6 +764,7 @@ init_font(Font *font, char *source) // here for now. where should it go? opengl?
 static PLATFORM_LOAD_TEXTURE(load_texture)
 {
 	// @Cleanup: More explicit name; upload text to gpu
+	// Refactor this to upload flat to gpu?
 	opengl_load_texture(path, id, GL_RGBA);
 }
 
@@ -772,6 +773,12 @@ static PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(upload_static_mesh_to_gpu)
 	// Maybe return an id later passed with the render command for drawing?
 	GPU_Mesh *pushed = push_struct(&debug_static_gpu_mesh_arena, GPU_Mesh);
 	opengl_upload_static_mesh_to_gpu(pushed, mesh);
+}
+
+static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
+{
+	// TODO: Return texture handle
+	opengl_upload_patch_to_gpu(patch);
 }
 
 int main(int argc, char** argv)
@@ -893,6 +900,7 @@ int main(int argc, char** argv)
 
 			game_memory.platform_API.load_texture = load_texture;
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
+			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
 
 			game_memory.debug_player_pos = &debug_player_pos;
 			game_memory.debug_player_angle = &debug_player_angle;

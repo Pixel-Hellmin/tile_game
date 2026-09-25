@@ -365,6 +365,20 @@ opengl_post_process_and_render_to_screen()
 	glEnable(GL_BLEND);
 }
 
+static GLuint
+opengl_upload_patch_to_gpu(Decoded_Patch *patch)
+{
+	GLuint texture;
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // patches don't tile like flats/walls do
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, patch->width, patch->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, patch->pixels);
+	return texture;
+}
+
 static void
 opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
 {
