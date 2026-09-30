@@ -50,6 +50,12 @@
 *
 * the linedef's front sidedef's sector == A → edge direction is v1 → v2
 * the linedef's back sidedef's sector == A → edge direction is v2 → v1 (reversed, since sector S is on the "back" side)
+*
+* Load NODES, SSECTORS, and SEGS and implement point_in_subsector,
+* only to get the sector for a position. It's about 20 lines.
+* Load BLOCKMAP for collision and hitscans.
+* Load REJECT and port P_CheckSight when you get to monsters.
+* Skip using the BSP for rendering order.
 */
 
 

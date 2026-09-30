@@ -98,6 +98,13 @@ struct Sector
     Mesh ceiling_mesh;
 };
 
+enum Point_Location
+{
+	PointLocation_Outside,
+	PointLocation_Inside,
+	PointLocation_On_Boundary,
+};
+
 #define INVALID_EDGE_INDEX 0xFFFFFFFF
 static Chained_Loops
 chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
@@ -197,29 +204,47 @@ is_point_on_edge(V2 v0, V2 v1, V2 p)
 	       min(v0.y, v1.y) <= p.y && p.y <= max(v0.y, v1.y);
 }
 
-static b32
-is_point_inside_loop(Edge_Loop *loop, V2 p, V2 *vertex_positions)
+static Point_Location
+locate_point_in_loop(Edge_Loop *loop, V2 p, V2 *vertex_positions)
 {
 	/*
 	 * https://www.geeksforgeeks.org/dsa/how-to-check-if-a-given-point-lies-inside-a-polygon/
 	*/
 
-	b32 result = false;
+	b32 inside = false;
 
 	for(u32 i = 0; i < loop->vertex_count; i++)
 	{
 		V2 v0 = vertex_positions[loop->vertices[(i + 0)]];
 		V2 v1 = vertex_positions[loop->vertices[(i + 1) % loop->vertex_count]];
 
-		if(is_point_on_edge(v0, v1, p)) { return true; }
+		if(is_point_on_edge(v0, v1, p)) { return PointLocation_On_Boundary; }
 
 		f64 x_at_y = ((f64)v1.x - v0.x) * ((f64)p.y - v0.y) / ((f64)v1.y - v0.y) + v0.x;
 		b32 intersect = ((v0.y > p.y) != (v1.y > p.y)) && ((f64)p.x < x_at_y);
 
-		if(intersect) { result = !result; }
+		if(intersect) { inside = !inside; }
 	}
 
-	return result;
+	return inside ? PointLocation_Inside : PointLocation_Outside;
+}
+
+static b32
+is_hole_inside_loop(Edge_Loop *hole, Edge_Loop *outer, V2 *vp)
+{
+	/*
+	 * Boundary vertices (overlap of a hole's vertex and outer's edge) is possible,
+	 * but inconclusive to determine whether the hole is inside or not.
+	 * We search for the first non-boundary vertex and use that instead.
+	*/
+
+	for(u32 i = 0; i < hole->vertex_count; i++)
+	{
+		Point_Location loc = locate_point_in_loop(outer, vp[hole->vertices[i]], vp);
+		if(loc != PointLocation_On_Boundary) { return loc == PointLocation_Inside; }
+	}
+
+	return false;
 }
 
 static Classified_Sector_Loops
@@ -248,16 +273,33 @@ classify_loops(Chained_Loops *chained, V2 *vertex_positions, Memory_Arena *arena
         }
     }
 
-	for(u32 outer_index = 0; outer_index < result.outer_count; ++outer_index)
+	/*
+	 * Its possible to have nested regions; an island inside a hole inside a big outer,
+	 * in that case the hole is inside both island's outer and the big outer so we need
+	 * to make sure each hole has only one owner so it doesn't get triangulated twice.
+	 * The owner with the smallest area is the right one.
+	*/
+	for(u32 hole_index = 0; hole_index < result.hole_count; ++hole_index)
 	{
-		result.outer[outer_index].hole_indices = push_array(arena, result.hole_count, u32); // @Cleanup: Over-allocation
-		for(u32 hole_index = 0; hole_index < result.hole_count; ++hole_index)
+		i32 best_outer = -1;
+		f32 best_area = 0.0f;
+		for(u32 o = 0; o < result.outer_count; ++o)
 		{
-			V2 hole_vertex = vertex_positions[result.holes[hole_index].vertices[0]];
-			if(is_point_inside_loop(&result.outer[outer_index], hole_vertex, vertex_positions))
+			if(!is_hole_inside_loop(&result.holes[hole_index], &result.outer[o], vertex_positions)) { continue; }
+			f32 area = fabsf(result.outer[o].signed_area);
+			if(best_outer < 0 || area < best_area) { best_outer = (i32)o; best_area = area; }
+		}
+		if(best_outer >= 0)
+		{
+			Edge_Loop *o = &result.outer[best_outer];
+
+			if(!o->hole_indices)
 			{
-				result.outer[outer_index].hole_indices[result.outer[outer_index].hole_count++] = hole_index;
+				// We don't know how many more holes belong to this outer,
+				// so we allocate enough for all the remaining holes
+				o->hole_indices = push_array(arena, result.hole_count - hole_index, u32);
 			}
+			o->hole_indices[o->hole_count++] = hole_index;
 		}
 	}
 
