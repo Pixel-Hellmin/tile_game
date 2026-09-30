@@ -9,7 +9,11 @@ struct Edge_Loop
 {
     u32 *vertices;      // walk order, indices into the level's vertex array
     u32 vertex_count;
-    f32 signed_area;    // filled in by classify_loops
+
+	// filled in by classify_loop
+    f32 signed_area;
+	u32 *hole_indices; // this data is only used by outer loops
+	u32 hole_count;
 };
 
 struct Chained_Loops
@@ -20,8 +24,8 @@ struct Chained_Loops
 
 struct Classified_Sector_Loops
 {
-	// NOTE(Fermin): There is always only one outer loop.
     Edge_Loop *outer;
+    u32 outer_count;
     Edge_Loop *holes;
     u32 hole_count;
 };
@@ -57,23 +61,26 @@ struct Wall_Segment_List
 	u32 segment_count;
 };
 
+struct Sector;
 struct Side_Def
 {
-    char *upper_texture;
-    char *middle_texture;
-    char *lower_texture;
+    //char *upper_texture;
+    //char *lower_texture;
+    //char *middle_texture;
+    char upper_texture[8];
+    char lower_texture[8];
+    char middle_texture[8];
     f32 x_offset, y_offset;
+	Sector *sector;
 };
 
-struct Sector;
 struct Line_Def
 {
-	// NOTE(Fermin): This data comes from the leveel file
-	u32 v1, v2;
+	u32 v1, v2;           // indices into the vertex array
 	Sector *front_sector;
-	Sector *back_sector;   // NULL for a one-sided line -- same meaning as sidenum[1] == -1
-	Side_Def front_side;
-	Side_Def back_side;    // only meaningful when back_sector != NULL
+	Sector *back_sector;  // NULL for a one-sided line -- same meaning as sidenum[1] == -1
+	Side_Def *front_side;
+	Side_Def *back_side;  // only meaningful when back_sector != NULL
 };
 
 struct Sector
@@ -113,8 +120,8 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
     }
     for(u32 edge_index = 0; edge_index < edge_count; ++edge_index)
     {
-		// table that says: At vertex X we got this edge index
-		// given the vertex you just arrived at, one array lookup tells you the next edge.
+		// Table that says: At vertex X we got this edge index.
+		// Given the vertex you just arrived at, one array lookup tells you the next edge.
 		// This works because edges[0].v2 = edges[1].v1, so you can use the edge v2 as
 		// index to get the next edge.
         edge_by_start[edges[edge_index].v1] = edge_index;
@@ -178,30 +185,81 @@ signed_area_for_loop(Edge_Loop *loop, V2 *vertex_positions)
     return 0.5f * area;
 }
 
+static b32
+is_point_on_edge(V2 v0, V2 v1, V2 p)
+{
+	f64 c = ((f64)p.x - v0.x) * ((f64)v1.y - v0.y) -
+	        ((f64)p.y - v0.y) * ((f64)v1.x - v0.x);
+
+	if(c != 0.0) { return false; }
+
+	return min(v0.x, v1.x) <= p.x && p.x <= max(v0.x, v1.x) &&
+	       min(v0.y, v1.y) <= p.y && p.y <= max(v0.y, v1.y);
+}
+
+static b32
+is_point_inside_loop(Edge_Loop *loop, V2 p, V2 *vertex_positions)
+{
+	/*
+	 * https://www.geeksforgeeks.org/dsa/how-to-check-if-a-given-point-lies-inside-a-polygon/
+	*/
+
+	b32 result = false;
+
+	for(u32 i = 0; i < loop->vertex_count; i++)
+	{
+		V2 v0 = vertex_positions[loop->vertices[(i + 0)]];
+		V2 v1 = vertex_positions[loop->vertices[(i + 1) % loop->vertex_count]];
+
+		if(is_point_on_edge(v0, v1, p)) { return true; }
+
+		f64 x_at_y = ((f64)v1.x - v0.x) * ((f64)p.y - v0.y) / ((f64)v1.y - v0.y) + v0.x;
+		b32 intersect = ((v0.y > p.y) != (v1.y > p.y)) && ((f64)p.x < x_at_y);
+
+		if(intersect) { result = !result; }
+	}
+
+	return result;
+}
+
 static Classified_Sector_Loops
 classify_loops(Chained_Loops *chained, V2 *vertex_positions, Memory_Arena *arena)
 {
     Classified_Sector_Loops result = {};
-	// there is only one outer loop per sector
 	assert(chained->loop_count > 0); // every sector has at least one loop (the outer boundary)
-    result.holes = push_array(arena, (chained->loop_count - 1), Edge_Loop); 
+	
+	// @Cleanup: Can we be more precise with these allocations?
+    result.outer = push_array(arena, chained->loop_count, Edge_Loop); 
+    result.holes = push_array(arena, chained->loop_count, Edge_Loop); 
 
     for(u32 loop_index = 0; loop_index < chained->loop_count; ++loop_index)
     {
         Edge_Loop *loop = chained->loops + loop_index;
         loop->signed_area = signed_area_for_loop(loop, vertex_positions);
 
-        if(loop->signed_area > 0.0f)
+        if(loop->signed_area < 0.0f)
         {
-            // NOTE(Fermin): convention -> positive area is the outer boundary
-            assert(!result.outer); // a well-formed sector has exactly one outer loop
-            result.outer = loop;
+            // NOTE(Fermin): convention -> negative area is the outer boundary
+            result.outer[result.outer_count++] = *loop;
         }
         else
         {
             result.holes[result.hole_count++] = *loop;
         }
     }
+
+	for(u32 outer_index = 0; outer_index < result.outer_count; ++outer_index)
+	{
+		result.outer[outer_index].hole_indices = push_array(arena, result.hole_count, u32); // @Cleanup: Over-allocation
+		for(u32 hole_index = 0; hole_index < result.hole_count; ++hole_index)
+		{
+			V2 hole_vertex = vertex_positions[result.holes[hole_index].vertices[0]];
+			if(is_point_inside_loop(&result.outer[outer_index], hole_vertex, vertex_positions))
+			{
+				result.outer[outer_index].hole_indices[result.outer[outer_index].hole_count++] = hole_index;
+			}
+		}
+	}
 
     return result;
 }
@@ -266,6 +324,8 @@ merge_hole_into_outer(Edge_Loop *outer, Edge_Loop *hole, V2 *vertex_positions, M
     Edge_Loop result = {};
     result.vertices = merged;
     result.vertex_count = merged_count;
+	result.hole_indices = outer->hole_indices;
+	result.hole_count = outer->hole_count;
 
     return result;
 }
@@ -332,8 +392,13 @@ is_ear(u32 *ring, u32 ring_count, u32 i, V2 *vertex_positions)
     V2 b = vertex_positions[vb];
     V2 c = vertex_positions[vc];
 
-	// is it convex?
-    if(cross((b - a), (c - b)) <= 0.0f) { return false; }
+	/*
+	* Is it convex?
+	* Since our convention is the front is always to the right/clockwise and
+	* we navigate the polygon in clockwise order, if the result is negative
+	* the angle is convex, and if positive it is concave.
+	*/
+    if(cross((b - a), (c - b)) >= 0.0f) { return false; }
 
 	// is it empty?
     for(u32 j = 0; j < ring_count; ++j)
@@ -470,9 +535,8 @@ build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
         result.vertices[i].light = light;
     }
 
-	// interior of front_sector is on the LEFT of v1->v2, so the visible
-	// face must point that way, not toward the exterior
-	u32 idx[6] = { 2, 1, 0, 3, 2, 0 }; 
+	u32 idx[6] = { 0, 1, 2, 0, 2, 3 }; 
+	//u32 idx[6] = { 2, 1, 0, 3, 2, 0 }; 
     result.index_count = 6;
     result.indices = push_array(arena, 6, u32);
     for(u32 i = 0; i < 6; ++i) { result.indices[i] = idx[i]; }
@@ -496,8 +560,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         // NOTE(Fermin): one-sided -- sidenum[1] == -1 in the WAD, solid floor-to-ceiling wall
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, front->floor_height, front->ceiling_height, front->light_level,
-                                      line->front_side.x_offset, line->front_side.y_offset, arena);
-        seg->texture_name = line->front_side.middle_texture;
+                                      line->front_side->x_offset, line->front_side->y_offset, arena);
+        seg->texture_name = line->front_side->middle_texture;
         return result;
     }
 
@@ -506,8 +570,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         // NOTE(Fermin): ceiling drops going from front sector into back sector
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, back->ceiling_height, front->ceiling_height, front->light_level,
-                                      line->front_side.x_offset, line->front_side.y_offset, arena);
-        seg->texture_name = line->front_side.upper_texture;
+                                      line->front_side->x_offset, line->front_side->y_offset, arena);
+        seg->texture_name = line->front_side->upper_texture;
     }
 
     if(front->floor_height > back->floor_height)
@@ -516,8 +580,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
 		// We build the quad facing the back sector, hence the inverted p
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p2, p1, back->floor_height, front->floor_height, back->light_level,
-                                      line->front_side.x_offset, line->front_side.y_offset, arena);
-        seg->texture_name = line->front_side.lower_texture;
+                                      line->front_side->x_offset, line->front_side->y_offset, arena);
+        seg->texture_name = line->front_side->lower_texture;
     }
 
     if(back->floor_height > front->floor_height)
@@ -525,8 +589,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         // NOTE(Fermin): floor rises going from front sector into back sector
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, front->floor_height, back->floor_height, front->light_level,
-                                      line->front_side.x_offset, line->front_side.y_offset, arena);
-        seg->texture_name = line->front_side.lower_texture;
+                                      line->front_side->x_offset, line->front_side->y_offset, arena);
+        seg->texture_name = line->front_side->lower_texture;
     }
 
     if(back->ceiling_height > front->ceiling_height)
@@ -535,23 +599,30 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
 		// We build the quad facing the back sector, hence the inverted p
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p2, p1, front->ceiling_height, back->ceiling_height, back->light_level,
-                                      line->front_side.x_offset, line->front_side.y_offset, arena);
-        seg->texture_name = line->front_side.lower_texture;
+                                      line->front_side->x_offset, line->front_side->y_offset, arena);
+        seg->texture_name = line->front_side->lower_texture;
     }
 
     return result;
 }
 
 static void
-build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena)
+build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena,
+						 Platform_API *platform_API, Level_Assets *assets)
 {
-	// NOTE: This builds the sector's floor and ceiling mesh
+	/* 
+	* The front of a Line_Def is always 90 degrees to the right / clockwise from the ray you
+	* would draw starting from the first point to the second point.
+	*/
+
+	if(sector->line_count == 0) { return; }  // NOTE(Fermin): orphan sector, nothing to triangulate
 
 	Sector_Edge *edges = push_array(tmp_arena, sector->line_count, Sector_Edge);
 	u32 edge_count = 0;
 	for(u32 i = 0; i < sector->line_count; ++i)
 	{
 		Line_Def *line = sector->lines[i];
+		if(line->front_sector == line->back_sector) { continue; } // same sector on both sides -> not part of the boundary
 		if(line->front_sector == sector) { edges[edge_count++] = { line->v1, line->v2 }; }
 		else                             { edges[edge_count++] = { line->v2, line->v1 }; }
 	}
@@ -560,25 +631,33 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 
 	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
 
-	Edge_Loop merged_loop = *classified_loops.outer;
-	for(u32 h = 0; h < classified_loops.hole_count; ++h)
+	for(u32 o = 0; o < classified_loops.outer_count; ++o)
 	{
-		merged_loop = merge_hole_into_outer(&merged_loop,
-										    classified_loops.holes + h,
-										    vertex_positions, tmp_arena);
+		Edge_Loop merged_loop = classified_loops.outer[o];
+		for(u32 h = 0; h < merged_loop.hole_count; ++h)
+		{
+			merged_loop = merge_hole_into_outer(&merged_loop,
+											    classified_loops.holes + merged_loop.hole_indices[h],
+												vertex_positions, tmp_arena);
+		}
+
+		Triangulated_Loop floor_triangles = triangulate_ear_clip(merged_loop.vertices,
+															     merged_loop.vertex_count,
+																 vertex_positions, tmp_arena);
+
+		Mesh floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
+										 sector->floor_height,
+										 sector->light_level,
+										 true, tmp_arena);
+
+		Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
+										 sector->ceiling_height,
+										 sector->light_level,
+										 false, tmp_arena);
+
+		floor_mesh.texture_handle = assets->floor_texture_id;
+		ceiling_mesh.texture_handle = assets->roof_texture_id;
+		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
+		platform_API->upload_static_mesh_to_gpu(&ceiling_mesh);
 	}
-
-	Triangulated_Loop floor_triangles = triangulate_ear_clip(merged_loop.vertices,
-															 merged_loop.vertex_count,
-															 vertex_positions, tmp_arena);
-
-	sector->floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
-										   sector->floor_height,
-										   sector->light_level,
-										   false, tmp_arena);
-
-	sector->ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
-										   sector->ceiling_height,
-										   sector->light_level,
-										   true, tmp_arena);
 }

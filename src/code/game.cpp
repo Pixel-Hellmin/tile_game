@@ -412,6 +412,7 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 static void
 load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level_assets)
 {
+	/*
 	// TODO: Load this from lvl data file
 	V2 vertex_positions[] = {
 		{ 0,   0   }, // 0
@@ -493,6 +494,49 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level
 	}
 
 	end_tmp_memory(tmp_memory);
+	*/
+
+	Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
+	Wad_File wad = open_wad_from_memory(wad_buffer.data, tmp_arena);
+
+	i32 map = find_lump(&wad, "E1M1");
+	assert(map >= 0);
+	i32 vertexes_lump = find_map_lump(&wad, map, "VERTEXES");
+	i32 sectors_lump  = find_map_lump(&wad, map, "SECTORS");
+	i32 sidedefs_lump = find_map_lump(&wad, map, "SIDEDEFS");
+	i32 linedefs_lump = find_map_lump(&wad, map, "LINEDEFS");
+	assert(vertexes_lump >= 0 && sectors_lump >= 0 && sidedefs_lump >= 0 && linedefs_lump >= 0);
+
+	/*
+	 * NOTE(Fermin): Load order matters and is fixed:
+	 *	Sectors -> Side_Defs -> Line_Defs
+	*/
+	u32 vertex_count, sector_count, side_count, line_count;
+	V2       *vertex_positions = load_vertexes(&wad, vertexes_lump, &vertex_count, tmp_arena);
+	Sector   *sectors          = load_sectors(&wad, sectors_lump, &sector_count, tmp_arena);
+	Side_Def *sides            = load_sidedefs(&wad, sidedefs_lump, sectors, &side_count, tmp_arena);
+	Line_Def *lines            = load_linedefs(&wad, linedefs_lump, sides, &line_count, tmp_arena);
+
+	group_lines_into_sectors(lines, line_count, sectors, sector_count, tmp_arena);
+
+	for(u32 i = 0; i < sector_count; ++i)
+	{
+		build_sector_render_data(&sectors[i], vertex_positions, tmp_arena,
+								 &game_memory->platform_API, &level_assets);
+	}
+
+	for(u32 i = 0; i < line_count; ++i)
+	{
+		//build_line_render_data(&lines[i], vertex_positions, debug_texture, tmp_arena);
+		
+		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, tmp_arena);
+		for(u32 i = 0; i < segment_list.segment_count; ++i)
+		{
+			Mesh mesh = segment_list.segments[i].mesh;
+			mesh.texture_handle = level_assets.wall_texture_id;
+			game_memory->platform_API.upload_static_mesh_to_gpu(&mesh);
+		}
+	}
 }
 
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
@@ -561,7 +605,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		dude->dim_in_tiles = V2{1.0f, 1.0f};
 		dude->texture_id = game_state->dude_texture_id;
 		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
-		*game_memory->debug_player_pos = { 32.0f, -80.0f, 0.0f };
+		*game_memory->debug_player_pos = { 1544.0f, -3380.0f, 0.0f };
 		*game_memory->debug_player_angle = 1.5707963f;
 
 		// TODO(Fermin): Proper initialization of flipbooks
@@ -590,7 +634,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     Input_Keys old_input = input[1];
     //Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 dt_in_seconds = new_input.dt_in_seconds;
-    f32 dude_speed = 10.0 * dt_in_seconds;
+    f32 dude_speed = 50.0 * dt_in_seconds;
     f32 camera_speed = 30.0 * dt_in_seconds;
     if(new_input.f1 && !old_input.f1)
     {
@@ -629,11 +673,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     if(new_input.q)
     {
-		*game_memory->debug_player_angle += 0.5f * dude_speed;
+		*game_memory->debug_player_angle += 0.2f * dude_speed;
     }
     if(new_input.e)
     {
-		*game_memory->debug_player_angle += -0.5f * dude_speed;
+		*game_memory->debug_player_angle += -0.2f * dude_speed;
     }
 
     if(!is_set(game_state, game_state_flag_free_cam_mode))

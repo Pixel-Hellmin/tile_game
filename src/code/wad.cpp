@@ -21,6 +21,20 @@ struct Composite_Texture_Def
     u32 patch_count;
 };
 
+struct Lump_Info
+{ 
+	char name[9];
+	i32 file_pos;
+	i32 size;
+};
+
+struct Wad_File
+{
+	u8 *data; // whole file, memory-mapped or read in wholesale
+	Lump_Info *lumps;
+	u32 lump_count;
+};
+
 static RGB8 *
 load_playpal(u8 *playpal_lump_data, Memory_Arena *arena)
 {
@@ -262,4 +276,289 @@ load_wall_texture(char *texture_name, umm name_length,
 	}
 
 	assert(!"texture name not found in TEXTURE1/TEXTURE2"); // shouldn't happen on a well-formed WAD
+}
+
+static Wad_File
+open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
+{
+	/*
+	* WAD file. "Where's all the data?"
+	* https://doomwiki.org/wiki/WAD
+	*
+	* Header
+	* offset  length  name			  content
+	* 0x00    4       identification  ASCII characters "IWAD" or "PWAD"
+	* 0x04    4       numlumps		  integer specifying the number of lumps in the WAD
+	* 0x08    4       infotableofs    integer holding a pointer to the location of the directory
+	*
+	* Directory
+	* offset  length  name	   content
+	* 0x00    4       filepos  integer holding a pointer to the start of the lump's data in the file
+	* 0x04    4       size	   integer representing the size of the lump in bytes
+	* 0x08    8       name     ASCII string defining the lump's name, 8 char max
+	*/
+
+	Wad_File result = {0};
+	result.data = file_data;
+
+	char *ident = (char *)file_data;
+	assert(strings_are_equal(4, ident, "IWAD") || strings_are_equal(4, ident, "PWAD"));
+	//Assert(memcmp(ident, "IWAD", 4) == 0 || memcmp(ident, "PWAD", 4) == 0);
+
+	i32 num_lumps    = *(i32 *)(file_data + 4);
+	i32 dir_offset   = *(i32 *)(file_data + 8);
+
+	result.lump_count = (u32)num_lumps;
+	result.lumps = push_array(arena, result.lump_count, Lump_Info);
+
+	u8 *dir = file_data + dir_offset;
+	for(u32 i = 0; i < result.lump_count; ++i)
+	{
+		u8 *entry = dir + i * 16; // filelump_t is 16 bytes -- filepos(4) + size(4) + name(8)
+		result.lumps[i].file_pos = *(i32 *)(entry + 0);
+		result.lumps[i].size     = *(i32 *)(entry + 4);
+		copy_string((char *)(entry + 8), result.lumps[i].name, 8);
+		//memcpy(result.lumps[i].name, entry + 8, 8);
+		result.lumps[i].name[8] = 0;
+	}
+	return result;
+}
+
+static i32
+find_lump(Wad_File *wad, char *name)
+{
+	for(u32 i = 0; i < wad->lump_count; ++i)
+	{
+		if(strings_are_equal(8, wad->lumps[i].name, name)) { return (i32)i; }
+	}
+
+	return -1; // matches W_CheckNumForName's "not found" convention
+}
+
+static i32
+find_map_lump(Wad_File *wad, i32 map_marker, char *name)
+{
+	// NOTE(Fermin): map data lumps sit within 10 entries after the marker
+	for(i32 i = map_marker + 1; i <= map_marker + 10 && i < (i32)wad->lump_count; ++i)
+	{
+		if(strings_are_equal(8, wad->lumps[i].name, name)) { return i; }
+	}
+	return -1;
+}
+
+static u8 *
+get_lump_data(Wad_File *wad, i32 idx)
+{
+	assert(idx >= 0);
+
+	return wad->data + wad->lumps[idx].file_pos;
+}
+
+static u32
+get_lump_size(Wad_File *wad, i32 idx)
+{
+	assert(idx >= 0);
+
+	return (u32)wad->lumps[idx].size;
+}
+
+static V2 *
+load_vertexes(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
+{
+	/*
+	* Lump: VERTEXES
+	* https://doomwiki.org/wiki/Vertex
+	*
+	* Vertex structure
+	* offset  size  type  description
+	* 0		  2		i16	  x position
+	* 2		  2	    i16   y position
+	*/
+
+	u32 count = get_lump_size(wad, lump) / 4;
+	i16 *raw = (i16 *)get_lump_data(wad, lump);
+
+	V2 *verts = push_array(arena, count, V2);
+	for(u32 i = 0; i < count; ++i)
+	{ 
+		verts[i] = { (f32)raw[i*2], (f32)raw[i*2+1] };
+	}
+
+	*out_count = count;
+	return verts;
+}
+
+static Sector *
+load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
+{
+	/*
+	* Lump: SECTORS
+	* https://doomwiki.org/wiki/Sector
+	*
+	* Sector structure
+	* offset  size  type   description
+	* 0		  2		i16	   floor height
+	* 2		  2	    i16    ceiling height
+	* 4       8     i8[8]  name of floor texture(flat)
+	* 12      8     i8[8]  name of ceiling texture(flat)
+	* 20	  2		i16	   light level
+	* 22	  2	    i16	   special type
+	* 24	  2	    i16	   tag number
+	*/
+
+	u32 count = get_lump_size(wad, lump) / 26;
+	u8 *raw = get_lump_data(wad, lump);
+
+	Sector *sectors = push_array(arena, count, Sector);
+	for(u32 i = 0; i < count; ++i)
+	{
+		u8 *e = raw + i * 26;
+
+		sectors[i].floor_height   = (f32)(*(i16 *)(e + 0));
+		sectors[i].ceiling_height = (f32)(*(i16 *)(e + 2));
+
+		copy_string((char *)(e + 4), sectors[i].floor_texture, 8);
+		sectors[i].floor_texture[8] = 0;
+		//memcpy(sectors[i].floor_texture,   e + 4,  8); sectors[i].floor_texture[8]   = 0;
+
+		copy_string((char *)(e + 12), sectors[i].ceiling_texture, 8);
+		sectors[i].ceiling_texture[8] = 0;
+		//memcpy(sectors[i].ceiling_texture, e + 12, 8); sectors[i].ceiling_texture[8] = 0;
+
+		sectors[i].light_level = (f32)(*(i16 *)(e + 20)) / 255.0f;
+		
+		// special @ e+22, tag @ e+24 -- doors/lifts, not consumed yet
+	}
+
+	*out_count = count;
+	return sectors;
+}
+
+static Side_Def *
+load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count, Memory_Arena *arena)
+{
+	/*
+	* Lump: SIDEDEFS
+	* https://doomwiki.org/wiki/Sidedef
+	*
+	* Sidedef structure
+	* offset  size  type   description
+	* 0		  2		i16	   x offset
+	* 2		  2	    i16    y offset
+	* 4       8     i8[8]  name of upper texture
+	* 12      8     i8[8]  name of lower texture
+	* 20	  8		i8[8]  name of middle texture
+	* 28	  2	    i16	   sector number this sidedef faces
+	*/
+
+	u32 count = get_lump_size(wad, lump) / 30;
+	u8 *raw = get_lump_data(wad, lump);
+
+	Side_Def *sides = push_array(arena, count, Side_Def);
+	for(u32 i = 0; i < count; ++i)
+	{
+		u8 *e = raw + i * 30;
+		sides[i].x_offset = (f32)(*(i16 *)(e + 0));
+		sides[i].y_offset = (f32)(*(i16 *)(e + 2));
+
+		copy_string((char *)(e + 4), sides[i].upper_texture, 8);
+		sides[i].upper_texture[8]  = 0;
+		copy_string((char *)(e + 12), sides[i].lower_texture, 8);
+		sides[i].lower_texture[8]  = 0;
+		copy_string((char *)(e + 20), sides[i].middle_texture, 8);
+		sides[i].middle_texture[8] = 0;
+		//memcpy(sides[i].upper_texture,  e + 4,  8); sides[i].upper_texture[8]  = 0;
+		//memcpy(sides[i].lower_texture,  e + 12, 8); sides[i].lower_texture[8]  = 0;
+		//memcpy(sides[i].middle_texture, e + 20, 8); sides[i].middle_texture[8] = 0;
+
+		i16 sector_index = *(i16 *)(e + 28);
+		sides[i].sector = &sectors[sector_index];
+	}
+
+	*out_count = count;
+	return sides;
+}
+
+static Line_Def *
+load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_Arena *arena)
+{
+	/*
+	* Lump: LINEDEFS
+	* https://doomwiki.org/wiki/Linedef
+	*
+	* Linedef structure
+	* offset  size  type   code        description
+	* 0		  2		i16	   v1		   starting vertex
+	* 2		  2	    i16    v2		   ending vertex
+	* 4       2     i16    flags	   flags: attribute bits
+	* 6       2     i16    special	   linedef type: special action or behavior
+	* 8 	  2		i16    tag		   tag: associates sector(s)/line(s) with special
+	* 10	  2	    i16	   sidenum[0]  front sidedef
+	* 12	  2	    i16	   sidenum[1]  back sidedef
+	*/
+
+	u32 count = get_lump_size(wad, lump) / 14;
+	i16 *raw = (i16 *)get_lump_data(wad, lump);
+
+	Line_Def *lines = push_array(arena, count, Line_Def);
+	for(u32 i = 0; i < count; ++i)
+	{
+		i16 *e = raw + i * 7; // by 7 because points to i16s
+		lines[i].v1 = (u32)(u16)e[0]; // double cast to avoid sign extension
+		lines[i].v2 = (u32)(u16)e[1];
+		// NOTE(Fermin): flags @ e[2], special @ e[3], tag @ e[4] -- not consumed yet
+
+		i16 front_side_index = e[5];
+		lines[i].front_side   = &sides[front_side_index];
+		lines[i].front_sector = sides[front_side_index].sector;
+
+		i16 back_side_index = e[6];
+		if(back_side_index == -1)
+		{ 
+			lines[i].back_sector = NULL;
+		}
+		else
+		{
+			lines[i].back_side   = &sides[back_side_index];
+			lines[i].back_sector = sides[back_side_index].sector;
+		}
+	}
+
+	*out_count = count;
+	return lines;
+}
+
+static void
+group_lines_into_sectors(Line_Def *lines, u32 line_count, Sector *sectors, u32 sector_count, Memory_Arena *arena)
+{
+	u32 *counts = push_array(arena, sector_count, u32);
+	for(u32 i = 0; i < line_count; ++i)
+	{
+		// How many lines reference each sector -- Sector 0 -> 2 lines.
+		// This is so we can allocate exact memory below
+		counts[lines[i].front_sector - sectors]++;
+		if(lines[i].back_sector && lines[i].back_sector != lines[i].front_sector)
+		{
+			counts[lines[i].back_sector - sectors]++;
+		}
+	}
+
+	for(u32 s = 0; s < sector_count; ++s)
+	{
+		// allocate buffer for lines in each sector
+		sectors[s].lines = push_array(arena, counts[s], Line_Def *);
+		sectors[s].line_count = 0; // NOTE(Fermin): refilled below, counts[] was just for sizing
+	}
+
+	for(u32 i = 0; i < line_count; ++i)
+	{
+		// populate sector's array with lines
+		Sector *fs = lines[i].front_sector;
+		fs->lines[fs->line_count++] = &lines[i];
+		if(lines[i].back_sector && lines[i].back_sector != lines[i].front_sector)
+		{
+			Sector *bs = lines[i].back_sector;
+			bs->lines[bs->line_count++] = &lines[i];
+		}
+	}
 }

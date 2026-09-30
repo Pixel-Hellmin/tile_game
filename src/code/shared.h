@@ -68,6 +68,8 @@ strings_are_equal(umm a_length, char *a, char *b)
         index < a_length;
         ++index, ++at)
     {
+		if(a[index] == 0) { break; }
+
         if((*at == 0) ||
            (a[index] != *at))
         {

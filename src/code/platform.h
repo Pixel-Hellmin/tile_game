@@ -146,11 +146,14 @@ struct Decoded_Patch
 	typedef PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(Platform_Upload_Static_Mesh_To_Gpu);
 #define PLATFORM_UPLOAD_PATCH_TO_GPU(name) void name(Decoded_Patch *patch)
 	typedef PLATFORM_UPLOAD_PATCH_TO_GPU(Platform_Upload_Patch_To_Gpu);
+#define PLATFORM_READ_FILE_FROM_DISK(name) Buffer name(char *file_name)
+	typedef PLATFORM_READ_FILE_FROM_DISK(Platform_Read_File_From_Disk);
 struct Platform_API
 {
 	Platform_Load_Texture *load_texture;
 	Platform_Upload_Static_Mesh_To_Gpu *upload_static_mesh_to_gpu;
 	Platform_Upload_Patch_To_Gpu *upload_patch_to_gpu;
+	Platform_Read_File_From_Disk *read_file_from_disk;
 };
 
 struct Game_Memory

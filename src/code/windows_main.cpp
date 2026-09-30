@@ -781,6 +781,14 @@ static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
 	opengl_upload_patch_to_gpu(patch);
 }
 
+static PLATFORM_READ_FILE_FROM_DISK(read_file_from_disk)
+{
+	Buffer result = {};
+	result = read_file(file_name);
+
+	return result;
+}
+
 int main(int argc, char** argv)
 {
     begin_profile();
@@ -901,6 +909,7 @@ int main(int argc, char** argv)
 			game_memory.platform_API.load_texture = load_texture;
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
 			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
+			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
 
 			game_memory.debug_player_pos = &debug_player_pos;
 			game_memory.debug_player_angle = &debug_player_angle;
