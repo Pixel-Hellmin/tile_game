@@ -105,13 +105,86 @@ enum Point_Location
 	PointLocation_On_Boundary,
 };
 
+static u32
+turn_class(V2 in, V2 out)
+{
+	/*
+	 * NOTE(Fermin): turn class relative to the incoming direction.
+	 * 0 = CW       -- cross <  0
+	 * 1 = straight -- cross == 0 & inner > 0
+	 * 2 = CCW		-- cross >  0
+	 * 3 = U-turn	-- cross == 0 & inner < 0
+	 * Lower is preferred. Origin doesn't matter, cross and inner only use
+	 * a vector's direction and length, not its position. To visualize this
+	 * imagin both vectors origin in the same point.
+	*/
+
+	f64 cross_p = cross_f64(in, out);
+	if(cross_p < 0.0) { return 0; }
+	if(cross_p > 0.0) { return 2; }
+
+	f64 inner_p = inner_f64(in, out);
+	return (inner_p > 0.0) ? 1 : 3;
+}
+
+static b32
+is_sharper_right(V2 in, V2 out, V2 best)
+{
+	/*
+	* NOTE(Fermin): true if out vector a is a sharper right turn than best,
+	* given both are relative to the same incoming direction.
+	*/
+
+	u32 class_out = turn_class(in, out);
+	u32 class_best = turn_class(in, best);
+	if(class_out != class_best) { return class_out < class_best; }
+
+	// same class: out is the smaller angle if best is CCW of out
+	return cross_f64(out, best) > 0.0;
+}
+
 #define INVALID_EDGE_INDEX 0xFFFFFFFF
+static u32
+pick_next_edge(Sector_Edge *edges, u32 current, u32 start, b32 *visited,
+			   u32 *first_edge_at, u32 *next_at_start, V2 *vp)
+{
+	/* 
+	* NOTE(Fermin): among the outgoing edges at edge->v2, pick the sharpest RIGHT(CW) turn
+	* relative to the incoming direction (smallest signed angle; right = negative).
+	* Only unvisited edges, or the loop's start edge, are candidates.
+	*/
+
+	Sector_Edge *cur = edges + current;
+	V2 p0 = vp[cur->v1];
+	V2 p1 = vp[cur->v2];
+	V2 in = p1 - p0;
+
+	u32 best = INVALID_EDGE_INDEX;
+	V2 best_out = {};
+
+	for(u32 e = first_edge_at[cur->v2]; e != INVALID_EDGE_INDEX; e = next_at_start[e])
+	{
+		if(visited[e] && e != start) { continue; }
+
+		V2 q = vp[edges[e].v2];
+		V2 out = q - p1;
+
+		if(best == INVALID_EDGE_INDEX || is_sharper_right(in, out, best_out))
+		{
+			best = e;
+			best_out = out;
+		}
+	}
+
+	return best;
+}
+
 static Chained_Loops
-chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
+chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, V2 *vertex_positions, Memory_Arena *arena)
 {
     Chained_Loops result = {};
 
-    // NOTE(Fermin): find the vertex index range so edge_by_start can be a flat array
+    // NOTE(Fermin): find the vertex index range so first_edge_at can be a flat array
     u32 max_vertex_index = 0;
     for(u32 edge_index = 0; edge_index < edge_count; ++edge_index)
     {
@@ -120,18 +193,32 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
         if(edge->v2 > max_vertex_index) { max_vertex_index = edge->v2; }
     }
 
-    u32 *edge_by_start = push_array(arena, max_vertex_index + 1, u32);
+    u32 *first_edge_at = push_array(arena, max_vertex_index + 1, u32);
+    u32 *next_at_start = push_array(arena, edge_count, u32);
     for(u32 vertex_index = 0; vertex_index <= max_vertex_index; ++vertex_index)
     {
-        edge_by_start[vertex_index] = INVALID_EDGE_INDEX;
+        first_edge_at[vertex_index] = INVALID_EDGE_INDEX;
     }
     for(u32 edge_index = 0; edge_index < edge_count; ++edge_index)
     {
-		// Table that says: At vertex X we got this edge index.
-		// Given the vertex you just arrived at, one array lookup tells you the next edge.
-		// This works because edges[0].v2 = edges[1].v1, so you can use the edge v2 as
-		// index to get the next edge.
-        edge_by_start[edges[edge_index].v1] = edge_index;
+		/*
+		* first_edge_at: At starting vertex V we got this edge index.
+		* Given the vertex you just arrived at, one array lookup tells you the next edge.
+		* This works because edges[0].v2 = edges[1].v1, so you can use the edge v2 as
+		* index to get the next edge.
+		*
+		* We need to handle multipe overlapping vertices starting on the same point.
+		* first_edge_at stores only the last edge's index at that vertex.
+		* next_at_start is a linked list that stores the next edge index also starting at V.
+		* 
+		* first_edge_at[v] is the head of vertex v's list of outgoing edges.
+		* next_at_start[e] is the next edge after e that starts at the same vertex as e.
+		* It's indexed by edge, not by vertex. Both start as X (INVALID_EDGE_INDEX)
+		* or are overwritten before being read.
+		*
+		*/
+		next_at_start[edge_index] = first_edge_at[edges[edge_index].v1]; // old head becomes my successor
+        first_edge_at[edges[edge_index].v1] = edge_index; // I become the head
     }
 
     b32 *visited = push_array(arena, edge_count, b32);
@@ -150,9 +237,7 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
 		// Over-allocating, edge_count is all loops' edges.
         loop->vertices = push_array(arena, edge_count, u32); 
 
-        u32 start_vertex = edges[start_edge_index].v1;
         u32 current_edge_index = start_edge_index;
-
         for(;;)
         {
             assert(!visited[current_edge_index]);
@@ -161,10 +246,11 @@ chain_edges_to_loops(Sector_Edge *edges, u32 edge_count, Memory_Arena *arena)
             Sector_Edge *current_edge = edges + current_edge_index;
             loop->vertices[loop->vertex_count++] = current_edge->v1;
 
-            if(current_edge->v2 == start_vertex) { break; }
+			u32 next_edge_index = pick_next_edge(edges, current_edge_index, start_edge_index,
+									  visited, first_edge_at, next_at_start, vertex_positions);
 
-            u32 next_edge_index = edge_by_start[current_edge->v2];
-            assert(next_edge_index != INVALID_EDGE_INDEX); // NOTE(Fermin): open chain -> malformed sector data
+            assert(next_edge_index != INVALID_EDGE_INDEX); // open chain -> malformed sector data
+            if(next_edge_index == start_edge_index) { break; }
             current_edge_index = next_edge_index;
         }
     }
@@ -302,6 +388,8 @@ classify_loops(Chained_Loops *chained, V2 *vertex_positions, Memory_Arena *arena
 			o->hole_indices[o->hole_count++] = hole_index;
 		}
 	}
+
+	assert(result.outer_count > 0);
 
     return result;
 }
@@ -669,7 +757,7 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 		else                             { edges[edge_count++] = { line->v2, line->v1 }; }
 	}
 
-	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, tmp_arena);
+	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, vertex_positions, tmp_arena);
 
 	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
 

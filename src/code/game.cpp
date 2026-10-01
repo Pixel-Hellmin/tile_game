@@ -499,7 +499,7 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level
 	Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
 	Wad_File wad = open_wad_from_memory(wad_buffer.data, tmp_arena);
 
-	i32 map = find_lump(&wad, "E1M1");
+	i32 map = find_lump(&wad, "E1M8");
 	assert(map >= 0);
 	i32 vertexes_lump = find_map_lump(&wad, map, "VERTEXES");
 	i32 sectors_lump  = find_map_lump(&wad, map, "SECTORS");

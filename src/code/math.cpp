@@ -198,9 +198,34 @@ static inline f32 inner(V2 a, V2 b)
     return result;
 }
 
+static inline f64 inner_f64(V2 a, V2 b)
+{
+    f64 result = (f64)a.x*(f64)b.x + (f64)a.y*(f64)b.y;
+
+    return result;
+}
+
 static inline f32 length_sq(V2 a)
 {
     f32 result = inner(a, a);
+
+    return result;
+}
+
+static inline f32 cross(V2 a, V2 b)
+{
+    f32 result = {};
+
+    result = (a.x * b.y) - (a.y * b.x);
+
+    return result;
+}
+
+static inline f64 cross_f64(V2 a, V2 b)
+{
+    f64 result = {};
+
+    result = (f64)a.x * (f64)b.y - (f64)a.y * (f64)b.x;
 
     return result;
 }
@@ -331,15 +356,6 @@ inline V3 operator/(V3 a, f32 b)
 static inline f32 inner(V3 a, V3 b)
 {
     f32 result = a.x*b.x + a.y*b.y + a.z*b.z;
-
-    return result;
-}
-
-static inline f32 cross(V2 a, V2 b)
-{
-    f32 result = {};
-
-    result = (a.x * b.y) - (a.y * b.x);
 
     return result;
 }
