@@ -35,8 +35,59 @@ struct Wad_File
 	u32 lump_count;
 };
 
+struct Loaded_Flat
+{
+	char name[9];
+	u32 id;
+};
+
+struct Sector;
+struct Side_Def
+{
+    //char *upper_texture;
+    //char *lower_texture;
+    //char *middle_texture;
+    char upper_texture[8];
+    char lower_texture[8];
+    char middle_texture[8];
+    f32 x_offset, y_offset;
+	Sector *sector;
+};
+
+struct Line_Def
+{
+	u32 v1, v2;           // indices into the vertex array
+	Sector *front_sector;
+	Sector *back_sector;  // NULL for a one-sided line -- same meaning as sidenum[1] == -1
+	Side_Def *front_side;
+	Side_Def *back_side;  // only meaningful when back_sector != NULL
+};
+
+struct Sector
+{
+    f32 floor_height;
+    f32 ceiling_height;
+    char floor_texture[9];    // NOTE(Fermin): DOOM lump names are 8 chars + null
+    char ceiling_texture[9];
+    f32 light_level;          // 0..1, normalized from the WAD's 0..255 lightlevel
+
+    Line_Def **lines;         // NOTE(Fermin): every line whose front or back references this sector
+    u32 line_count;
+
+    Mesh floor_mesh;
+    Mesh ceiling_mesh;
+};
+
+static u8 *
+get_lump_data(Wad_File *wad, i32 idx)
+{
+	assert(idx >= 0);
+
+	return wad->data + wad->lumps[idx].file_pos;
+}
+
 static RGB8 *
-load_playpal(u8 *playpal_lump_data, Memory_Arena *arena)
+load_playpal(Wad_File *wad, i32 lump, Memory_Arena *arena)
 {
 	/*
 	* Parses PLAYPAL lump
@@ -45,13 +96,16 @@ load_playpal(u8 *playpal_lump_data, Memory_Arena *arena)
 	* Loads pallete of colors textures index into.
 	*/
 
+	u8 *raw = (u8 *)get_lump_data(wad, lump);
+
     RGB8 *palette = push_array(arena, 256, RGB8);
     for(u32 i = 0; i < 256; ++i)
     {
-        palette[i].r = playpal_lump_data[i*3 + 0];
-        palette[i].g = playpal_lump_data[i*3 + 1];
-        palette[i].b = playpal_lump_data[i*3 + 2];
+        palette[i].r = raw[i*3 + 0];
+        palette[i].g = raw[i*3 + 1];
+        palette[i].b = raw[i*3 + 2];
     }
+
     return palette; // NOTE(Fermin): palette 0 only
 }
 
@@ -346,14 +400,6 @@ find_map_lump(Wad_File *wad, i32 map_marker, char *name)
 	return -1;
 }
 
-static u8 *
-get_lump_data(Wad_File *wad, i32 idx)
-{
-	assert(idx >= 0);
-
-	return wad->data + wad->lumps[idx].file_pos;
-}
-
 static u32
 get_lump_size(Wad_File *wad, i32 idx)
 {
@@ -528,37 +574,52 @@ load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_A
 	return lines;
 }
 
-static void
-group_lines_into_sectors(Line_Def *lines, u32 line_count, Sector *sectors, u32 sector_count, Memory_Arena *arena)
+static u32
+get_or_load_flat(Wad_File *wad, u8 *palette, char *name, Platform_API *platform_API,
+				 Memory_Arena *flat_arena)
 {
-	u32 *counts = push_array(arena, sector_count, u32);
-	for(u32 i = 0; i < line_count; ++i)
+	/*
+	* https://doomwiki.org/wiki/Flat
+	*
+	* Each flat is a named lump of 4096 bytes representing a 64×64 square.
+	* These lumps are between F_START and F_END
+	*/
+
+	Loaded_Flat *loaded_flat_base = (Loaded_Flat *)flat_arena->base;
+
+	size_t entry_count = flat_arena->cached / sizeof(Loaded_Flat);
+	for(u32 i = 0; i < entry_count; ++i)
 	{
-		// How many lines reference each sector -- Sector 0 -> 2 lines.
-		// This is so we can allocate exact memory below
-		counts[lines[i].front_sector - sectors]++;
-		if(lines[i].back_sector && lines[i].back_sector != lines[i].front_sector)
-		{
-			counts[lines[i].back_sector - sectors]++;
-		}
+	    Loaded_Flat *loaded_flat = loaded_flat_base + i;
+		if(strings_are_equal(8, loaded_flat->name, name)) { return loaded_flat->id; }
 	}
 
-	for(u32 s = 0; s < sector_count; ++s)
+	i32 first = find_lump(wad, "F_START");
+	i32 last  = find_lump(wad, "F_END");
+	for(i32 i = last - 1; i > first; --i)
 	{
-		// allocate buffer for lines in each sector
-		sectors[s].lines = push_array(arena, counts[s], Line_Def *);
-		sectors[s].line_count = 0; // NOTE(Fermin): refilled below, counts[] was just for sizing
+		if(!strings_are_equal(8, wad->lumps[i].name, name)) { continue; }
+		if(wad->lumps[i].size != 64 * 64) { return 0; } // marker lump, not a flat
+		
+		u8 *src = wad->data + wad->lumps[i].file_pos; // indices
+		u32 rgba[64 * 64];
+		for(u32 p = 0; p < 64 * 64; ++p)
+		{
+		    u8 *c = palette + src[p] * 3; // * 3 because palette is RGB8 *
+			rgba[p] = 0xFF000000u | ((u32)c[2] << 16) | ((u32)c[1] << 8) | c[0];
+		}
+		u32 id = platform_API->upload_flat_to_gpu(rgba);
+
+		Loaded_Flat *new_entry = push_struct(flat_arena, Loaded_Flat);
+		flat_arena->cached = flat_arena->used;
+		copy_string(name, new_entry->name, 8);
+		new_entry->name[8] = 0;
+		new_entry->id = id;
+
+		return id;
 	}
 
-	for(u32 i = 0; i < line_count; ++i)
-	{
-		// populate sector's array with lines
-		Sector *fs = lines[i].front_sector;
-		fs->lines[fs->line_count++] = &lines[i];
-		if(lines[i].back_sector && lines[i].back_sector != lines[i].front_sector)
-		{
-			Sector *bs = lines[i].back_sector;
-			bs->lines[bs->line_count++] = &lines[i];
-		}
-	}
+	assert(!"TODO: Handle texture not found");
+
+	return 0; // not found
 }

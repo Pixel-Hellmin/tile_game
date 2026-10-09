@@ -111,6 +111,7 @@ struct Game_State
 	Memory_Arena tmp_arena;
 	Memory_Arena world_arena;
 	Memory_Arena ui_arena;
+	Memory_Arena flat_arena;
 
 	Loaded_Sound test_sound;
 	Playing_Sound *test_music;

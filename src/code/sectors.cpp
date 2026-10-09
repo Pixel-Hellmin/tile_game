@@ -1,3 +1,5 @@
+// change file name
+
 struct Sector_Edge
 {
 	// indices to vertex values
@@ -59,43 +61,6 @@ struct Wall_Segment_List
 {
 	Wall_Segment *segments;
 	u32 segment_count;
-};
-
-struct Sector;
-struct Side_Def
-{
-    //char *upper_texture;
-    //char *lower_texture;
-    //char *middle_texture;
-    char upper_texture[8];
-    char lower_texture[8];
-    char middle_texture[8];
-    f32 x_offset, y_offset;
-	Sector *sector;
-};
-
-struct Line_Def
-{
-	u32 v1, v2;           // indices into the vertex array
-	Sector *front_sector;
-	Sector *back_sector;  // NULL for a one-sided line -- same meaning as sidenum[1] == -1
-	Side_Def *front_side;
-	Side_Def *back_side;  // only meaningful when back_sector != NULL
-};
-
-struct Sector
-{
-    f32 floor_height;
-    f32 ceiling_height;
-    char floor_texture[9];    // NOTE(Fermin): DOOM lump names are 8 chars + null
-    char ceiling_texture[9];
-    f32 light_level;          // 0..1, normalized from the WAD's 0..255 lightlevel
-
-    Line_Def **lines;         // NOTE(Fermin): every line whose front or back references this sector
-    u32 line_count;
-
-    Mesh floor_mesh;
-    Mesh ceiling_mesh;
 };
 
 enum Point_Location
@@ -730,7 +695,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p2, p1, front->ceiling_height, back->ceiling_height, back->light_level,
                                       line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_name = line->front_side->lower_texture;
+        seg->texture_name = line->front_side->upper_texture;
     }
 
     return result;
@@ -738,7 +703,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
 
 static void
 build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena,
-						 Platform_API *platform_API, Level_Assets *assets)
+						 Platform_API *platform_API, Wad_File *wad, Memory_Arena *flat_arena,
+						 u8 *palette)
 {
 	/* 
 	* The front of a Line_Def is always 90 degrees to the right / clockwise from the ray you
@@ -776,18 +742,54 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 																 vertex_positions, tmp_arena);
 
 		Mesh floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
-										 sector->floor_height,
-										 sector->light_level,
+										 sector->floor_height, sector->light_level,
 										 true, tmp_arena);
 
 		Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
-										 sector->ceiling_height,
-										 sector->light_level,
+										 sector->ceiling_height, sector->light_level,
 										 false, tmp_arena);
 
-		floor_mesh.texture_handle = assets->floor_texture_id;
-		ceiling_mesh.texture_handle = assets->roof_texture_id;
+		floor_mesh.texture_handle   = get_or_load_flat(wad, palette, sector->floor_texture,
+											   platform_API, flat_arena);
+		ceiling_mesh.texture_handle = get_or_load_flat(wad, palette, sector->ceiling_texture,
+											   platform_API, flat_arena);
+
 		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
 		platform_API->upload_static_mesh_to_gpu(&ceiling_mesh);
+	}
+}
+
+static void
+group_lines_into_sectors(Line_Def *lines, u32 line_count, Sector *sectors, u32 sector_count, Memory_Arena *arena)
+{
+	u32 *counts = push_array(arena, sector_count, u32);
+	for(u32 i = 0; i < line_count; ++i)
+	{
+		// How many lines reference each sector -- Sector 0 -> 2 lines.
+		// This is so we can allocate exact memory below
+		counts[lines[i].front_sector - sectors]++;
+		if(lines[i].back_sector && lines[i].back_sector != lines[i].front_sector)
+		{
+			counts[lines[i].back_sector - sectors]++;
+		}
+	}
+
+	for(u32 s = 0; s < sector_count; ++s)
+	{
+		// allocate buffer for lines in each sector
+		sectors[s].lines = push_array(arena, counts[s], Line_Def *);
+		sectors[s].line_count = 0; // NOTE(Fermin): refilled below, counts[] was just for sizing
+	}
+
+	for(u32 i = 0; i < line_count; ++i)
+	{
+		// populate sector's array with lines
+		Sector *fs = lines[i].front_sector;
+		fs->lines[fs->line_count++] = &lines[i];
+		if(lines[i].back_sector && lines[i].back_sector != lines[i].front_sector)
+		{
+			Sector *bs = lines[i].back_sector;
+			bs->lines[bs->line_count++] = &lines[i];
+		}
 	}
 }

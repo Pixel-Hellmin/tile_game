@@ -781,6 +781,16 @@ static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
 	opengl_upload_patch_to_gpu(patch);
 }
 
+static PLATFORM_UPLOAD_FLAT_TO_GPU(upload_flat_to_gpu)
+{
+	u32 result = 0;
+
+	result = (u32)opengl_upload_flat_to_gpu(rgba);
+
+	return result;
+}
+
+
 static PLATFORM_READ_FILE_FROM_DISK(read_file_from_disk)
 {
 	Buffer result = {};
@@ -903,12 +913,13 @@ int main(int argc, char** argv)
 			Input_Keys *old_input = &input[1];
 
 			Game_Memory game_memory = {};
-            game_memory.permanent_storage = allocate_buffer(gigabytes(3));
+            game_memory.permanent_storage = allocate_buffer(gigabytes(4));
             game_memory.temporary_storage = allocate_buffer(gigabytes(1));
 
 			game_memory.platform_API.load_texture = load_texture;
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
 			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
+			game_memory.platform_API.upload_flat_to_gpu = upload_flat_to_gpu;
 			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
 
 			game_memory.debug_player_pos = &debug_player_pos;

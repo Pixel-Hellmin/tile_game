@@ -410,6 +410,25 @@ opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
 	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
 }
 
+static GLuint
+opengl_upload_flat_to_gpu(u32 *rgba)
+{
+	GLuint id;
+	glGenTextures(1, &id);  
+    glBindTexture(GL_TEXTURE_2D, id);  
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	// flats are always 64x64
+	glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
+			  64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+
+	return id;
+}
+
 static void // move to opengl
 opengl_draw_gpu_mesh(GPU_Mesh *mesh)
 {

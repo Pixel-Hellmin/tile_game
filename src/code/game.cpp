@@ -1,8 +1,8 @@
 #include "game.h"
 #include "asset.cpp"
 #include "audio.cpp"
-#include "sectors.cpp"
 #include "wad.cpp"
+#include "sectors.cpp"
 
 static void
 set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Memory_Arena *arena)
@@ -401,6 +401,10 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 					 game_memory->permanent_storage.data + total_memory_partitioned);
 	total_memory_partitioned += game_state->ui_arena.size;
 
+	initialize_arena(&game_state->flat_arena, gigabytes(1),
+					 game_memory->permanent_storage.data + total_memory_partitioned);
+	total_memory_partitioned += game_state->flat_arena.size;
+
 	initialize_arena(&game_state->audio_state.arena, (game_memory->permanent_storage.size - total_memory_partitioned),
 					 game_memory->permanent_storage.data + total_memory_partitioned);
 	total_memory_partitioned += game_state->audio_state.arena.size;
@@ -410,102 +414,35 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 }
 
 static void
-load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level_assets)
+load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat_arena,
+		   Level_Assets level_assets)
 {
 	/*
-	// TODO: Load this from lvl data file
-	V2 vertex_positions[] = {
-		{ 0,   0   }, // 0
-		{ 256, 0   }, // 1
-		{ 256, 256 }, // 2
-		{ 0,   256 }, // 3
-		{ 512, 0   }, // 4
-		{ 512, 128 }, // 5
-		{ 96,  64  }, // 6  -- pillar
-		{ 64,  64  }, // 7
-		{ 64,  96  }, // 8
-		{ 96,  96  }, // 9
-	};
-
-	Sector sector_a = {};
-	sector_a.floor_height = 0.0f;
-	sector_a.ceiling_height = 128.0f;
-	sector_a.light_level = 0.8f;
-
-	Sector sector_b = {};
-	sector_b.floor_height = 24.0f;
-	sector_b.ceiling_height = 128.0f;
-	sector_b.light_level = 0.6f;
-
-	Line_Def lines[] = {
-		{ 0, 1, &sector_a, NULL },
-		{ 1, 2, &sector_a, &sector_b }, // NOTE: the shared wall
-		{ 2, 3, &sector_a, NULL },
-		{ 3, 0, &sector_a, NULL },
-		{ 1, 4, &sector_b, NULL },
-		{ 4, 5, &sector_b, NULL },
-		{ 5, 2, &sector_b, NULL },
-		{ 6, 7, &sector_a, NULL }, // pillar
-		{ 7, 8, &sector_a, NULL },
-		{ 8, 9, &sector_a, NULL },
-		{ 9, 6, &sector_a, NULL },
-	};
-
-	// @Cleanup: Over allocation
-	sector_a.lines = push_array(tmp_arena, array_count(lines), Line_Def *);
-	sector_b.lines = push_array(tmp_arena, array_count(lines), Line_Def *);
-	for(u32 i = 0; i < array_count(lines); ++i)
-	{
-		Line_Def line = lines[i];
-		
-		if (line.front_sector == &sector_b || line.back_sector == &sector_b)
-		{
-			sector_b.lines[sector_b.line_count++] = lines + i;
-		}
-		if (line.front_sector == &sector_a || line.back_sector == &sector_a)
-		{
-			sector_a.lines[sector_a.line_count++] = lines + i;
-		}
-	}
-
-	Tmp_Memory tmp_memory = begin_tmp_memory(tmp_arena);
-
-	build_sector_render_data(&sector_a, vertex_positions, tmp_arena);
-	sector_a.floor_mesh.texture_handle = level_assets.floor_texture_id;
-	sector_a.ceiling_mesh.texture_handle = level_assets.roof_texture_id;
-	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_a.floor_mesh);
-	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_a.ceiling_mesh);
-
-	build_sector_render_data(&sector_b, vertex_positions, tmp_arena);
-	sector_b.floor_mesh.texture_handle = level_assets.floor_texture_id;
-	sector_b.ceiling_mesh.texture_handle = level_assets.roof_texture_id;
-	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_b.floor_mesh);
-	game_memory->platform_API.upload_static_mesh_to_gpu(&sector_b.ceiling_mesh);
-
-	for(u32 i = 0; i < array_count(lines); ++i)
-	{
-		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, tmp_arena);
-		for(u32 i = 0; i < segment_list.segment_count; ++i)
-		{
-			Mesh mesh = segment_list.segments[i].mesh;
-			mesh.texture_handle = level_assets.wall_texture_id;
-			game_memory->platform_API.upload_static_mesh_to_gpu(&mesh);
-		}
-	}
-
-	end_tmp_memory(tmp_memory);
+	 * TODO:
+	 * - Use appropiate arenas
+	 * - Keep the stored the data we need; WAD, Sectors, Flats...
 	*/
 
 	Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
 	Wad_File wad = open_wad_from_memory(wad_buffer.data, tmp_arena);
 
-	i32 map = find_lump(&wad, "E1M8");
+	i32 map = find_lump(&wad, "E1M1");
 	assert(map >= 0);
+	i32 playpal_lump  = find_lump(&wad, "PLAYPAL");
+	i32 texture1_lump = find_lump(&wad, "TEXTURE1");
+	i32 texture2_lump = find_lump(&wad, "TEXTURE2");
 	i32 vertexes_lump = find_map_lump(&wad, map, "VERTEXES");
 	i32 sectors_lump  = find_map_lump(&wad, map, "SECTORS");
 	i32 sidedefs_lump = find_map_lump(&wad, map, "SIDEDEFS");
 	i32 linedefs_lump = find_map_lump(&wad, map, "LINEDEFS");
-	assert(vertexes_lump >= 0 && sectors_lump >= 0 && sidedefs_lump >= 0 && linedefs_lump >= 0);
+	assert(vertexes_lump >= 0 &&
+		   sectors_lump  >= 0 &&
+		   sidedefs_lump >= 0 &&
+		   linedefs_lump >= 0 &&
+		   playpal_lump  >= 0 &&
+		   texture1_lump >= 0 &&
+		   texture2_lump >= 0
+	);
 
 	/*
 	 * NOTE(Fermin): Load order matters and is fixed:
@@ -517,12 +454,22 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level
 	Side_Def *sides            = load_sidedefs(&wad, sidedefs_lump, sectors, &side_count, tmp_arena);
 	Line_Def *lines            = load_linedefs(&wad, linedefs_lump, sides, &line_count, tmp_arena);
 
+
+	RGB8	 *palette		   = load_playpal(&wad, playpal_lump, tmp_arena);
+	// @Cleanup: group this in a way it makes sense
+	u32 texture1_defs_count = 0;
+	u8* texture1_raw = (u8 *)get_lump_data(&wad, texture1_lump);
+	Composite_Texture_Def* texture1_defs = load_texture_defs(texture1_raw, &texture1_defs_count, tmp_arena);
+
 	group_lines_into_sectors(lines, line_count, sectors, sector_count, tmp_arena);
+
+	Tmp_Memory tmp_memory = begin_tmp_memory(tmp_arena);
 
 	for(u32 i = 0; i < sector_count; ++i)
 	{
 		build_sector_render_data(&sectors[i], vertex_positions, tmp_arena,
-								 &game_memory->platform_API, &level_assets);
+								 &game_memory->platform_API, &wad, flat_arena,
+								 (u8 *)palette);
 	}
 
 	for(u32 i = 0; i < line_count; ++i)
@@ -532,11 +479,20 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Level_Assets level
 		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, tmp_arena);
 		for(u32 i = 0; i < segment_list.segment_count; ++i)
 		{
-			Mesh mesh = segment_list.segments[i].mesh;
+			Wall_Segment *segment = segment_list.segments + i;
+			Mesh mesh = segment->mesh;
+			/*
+		    load_wall_texture(segment->texture_name, null_terminated_string_length(segment->texture_name),
+							  texture1_defs, texture1_defs_count,
+							  u8 **resolved_patch_lumps, palette,
+							  tmp_arena)
+		    */
 			mesh.texture_handle = level_assets.wall_texture_id;
 			game_memory->platform_API.upload_static_mesh_to_gpu(&mesh);
 		}
 	}
+
+	end_tmp_memory(tmp_memory);
 }
 
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
@@ -594,7 +550,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		* uploading a decoded texture to opengl.
 		*
 		*/
-		load_level(&game_state->tmp_arena, game_memory, game_state->level_assets);
+		load_level(&game_state->tmp_arena, game_memory, &game_state->flat_arena, game_state->level_assets);
 
 		set_flag(game_state, game_state_flag_prints);
 
