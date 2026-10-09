@@ -61,7 +61,7 @@ null_terminated_string_length(char *a)
 }
 
 inline b32
-strings_are_equal(umm a_length, char *a, char *b)
+strings_are_equal(char *b, char *a, umm a_length)
 {
     char *at = b;
     for(umm index = 0;
@@ -135,7 +135,7 @@ cat_strings(size_t source_a_count, char *source_a,
 }
 
 static void
-copy_string(char *src, char *dest, size_t count)
+copy_string(char *dest, char *src, size_t count)
 {
 	for(int i = 0; i < count; ++i)
 	{

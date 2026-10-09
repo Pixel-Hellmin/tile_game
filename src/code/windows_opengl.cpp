@@ -29,8 +29,8 @@ opengl_get_info(b32 modern_context)
         umm count = end - at;
 
         if(0) {}
-        else if(strings_are_equal(count, at, "GL_EXT_texture_sRGB")) {result.GL_EXT_texture_sRGB = true;}
-        else if(strings_are_equal(count, at, "GL_EXT_framebuffer_sRGB")) {result.GL_EXT_framebuffer_sRGB = true;}
+        else if(strings_are_equal("GL_EXT_texture_sRGB", at, count)) {result.GL_EXT_texture_sRGB = true;}
+        else if(strings_are_equal("GL_EXT_framebuffer_sRGB", at, count)) {result.GL_EXT_framebuffer_sRGB = true;}
 
         at = end;
     }

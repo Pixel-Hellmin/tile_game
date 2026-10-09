@@ -34,7 +34,7 @@ check_param(char *param)
 
     for (i = 1; i < my_argc; i++)
     {
-		if (strings_are_equal(length, param, my_argv[i]))
+		if (strings_are_equal(my_argv[i], param, length))
 	    return i;
     }
 

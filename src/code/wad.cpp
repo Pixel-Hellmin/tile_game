@@ -201,7 +201,7 @@ load_pnames(u8 *lump_data, u32 *out_count, Memory_Arena *arena)
 	for(i32 i = 0; i < count; ++i)
 	{
 		//memcpy(names[i].name, p, 8);
-		copy_string((char *)p, names[i].name, 8);
+		copy_string(names[i].name, (char *)p, 8);
 		names[i].name[8] = 0; // null-terminate, WAD names aren't
 		p += 8;
 	}
@@ -245,7 +245,7 @@ load_texture_defs(u8 *lump_data, u32 *out_count, Memory_Arena *arena)
     {
         u8 *tex = lump_data + offsets[t];
         //memcpy(defs[t].name, tex, 8);
-		copy_string((char *)tex, defs[t].name, 8);
+		copy_string(defs[t].name, (char *)tex, 8);
         defs[t].name[8] = 0;
 
         defs[t].width  = (u32)(*(i16 *)(tex + 12));
@@ -318,7 +318,7 @@ load_wall_texture(char *texture_name, umm name_length,
 	for(u32 i = 0; i < def_count; ++i)
 	{
 		// @Cleanup: Build a lookup table or hash instead of this linear scan
-		if(strings_are_equal(name_length, texture_name, defs[i].name))
+		if(strings_are_equal(defs[i].name, texture_name, name_length))
 		//if(strcmp(defs[i].name, texture_name) == 0)
 		{
 			Decoded_Patch composited = composite_texture(&defs[i], resolved_patch_lumps, palette, arena);
@@ -356,7 +356,7 @@ open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
 	result.data = file_data;
 
 	char *ident = (char *)file_data;
-	assert(strings_are_equal(4, ident, "IWAD") || strings_are_equal(4, ident, "PWAD"));
+	assert(strings_are_equal("IWAD", ident, 4) || strings_are_equal("PWAD", ident, 4));
 	//Assert(memcmp(ident, "IWAD", 4) == 0 || memcmp(ident, "PWAD", 4) == 0);
 
 	i32 num_lumps    = *(i32 *)(file_data + 4);
@@ -371,7 +371,7 @@ open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
 		u8 *entry = dir + i * 16; // filelump_t is 16 bytes -- filepos(4) + size(4) + name(8)
 		result.lumps[i].file_pos = *(i32 *)(entry + 0);
 		result.lumps[i].size     = *(i32 *)(entry + 4);
-		copy_string((char *)(entry + 8), result.lumps[i].name, 8);
+		copy_string(result.lumps[i].name, (char *)(entry + 8), 8);
 		//memcpy(result.lumps[i].name, entry + 8, 8);
 		result.lumps[i].name[8] = 0;
 	}
@@ -383,7 +383,7 @@ find_lump(Wad_File *wad, char *name)
 {
 	for(u32 i = 0; i < wad->lump_count; ++i)
 	{
-		if(strings_are_equal(8, wad->lumps[i].name, name)) { return (i32)i; }
+		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return (i32)i; }
 	}
 
 	return -1; // matches W_CheckNumForName's "not found" convention
@@ -395,7 +395,7 @@ find_map_lump(Wad_File *wad, i32 map_marker, char *name)
 	// NOTE(Fermin): map data lumps sit within 10 entries after the marker
 	for(i32 i = map_marker + 1; i <= map_marker + 10 && i < (i32)wad->lump_count; ++i)
 	{
-		if(strings_are_equal(8, wad->lumps[i].name, name)) { return i; }
+		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return i; }
 	}
 	return -1;
 }
@@ -463,11 +463,11 @@ load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 		sectors[i].floor_height   = (f32)(*(i16 *)(e + 0));
 		sectors[i].ceiling_height = (f32)(*(i16 *)(e + 2));
 
-		copy_string((char *)(e + 4), sectors[i].floor_texture, 8);
+		copy_string(sectors[i].floor_texture, (char *)(e + 4), 8);
 		sectors[i].floor_texture[8] = 0;
 		//memcpy(sectors[i].floor_texture,   e + 4,  8); sectors[i].floor_texture[8]   = 0;
 
-		copy_string((char *)(e + 12), sectors[i].ceiling_texture, 8);
+		copy_string(sectors[i].ceiling_texture, (char *)(e + 12), 8);
 		sectors[i].ceiling_texture[8] = 0;
 		//memcpy(sectors[i].ceiling_texture, e + 12, 8); sectors[i].ceiling_texture[8] = 0;
 
@@ -507,11 +507,11 @@ load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count, Memory_A
 		sides[i].x_offset = (f32)(*(i16 *)(e + 0));
 		sides[i].y_offset = (f32)(*(i16 *)(e + 2));
 
-		copy_string((char *)(e + 4), sides[i].upper_texture, 8);
+		copy_string(sides[i].upper_texture, (char *)(e + 4), 8);
 		sides[i].upper_texture[8]  = 0;
-		copy_string((char *)(e + 12), sides[i].lower_texture, 8);
+		copy_string(sides[i].lower_texture, (char *)(e + 12), 8);
 		sides[i].lower_texture[8]  = 0;
-		copy_string((char *)(e + 20), sides[i].middle_texture, 8);
+		copy_string(sides[i].middle_texture, (char *)(e + 20), 8);
 		sides[i].middle_texture[8] = 0;
 		//memcpy(sides[i].upper_texture,  e + 4,  8); sides[i].upper_texture[8]  = 0;
 		//memcpy(sides[i].lower_texture,  e + 12, 8); sides[i].lower_texture[8]  = 0;
@@ -591,14 +591,14 @@ get_or_load_flat(Wad_File *wad, u8 *palette, char *name, Platform_API *platform_
 	for(u32 i = 0; i < entry_count; ++i)
 	{
 	    Loaded_Flat *loaded_flat = loaded_flat_base + i;
-		if(strings_are_equal(8, loaded_flat->name, name)) { return loaded_flat->id; }
+		if(strings_are_equal(name, loaded_flat->name, 8)) { return loaded_flat->id; }
 	}
 
 	i32 first = find_lump(wad, "F_START");
 	i32 last  = find_lump(wad, "F_END");
 	for(i32 i = last - 1; i > first; --i)
 	{
-		if(!strings_are_equal(8, wad->lumps[i].name, name)) { continue; }
+		if(!strings_are_equal(name, wad->lumps[i].name, 8)) { continue; }
 		if(wad->lumps[i].size != 64 * 64) { return 0; } // marker lump, not a flat
 		
 		u8 *src = wad->data + wad->lumps[i].file_pos; // indices
@@ -612,7 +612,7 @@ get_or_load_flat(Wad_File *wad, u8 *palette, char *name, Platform_API *platform_
 
 		Loaded_Flat *new_entry = push_struct(flat_arena, Loaded_Flat);
 		flat_arena->cached = flat_arena->used;
-		copy_string(name, new_entry->name, 8);
+		copy_string(new_entry->name, name, 8);
 		new_entry->name[8] = 0;
 		new_entry->id = id;
 

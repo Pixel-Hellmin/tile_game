@@ -421,6 +421,7 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 	 * TODO:
 	 * - Use appropiate arenas
 	 * - Keep the stored the data we need; WAD, Sectors, Flats...
+	 * - Distinguish between map specific data (sectors...) and game data (wad, palette...)
 	*/
 
 	Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
