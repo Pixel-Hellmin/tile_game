@@ -54,7 +54,7 @@ struct Triangulated_Loop
 struct Wall_Segment
 {
 	Mesh mesh;
-	char *texture_name;
+	u32 texture_number;
 };
 
 struct Wall_Segment_List
@@ -656,7 +656,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, front->floor_height, front->ceiling_height, front->light_level,
                                       line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_name = line->front_side->middle_texture;
+        seg->texture_number = line->front_side->middle_texture;
         return result;
     }
 
@@ -666,7 +666,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, back->ceiling_height, front->ceiling_height, front->light_level,
                                       line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_name = line->front_side->upper_texture;
+        seg->texture_number = line->front_side->upper_texture;
     }
 
     if(front->floor_height > back->floor_height)
@@ -675,8 +675,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
 		// We build the quad facing the back sector, hence the inverted p
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p2, p1, back->floor_height, front->floor_height, back->light_level,
-                                      line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_name = line->front_side->lower_texture;
+                                      line->back_side->x_offset, line->back_side->y_offset, arena);
+        seg->texture_number = line->back_side->lower_texture;
     }
 
     if(back->floor_height > front->floor_height)
@@ -685,7 +685,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p1, p2, front->floor_height, back->floor_height, front->light_level,
                                       line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_name = line->front_side->lower_texture;
+        seg->texture_number = line->front_side->lower_texture;
     }
 
     if(back->ceiling_height > front->ceiling_height)
@@ -694,8 +694,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
 		// We build the quad facing the back sector, hence the inverted p
         Wall_Segment *seg = result.segments + result.segment_count++;
         seg->mesh = build_wall_quad(p2, p1, front->ceiling_height, back->ceiling_height, back->light_level,
-                                      line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_name = line->front_side->upper_texture;
+                                      line->back_side->x_offset, line->back_side->y_offset, arena);
+        seg->texture_number = line->back_side->upper_texture;
     }
 
     return result;
@@ -703,8 +703,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena 
 
 static void
 build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena,
-						 Platform_API *platform_API, Wad_File *wad, Memory_Arena *flat_arena,
-						 u8 *palette)
+						 Platform_API *platform_API, Wad_File *wad, Texture_Cache *texture_cache)
 {
 	/* 
 	* The front of a Line_Def is always 90 degrees to the right / clockwise from the ray you
@@ -749,10 +748,8 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 										 sector->ceiling_height, sector->light_level,
 										 false, tmp_arena);
 
-		floor_mesh.texture_handle   = get_or_load_flat(wad, palette, sector->floor_texture,
-											   platform_API, flat_arena);
-		ceiling_mesh.texture_handle = get_or_load_flat(wad, palette, sector->ceiling_texture,
-											   platform_API, flat_arena);
+		floor_mesh.texture_handle   = get_or_load_flat_id(wad, texture_cache, sector->floor_flat, platform_API);
+		ceiling_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->ceiling_flat, platform_API);
 
 		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
 		platform_API->upload_static_mesh_to_gpu(&ceiling_mesh);

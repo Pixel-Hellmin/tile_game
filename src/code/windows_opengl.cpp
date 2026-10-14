@@ -368,6 +368,7 @@ opengl_post_process_and_render_to_screen()
 static GLuint
 opengl_upload_patch_to_gpu(Decoded_Patch *patch)
 {
+	// @Cleanup: Can we use either this or upload_texture_to_gpu?
 	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
@@ -375,7 +376,7 @@ opengl_upload_patch_to_gpu(Decoded_Patch *patch)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // patches don't tile like flats/walls do
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, patch->width, patch->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, patch->pixels);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, patch->width, patch->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, patch->rgba);
 	return texture;
 }
 
@@ -411,7 +412,7 @@ opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
 }
 
 static GLuint
-opengl_upload_flat_to_gpu(u32 *rgba)
+opengl_upload_texture_to_gpu(u32 *rgba, u32 width, u32 height)
 {
 	GLuint id;
 	glGenTextures(1, &id);  
@@ -422,9 +423,8 @@ opengl_upload_flat_to_gpu(u32 *rgba)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-	// flats are always 64x64
 	glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
-			  64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+			  width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 
 	return id;
 }

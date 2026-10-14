@@ -3,21 +3,24 @@ struct RGB8
 	u8 r, g, b;
 };
 
-struct Patch_Name
+struct Wall_Texture
 {
-	char name[9];
+	u32 id; // 0 = not composited
+	u16 width;
+	u16 height;
 };
 
-struct Texture_Patch_Ref
+struct Texture_Patch_Def
 { 
-	i16 origin_x, origin_y, patch_index;
+	i16 origin_x, origin_y;
+	i32 patch_lump;
 };
 
 struct Composite_Texture_Def
 {
     char name[9];
-    u32 width, height;
-    Texture_Patch_Ref *patches;
+    u16 width, height;
+    Texture_Patch_Def *patches;
     u32 patch_count;
 };
 
@@ -28,6 +31,28 @@ struct Lump_Info
 	i32 size;
 };
 
+struct Texture_Cache
+{
+	RGB8 *palette;
+
+	// NOTE(Fermin): flat number = lump index - first_flat.
+	// Entry [flat_count] is the missing-flat fallback.
+	i32 first_flat;
+	i32 last_flat; // exclusive (index of F_END)
+	u32 flat_count;
+	u32 *flat_ids; // flat_count + 1
+	u32 sky_flat_number;
+
+	// NOTE(Fermin): texture number = index into TEXTURE1 + TEXTURE2. 0 means "-" (no texture).
+	// Entry [texture_count] is the missing-texture fallback.
+	u32 texture_count;
+	Composite_Texture_Def *defs;
+	Wall_Texture *textures; // texture_count + 1
+
+	u32 patch_name_count;
+	i32 *patch_lumps; // PNAMES index -> lump index
+};
+
 struct Wad_File
 {
 	u8 *data; // whole file, memory-mapped or read in wholesale
@@ -35,21 +60,12 @@ struct Wad_File
 	u32 lump_count;
 };
 
-struct Loaded_Flat
-{
-	char name[9];
-	u32 id;
-};
-
 struct Sector;
 struct Side_Def
 {
-    //char *upper_texture;
-    //char *lower_texture;
-    //char *middle_texture;
-    char upper_texture[8];
-    char lower_texture[8];
-    char middle_texture[8];
+    u32 upper_texture;
+    u32 lower_texture;
+    u32 middle_texture;
     f32 x_offset, y_offset;
 	Sector *sector;
 };
@@ -67,8 +83,8 @@ struct Sector
 {
     f32 floor_height;
     f32 ceiling_height;
-    char floor_texture[9];    // NOTE(Fermin): DOOM lump names are 8 chars + null
-    char ceiling_texture[9];
+    u32 floor_flat;			  // flat numbers
+    u32 ceiling_flat;
     f32 light_level;          // 0..1, normalized from the WAD's 0..255 lightlevel
 
     Line_Def **lines;         // NOTE(Fermin): every line whose front or back references this sector
@@ -78,12 +94,89 @@ struct Sector
     Mesh ceiling_mesh;
 };
 
+static u32
+make_magenta_texture(Platform_API *platform_API)
+{
+	u32 pixels[64 * 64];
+	for(u32 i = 0; i < 64 * 64; ++i) { pixels[i] = 0xFFFF00FFu; }
+	return platform_API->upload_texture_to_gpu(pixels, 64, 64);
+}
+
 static u8 *
 get_lump_data(Wad_File *wad, i32 idx)
 {
 	assert(idx >= 0);
 
 	return wad->data + wad->lumps[idx].file_pos;
+}
+
+static i32
+find_lump(Wad_File *wad, char *name)
+{
+	for(u32 i = 0; i < wad->lump_count; ++i)
+	{
+		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return (i32)i; }
+	}
+
+	return -1; // matches W_CheckNumForName's "not found" convention
+}
+
+static i32
+find_last_lump_between(Wad_File *wad, char *name, i32 first, i32 last_exclusive)
+{
+		for(i32 i = last_exclusive - 1; i >= first; --i)
+		{
+			if(strings_are_equal(wad->lumps[i].name, name, 8)) { return i; }
+		}
+
+		return -1;
+}
+
+static u32
+find_flat_number(Texture_Cache *cache, Wad_File *wad, char *name)
+{
+	i32 lump = find_last_lump_between(wad, name, cache->first_flat, cache->last_flat);
+	if(lump < 0 || wad->lumps[lump].size != 64 * 64)
+	{
+		printf("missing flat: %.8s\n", name);
+		return cache->flat_count; // fallback texture
+	}
+
+	return (u32)(lump - cache->first_flat);
+}
+
+static u32
+find_texture_number(Texture_Cache *cache, char *name)
+{
+	if(name[0] == '-') { return 0; }
+
+	for(u32 i = cache->texture_count; i-- > 0; )   // backward, later definitions win
+	{
+		if(strings_are_equal(cache->defs[i].name, name, 8)) { return i; }
+	}
+
+	printf("missing texture: %.8s\n", name);
+
+	return cache->texture_count;
+}
+
+static i32
+find_map_lump(Wad_File *wad, i32 map_marker, char *name)
+{
+	// NOTE(Fermin): map data lumps sit within 10 entries after the marker
+	for(i32 i = map_marker + 1; i <= map_marker + 10 && i < (i32)wad->lump_count; ++i)
+	{
+		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return i; }
+	}
+	return -1;
+}
+
+static u32
+get_lump_size(Wad_File *wad, i32 idx)
+{
+	assert(idx >= 0);
+
+	return (u32)wad->lumps[idx].size;
 }
 
 static RGB8 *
@@ -148,7 +241,7 @@ decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
 
 	u32 pixel_count = result.width * result.height;
 	// IMPORTANT (FERMIN): Make sure this is init to 0
-	result.pixels = push_array(arena, pixel_count * 4, u8); // push_array zero-inits -> alpha=0 (transparent) everywhere by default
+	result.rgba = push_array(arena, pixel_count * 4, u8); // push_array zero-inits -> alpha=0 (transparent) everywhere by default
 
 	i32 *column_offsets = (i32 *)(lump_data + 8); // 4 x i16
 
@@ -171,18 +264,18 @@ decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
 				u32 dest_y = top_delta + y;
 				u32 dest = (dest_y * result.width + x) * 4;
 				RGB8 c = palette[pixel_indices[y]];
-				result.pixels[dest+0] = c.r;
-				result.pixels[dest+1] = c.g;
-				result.pixels[dest+2] = c.b;
-				result.pixels[dest+3] = 255;
+				result.rgba[dest+0] = c.r;
+				result.rgba[dest+1] = c.g;
+				result.rgba[dest+2] = c.b;
+				result.rgba[dest+3] = 255;
 			}
 		}
 	}
 	return result;
 }
 
-static Patch_Name *
-load_pnames(u8 *lump_data, u32 *out_count, Memory_Arena *arena)
+static void
+load_pnames(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 {
 	/*
 	 * Parsing PNAMES lump
@@ -194,24 +287,23 @@ load_pnames(u8 *lump_data, u32 *out_count, Memory_Arena *arena)
 	 * 0x04    8*nummappatches  name_p[]	   eight-char ASCII strings defining the lump names of the patches
 	*/
 
-	i32 count = *(i32 *)lump_data;
-	Patch_Name *names = push_array(arena, count, Patch_Name);
+	i32 pnames_lump = find_last_lump_between(wad, "PNAMES", 0, wad->lump_count);
+	assert(pnames_lump >= 0);
+	u8 *pnames = wad->data + wad->lumps[pnames_lump].file_pos;
 
-	u8 *p = lump_data + 4;
-	for(i32 i = 0; i < count; ++i)
+	cache->patch_name_count = read_u32(pnames);
+	cache->patch_lumps = push_array(arena, cache->patch_name_count, i32);
+
+	u8 *p = pnames + 4;
+	for(i32 i = 0; i < cache->patch_name_count; ++i)
 	{
-		//memcpy(names[i].name, p, 8);
-		copy_string(names[i].name, (char *)p, 8);
-		names[i].name[8] = 0; // null-terminate, WAD names aren't
+		cache->patch_lumps[i] = find_last_lump_between(wad, (char *)p, 0, wad->lump_count);
 		p += 8;
 	}
-
-	*out_count = (u32)count;
-	return names;
 }
 
-static Composite_Texture_Def *
-load_texture_defs(u8 *lump_data, u32 *out_count, Memory_Arena *arena)
+static void
+load_texture_defs(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 {
 	/*
 	* Parsing TEXTURE1/TEXTURE2 lump
@@ -237,41 +329,68 @@ load_texture_defs(u8 *lump_data, u32 *out_count, Memory_Arena *arena)
 	*
 	*/
 
-    i32 numtextures = *(i32 *)lump_data;
-    i32 *offsets = (i32 *)(lump_data + 4);
-    Composite_Texture_Def *defs = push_array(arena, numtextures, Composite_Texture_Def);
+	i32 texture_lumps[2] =
+	{
+		find_last_lump_between(wad, "TEXTURE1", 0, wad->lump_count),
+		find_last_lump_between(wad, "TEXTURE2", 0, wad->lump_count),
+	};
+	assert(texture_lumps[0] >= 0);
 
-    for(i32 t = 0; t < numtextures; ++t)
-    {
-        u8 *tex = lump_data + offsets[t];
-        //memcpy(defs[t].name, tex, 8);
-		copy_string(defs[t].name, (char *)tex, 8);
-        defs[t].name[8] = 0;
+	cache->texture_count = 0;
+	for(u32 t = 0; t < 2; ++t)
+	{
+		if(texture_lumps[t] < 0) { continue; }
+		cache->texture_count += read_u32(wad->data + wad->lumps[texture_lumps[t]].file_pos);
+	}
 
-        defs[t].width  = (u32)(*(i16 *)(tex + 12));
-        defs[t].height = (u32)(*(i16 *)(tex + 14));
+	cache->defs = push_array(arena, cache->texture_count, Composite_Texture_Def);
+	cache->textures = push_array(arena, cache->texture_count + 1, Wall_Texture);
 
-        i16 patch_count = *(i16 *)(tex + 20);
-        defs[t].patch_count = (u32)patch_count;
-        defs[t].patches = push_array(arena, patch_count, Texture_Patch_Ref);
+	u32 out = 0;
+	for(u32 l = 0; l < 2; ++l)
+	{
 
-        u8 *patch_data = tex + 22;
-        for(i16 p = 0; p < patch_count; ++p)
-        {
-			// NOTE(Fermin): A map patch's size is 10.
-			// https://doomwiki.org/wiki/TEXTURE1_and_TEXTURE2#Map_patches_structure.2C_binary_data
-            i16 *pf = (i16 *)(patch_data + p * 10);
-            defs[t].patches[p].origin_x    = pf[0];
-            defs[t].patches[p].origin_y    = pf[1];
-            defs[t].patches[p].patch_index = pf[2]; // index into PNAMES, not a lump number yet
-        }
-    }
-    *out_count = (u32)numtextures;
-    return defs;
+		if(texture_lumps[l] < 0) { continue; }
+
+		u8 *lump_data  = wad->data + wad->lumps[texture_lumps[l]].file_pos;
+		u32 numtextures = read_u32(lump_data);
+		i32 *offsets = (i32 *)(lump_data + 4);
+
+		for(i32 t = 0; t < numtextures; ++t, ++out)
+		{
+			u8 *tex = lump_data + offsets[t];
+
+			Composite_Texture_Def *def = cache->defs + out;
+			copy_string(def->name, (char *)tex, 8);
+			def->name[8] = 0;
+
+			def->width  = read_u16(tex + 12);
+			def->height = read_u16(tex + 14);
+
+			u16 patch_count = read_u16(tex + 20);
+			def->patch_count = (u32)patch_count;
+			def->patches = push_array(arena, patch_count, Texture_Patch_Def);
+
+			u8 *patch_data = tex + 22;
+			for(u32 p = 0; p < patch_count; ++p)
+			{
+				// NOTE(Fermin): A map patch's size is 10.
+				// https://doomwiki.org/wiki/TEXTURE1_and_TEXTURE2#Map_patches_structure.2C_binary_data
+				u8 *pf = patch_data + p * 10;
+				def->patches[p].origin_x    = read_i16(pf);
+				def->patches[p].origin_y    = read_i16(pf + 2);
+				u16 pname_index             = read_u16(pf + 4); 
+				def->patches[p].patch_lump = (pname_index < cache->patch_name_count) ? cache->patch_lumps[pname_index] : -1;
+			}
+
+			cache->textures[out].width = def->width;
+			cache->textures[out].height = def->height;
+		}
+	}
 }
 
 static Decoded_Patch
-composite_texture(Composite_Texture_Def *def, u8 **resolved_patch_lumps, RGB8 *palette, Memory_Arena *arena)
+composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memory_Arena *arena)
 {
 	Decoded_Patch result = {};
 	result.width = def->width;
@@ -279,57 +398,51 @@ composite_texture(Composite_Texture_Def *def, u8 **resolved_patch_lumps, RGB8 *p
 
 	u32 pixel_count = result.width * result.height;
 	// IMPORTANT (FERMIN): Make sure this is init to 0
-	result.pixels = push_array(arena, pixel_count * 4, u8); // zero-init -> fully transparent base
-	//
+	result.rgba = push_array(arena, pixel_count * 4, u8); // zero-init -> fully transparent base
+
 	for(u32 i = 0; i < def->patch_count; ++i)
 	{
-		Texture_Patch_Ref *ref = def->patches + i;
-		Decoded_Patch patch = decode_patch(resolved_patch_lumps[ref->patch_index], palette, arena);
+		Texture_Patch_Def *patch_def = def->patches + i;
+		if(patch_def->patch_lump < 0) { continue; }
+		u8 *lump_data = wad->data + wad->lumps[patch_def->patch_lump].file_pos;
+		Decoded_Patch patch = decode_patch(lump_data, palette, arena);
 
 		for(u32 y = 0; y < patch.height; ++y)
 		{
-			i32 dest_y = ref->origin_y + y;
+			i32 dest_y = patch_def->origin_y + y;
 			if(dest_y < 0 || (u32)dest_y >= result.height) { continue; }
 
 			for(u32 x = 0; x < patch.width; ++x)
 			{
-				i32 dest_x = ref->origin_x + x;
+				i32 dest_x = patch_def->origin_x + x;
 				if(dest_x < 0 || (u32)dest_x >= result.width) { continue; }
 
 				u32 src = (y * patch.width + x) * 4;
-				if(patch.pixels[src + 3] == 0) { continue; } // alpha; transparent source pixel -- don't stamp, preserve whatever's underneath
+				if(patch.rgba[src + 3] == 0) { continue; } // alpha; transparent source pixel -- don't stamp, preserve whatever's underneath
 
 				u32 dst = ((u32)dest_y * result.width + (u32)dest_x) * 4;
-				result.pixels[dst+0] = patch.pixels[src+0];
-				result.pixels[dst+1] = patch.pixels[src+1];
-				result.pixels[dst+2] = patch.pixels[src+2];
-				result.pixels[dst+3] = 255;
+				result.rgba[dst+0] = patch.rgba[src+0];
+				result.rgba[dst+1] = patch.rgba[src+1];
+				result.rgba[dst+2] = patch.rgba[src+2];
+				result.rgba[dst+3] = 255;
 			}
 		}
 	}
+
 	return result;
 }
 
-static void
-load_wall_texture(char *texture_name, umm name_length,
-				  Composite_Texture_Def *defs, u32 def_count,
-				  u8 **resolved_patch_lumps, RGB8 *palette, Memory_Arena *arena)
+static Wall_Texture *
+get_or_load_wall_texture(Wad_File *wad, Texture_Cache *cache, u32 number, Platform_API *platform_API, Memory_Arena *tmp_arena)
 {
-	for(u32 i = 0; i < def_count; ++i)
-	{
-		// @Cleanup: Build a lookup table or hash instead of this linear scan
-		if(strings_are_equal(defs[i].name, texture_name, name_length))
-		//if(strcmp(defs[i].name, texture_name) == 0)
-		{
-			Decoded_Patch composited = composite_texture(&defs[i], resolved_patch_lumps, palette, arena);
-			// TODO: Return texture handle and upload patch to gpu
-			//upload_patch_to_gpu(&composited);
+	Wall_Texture *tex = cache->textures + number;
+	if(tex->id) { return tex; }
 
-			return;
-		}
-	}
+	Composite_Texture_Def *def = cache->defs + number;
+	Decoded_Patch composited = composite_texture(wad, def, cache->palette, tmp_arena);
+	tex->id = platform_API->upload_texture_to_gpu((u32 *)composited.rgba, composited.width, composited.height);
 
-	assert(!"texture name not found in TEXTURE1/TEXTURE2"); // shouldn't happen on a well-formed WAD
+	return tex;
 }
 
 static Wad_File
@@ -378,36 +491,6 @@ open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
 	return result;
 }
 
-static i32
-find_lump(Wad_File *wad, char *name)
-{
-	for(u32 i = 0; i < wad->lump_count; ++i)
-	{
-		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return (i32)i; }
-	}
-
-	return -1; // matches W_CheckNumForName's "not found" convention
-}
-
-static i32
-find_map_lump(Wad_File *wad, i32 map_marker, char *name)
-{
-	// NOTE(Fermin): map data lumps sit within 10 entries after the marker
-	for(i32 i = map_marker + 1; i <= map_marker + 10 && i < (i32)wad->lump_count; ++i)
-	{
-		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return i; }
-	}
-	return -1;
-}
-
-static u32
-get_lump_size(Wad_File *wad, i32 idx)
-{
-	assert(idx >= 0);
-
-	return (u32)wad->lumps[idx].size;
-}
-
 static V2 *
 load_vertexes(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 {
@@ -435,7 +518,7 @@ load_vertexes(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 }
 
 static Sector *
-load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
+load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena, Texture_Cache *cache)
 {
 	/*
 	* Lump: SECTORS
@@ -460,18 +543,11 @@ load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 	{
 		u8 *e = raw + i * 26;
 
-		sectors[i].floor_height   = (f32)(*(i16 *)(e + 0));
-		sectors[i].ceiling_height = (f32)(*(i16 *)(e + 2));
-
-		copy_string(sectors[i].floor_texture, (char *)(e + 4), 8);
-		sectors[i].floor_texture[8] = 0;
-		//memcpy(sectors[i].floor_texture,   e + 4,  8); sectors[i].floor_texture[8]   = 0;
-
-		copy_string(sectors[i].ceiling_texture, (char *)(e + 12), 8);
-		sectors[i].ceiling_texture[8] = 0;
-		//memcpy(sectors[i].ceiling_texture, e + 12, 8); sectors[i].ceiling_texture[8] = 0;
-
-		sectors[i].light_level = (f32)(*(i16 *)(e + 20)) / 255.0f;
+		sectors[i].floor_height   = (f32)read_i16(e + 0);
+		sectors[i].ceiling_height = (f32)read_i16(e + 2);
+		sectors[i].floor_flat	  = find_flat_number(cache, wad, (char *)(e + 4));
+		sectors[i].ceiling_flat   = find_flat_number(cache, wad, (char *)(e + 12));
+		sectors[i].light_level	  = (f32)read_i16(e + 20) / 255.0f;
 		
 		// special @ e+22, tag @ e+24 -- doors/lifts, not consumed yet
 	}
@@ -481,7 +557,8 @@ load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 }
 
 static Side_Def *
-load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count, Memory_Arena *arena)
+load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count,
+			  Memory_Arena *arena, Texture_Cache *cache)
 {
 	/*
 	* Lump: SIDEDEFS
@@ -504,20 +581,13 @@ load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count, Memory_A
 	for(u32 i = 0; i < count; ++i)
 	{
 		u8 *e = raw + i * 30;
-		sides[i].x_offset = (f32)(*(i16 *)(e + 0));
-		sides[i].y_offset = (f32)(*(i16 *)(e + 2));
+		sides[i].x_offset = (f32)read_i16(e + 0);
+		sides[i].y_offset = (f32)read_i16(e + 2);
+		sides[i].upper_texture = find_texture_number(cache, (char *)(e + 4));
+		sides[i].lower_texture = find_texture_number(cache, (char *)(e + 12));
+		sides[i].middle_texture = find_texture_number(cache, (char *)(e + 20));
 
-		copy_string(sides[i].upper_texture, (char *)(e + 4), 8);
-		sides[i].upper_texture[8]  = 0;
-		copy_string(sides[i].lower_texture, (char *)(e + 12), 8);
-		sides[i].lower_texture[8]  = 0;
-		copy_string(sides[i].middle_texture, (char *)(e + 20), 8);
-		sides[i].middle_texture[8] = 0;
-		//memcpy(sides[i].upper_texture,  e + 4,  8); sides[i].upper_texture[8]  = 0;
-		//memcpy(sides[i].lower_texture,  e + 12, 8); sides[i].lower_texture[8]  = 0;
-		//memcpy(sides[i].middle_texture, e + 20, 8); sides[i].middle_texture[8] = 0;
-
-		i16 sector_index = *(i16 *)(e + 28);
+		i16 sector_index = read_i16(e + 28);
 		sides[i].sector = &sectors[sector_index];
 	}
 
@@ -575,8 +645,7 @@ load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_A
 }
 
 static u32
-get_or_load_flat(Wad_File *wad, u8 *palette, char *name, Platform_API *platform_API,
-				 Memory_Arena *flat_arena)
+get_or_load_flat_id(Wad_File *wad, Texture_Cache *cache, u32 flat_number, Platform_API *platform_API)
 {
 	/*
 	* https://doomwiki.org/wiki/Flat
@@ -585,41 +654,39 @@ get_or_load_flat(Wad_File *wad, u8 *palette, char *name, Platform_API *platform_
 	* These lumps are between F_START and F_END
 	*/
 
-	Loaded_Flat *loaded_flat_base = (Loaded_Flat *)flat_arena->base;
+	u32 *id = cache->flat_ids + flat_number;
+	if(*id) { return *id; }
 
-	size_t entry_count = flat_arena->cached / sizeof(Loaded_Flat);
-	for(u32 i = 0; i < entry_count; ++i)
+	u8 *src = wad->data + wad->lumps[cache->first_flat + flat_number].file_pos; // indices
+	u32 rgba[64 * 64];
+	for(u32 p = 0; p < 64 * 64; ++p)
 	{
-	    Loaded_Flat *loaded_flat = loaded_flat_base + i;
-		if(strings_are_equal(name, loaded_flat->name, 8)) { return loaded_flat->id; }
+		u8 *c = (u8 *)cache->palette + src[p] * 3; // * 3 because palette is RGB8 *
+		rgba[p] = 0xFF000000u | ((u32)c[2] << 16) | ((u32)c[1] << 8) | c[0];
 	}
 
-	i32 first = find_lump(wad, "F_START");
-	i32 last  = find_lump(wad, "F_END");
-	for(i32 i = last - 1; i > first; --i)
-	{
-		if(!strings_are_equal(name, wad->lumps[i].name, 8)) { continue; }
-		if(wad->lumps[i].size != 64 * 64) { return 0; } // marker lump, not a flat
-		
-		u8 *src = wad->data + wad->lumps[i].file_pos; // indices
-		u32 rgba[64 * 64];
-		for(u32 p = 0; p < 64 * 64; ++p)
-		{
-		    u8 *c = palette + src[p] * 3; // * 3 because palette is RGB8 *
-			rgba[p] = 0xFF000000u | ((u32)c[2] << 16) | ((u32)c[1] << 8) | c[0];
-		}
-		u32 id = platform_API->upload_flat_to_gpu(rgba);
+	*id = platform_API->upload_texture_to_gpu(rgba, 64, 64);
 
-		Loaded_Flat *new_entry = push_struct(flat_arena, Loaded_Flat);
-		flat_arena->cached = flat_arena->used;
-		copy_string(new_entry->name, name, 8);
-		new_entry->name[8] = 0;
-		new_entry->id = id;
+	return *id;
+}
 
-		return id;
-	}
+static void
+init_texture_cache(Texture_Cache *cache, Wad_File *wad, RGB8 *palette,
+				   Platform_API *platform_API, Memory_Arena *arena)
+{
+	cache->palette = palette;
+	u32 fallback_texture = make_magenta_texture(platform_API);
 
-	assert(!"TODO: Handle texture not found");
+	cache->first_flat = find_last_lump_between(wad, "F_START", 0, wad->lump_count) + 1;
+	cache->last_flat = find_last_lump_between(wad, "F_END", 0, wad->lump_count);
+	assert(cache->first_flat > 0 && cache->last_flat > cache->first_flat);
+	cache->flat_count = cache->last_flat - cache->first_flat;
+	cache->flat_ids = push_array(arena, cache->flat_count + 1, u32);
+	cache->flat_ids[cache->flat_count] = fallback_texture;
+	cache->sky_flat_number = find_flat_number(cache, wad, "F_SKY1");
 
-	return 0; // not found
+	load_pnames(wad, cache, arena);
+	load_texture_defs(wad, cache, arena);
+
+	cache->textures[cache->texture_count] = { fallback_texture, 64, 64 };
 }

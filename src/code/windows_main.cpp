@@ -781,11 +781,11 @@ static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
 	opengl_upload_patch_to_gpu(patch);
 }
 
-static PLATFORM_UPLOAD_FLAT_TO_GPU(upload_flat_to_gpu)
+static PLATFORM_UPLOAD_TEXTURE_TO_GPU(upload_texture_to_gpu)
 {
 	u32 result = 0;
 
-	result = (u32)opengl_upload_flat_to_gpu(rgba);
+	result = (u32)opengl_upload_texture_to_gpu(rgba, width, height);
 
 	return result;
 }
@@ -919,7 +919,7 @@ int main(int argc, char** argv)
 			game_memory.platform_API.load_texture = load_texture;
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
 			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
-			game_memory.platform_API.upload_flat_to_gpu = upload_flat_to_gpu;
+			game_memory.platform_API.upload_texture_to_gpu = upload_texture_to_gpu;
 			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
 
 			game_memory.debug_player_pos = &debug_player_pos;

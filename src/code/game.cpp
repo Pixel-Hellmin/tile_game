@@ -430,8 +430,6 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 	i32 map = find_lump(&wad, "E1M1");
 	assert(map >= 0);
 	i32 playpal_lump  = find_lump(&wad, "PLAYPAL");
-	i32 texture1_lump = find_lump(&wad, "TEXTURE1");
-	i32 texture2_lump = find_lump(&wad, "TEXTURE2");
 	i32 vertexes_lump = find_map_lump(&wad, map, "VERTEXES");
 	i32 sectors_lump  = find_map_lump(&wad, map, "SECTORS");
 	i32 sidedefs_lump = find_map_lump(&wad, map, "SIDEDEFS");
@@ -440,10 +438,13 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 		   sectors_lump  >= 0 &&
 		   sidedefs_lump >= 0 &&
 		   linedefs_lump >= 0 &&
-		   playpal_lump  >= 0 &&
-		   texture1_lump >= 0 &&
-		   texture2_lump >= 0
+		   playpal_lump  >= 0
 	);
+
+	RGB8 *palette = load_playpal(&wad, playpal_lump, tmp_arena);
+
+	Texture_Cache texture_cache = {};
+	init_texture_cache(&texture_cache, &wad, palette, &game_memory->platform_API, tmp_arena);
 
 	/*
 	 * NOTE(Fermin): Load order matters and is fixed:
@@ -451,16 +452,9 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 	*/
 	u32 vertex_count, sector_count, side_count, line_count;
 	V2       *vertex_positions = load_vertexes(&wad, vertexes_lump, &vertex_count, tmp_arena);
-	Sector   *sectors          = load_sectors(&wad, sectors_lump, &sector_count, tmp_arena);
-	Side_Def *sides            = load_sidedefs(&wad, sidedefs_lump, sectors, &side_count, tmp_arena);
+	Sector   *sectors          = load_sectors(&wad, sectors_lump, &sector_count, tmp_arena, &texture_cache);
+	Side_Def *sides            = load_sidedefs(&wad, sidedefs_lump, sectors, &side_count, tmp_arena, &texture_cache);
 	Line_Def *lines            = load_linedefs(&wad, linedefs_lump, sides, &line_count, tmp_arena);
-
-
-	RGB8	 *palette		   = load_playpal(&wad, playpal_lump, tmp_arena);
-	// @Cleanup: group this in a way it makes sense
-	u32 texture1_defs_count = 0;
-	u8* texture1_raw = (u8 *)get_lump_data(&wad, texture1_lump);
-	Composite_Texture_Def* texture1_defs = load_texture_defs(texture1_raw, &texture1_defs_count, tmp_arena);
 
 	group_lines_into_sectors(lines, line_count, sectors, sector_count, tmp_arena);
 
@@ -469,27 +463,20 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 	for(u32 i = 0; i < sector_count; ++i)
 	{
 		build_sector_render_data(&sectors[i], vertex_positions, tmp_arena,
-								 &game_memory->platform_API, &wad, flat_arena,
-								 (u8 *)palette);
+								 &game_memory->platform_API, &wad, &texture_cache);
 	}
 
 	for(u32 i = 0; i < line_count; ++i)
 	{
-		//build_line_render_data(&lines[i], vertex_positions, debug_texture, tmp_arena);
-		
 		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, tmp_arena);
 		for(u32 i = 0; i < segment_list.segment_count; ++i)
 		{
 			Wall_Segment *segment = segment_list.segments + i;
-			Mesh mesh = segment->mesh;
-			/*
-		    load_wall_texture(segment->texture_name, null_terminated_string_length(segment->texture_name),
-							  texture1_defs, texture1_defs_count,
-							  u8 **resolved_patch_lumps, palette,
-							  tmp_arena)
-		    */
-			mesh.texture_handle = level_assets.wall_texture_id;
-			game_memory->platform_API.upload_static_mesh_to_gpu(&mesh);
+		    Wall_Texture *texture = get_or_load_wall_texture(&wad, &texture_cache, segment->texture_number, // do this in build_wall_segments_for_line?
+											   &game_memory->platform_API, tmp_arena);
+			segment->mesh.texture_handle = texture->id;
+;
+			game_memory->platform_API.upload_static_mesh_to_gpu(&segment->mesh);
 		}
 	}
 
