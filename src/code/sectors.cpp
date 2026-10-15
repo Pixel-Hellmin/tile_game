@@ -51,16 +51,33 @@ struct Triangulated_Loop
 	u32 triangle_count;
 };
 
+enum Wall_Part {
+	WallPart_Upper,
+	WallPart_Lower,
+	WallPart_Middle
+};
+
 struct Wall_Segment
 {
-	Mesh mesh;
-	u32 texture_number;
+    Mesh mesh;
+    Wall_Part part;
+    u32 texture_number;
 };
 
 struct Wall_Segment_List
 {
 	Wall_Segment *segments;
 	u32 segment_count;
+};
+
+// NOTE(Fermin): everything the wall builder needs to resolve a texture lazily.
+struct Wall_Build_Context
+{
+	Texture_Cache *cache;
+	Wad_File *wad;
+	Platform_API *platform_API;
+	Memory_Arena *scratch;   // compositing scratch space
+	Memory_Arena *arena;     // mesh storage
 };
 
 enum Point_Location
@@ -600,7 +617,7 @@ build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light,
 
 static Mesh
 build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
-                 f32 x_offset, f32 y_offset, Memory_Arena *arena)
+                 f32 x_offset, f32 anchor_top, f32 tex_w, f32 tex_h, Memory_Arena *arena)
 {
     f32 wall_length = length(p2 - p1);
     f32 wall_height = top_z - bottom_z;
@@ -613,11 +630,16 @@ build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
     };
 
     // NOTE(Fermin): DOOM textures are top-pegged by default -- v=0 at the top edge, growing downward
+	f32 u0 = x_offset / tex_w;
+	f32 u1 = (x_offset + wall_length) / tex_w;
+	f32 v_bottom = (anchor_top - bottom_z) / tex_h;
+	f32 v_top = (anchor_top - top_z) / tex_h;
+
     V2 uvs[4] = {
-        { x_offset / 64.0f, (y_offset + wall_height) / 64.0f },
-        { (x_offset + wall_length) / 64.0f, (y_offset + wall_height) / 64.0f },
-        { (x_offset + wall_length) / 64.0f, y_offset / 64.0f },
-        { x_offset / 64.0f, y_offset / 64.0f },
+        { u0, v_bottom },
+        { u1, v_bottom },
+        { u1, v_top },
+        { u0, v_top }
     };
 
     Mesh result = {};
@@ -631,7 +653,6 @@ build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
     }
 
 	u32 idx[6] = { 0, 1, 2, 0, 2, 3 }; 
-	//u32 idx[6] = { 2, 1, 0, 3, 2, 0 }; 
     result.index_count = 6;
     result.indices = push_array(arena, 6, u32);
     for(u32 i = 0; i < 6; ++i) { result.indices[i] = idx[i]; }
@@ -639,63 +660,107 @@ build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
     return result;
 }
 
-static Wall_Segment_List
-build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Memory_Arena *arena)
+static f32
+wall_anchor_top(Wall_Part part, u16 flags, Sector *near_s, Sector *far_s, f32 tex_h)
 {
-    Wall_Segment_List result = {};
-    result.segments = push_array(arena, 2, Wall_Segment); // NOTE(Fermin): at most upper + lower for a two-sided line
+	/*
+	 * The 'TOP' and 'BOTTOM' on the flag names mean upper and lower wall respectively.
+	 * Not the edge to which the texture is not pegged to.
+	 *
+	 * You can read these flags like so:
+	 * ML_DONTPEGTOP == Dont use default pegging on top wall
+	 * ML_DONTPEGBOTTOM == Dont use default pegging on bottom wall
+	 *
+	 * ML_DONTPEGBOTTOM is reused for middle walls with same meaning; dont do default pegging.
+	 * It's confusing.
+	 *
+	*/
+
+	switch(part)
+	{
+		case WallPart_Middle:
+			return (flags & ML_DONTPEGBOTTOM) ? near_s->floor_height + tex_h : near_s->ceiling_height;
+		case WallPart_Upper:
+			return (flags & ML_DONTPEGTOP) ? near_s->ceiling_height : far_s->ceiling_height + tex_h;
+		case WallPart_Lower:
+			return (flags & ML_DONTPEGBOTTOM) ? near_s->ceiling_height : far_s->floor_height;
+	}
+	return 0.0f;
+}
+
+static void
+add_wall_segment(Wall_Segment_List *list, Wall_Part part, u32 texture_number,
+                 Line_Def *line, Side_Def *side, Sector *near_s, Sector *far_s,
+                 V2 p1, V2 p2, f32 bottom_z, f32 top_z, Wall_Build_Context *context)
+{
+    if(texture_number == 0) { return; } // NOTE(Fermin): "-" means no texture
+
+    Wall_Texture *tex = get_or_load_wall_texture(context->wad, context->cache, texture_number,
+                                         context->platform_API, context->scratch);
+    f32 tex_h = (f32)tex->height;
+    f32 anchor = wall_anchor_top(part, line->flags, near_s, far_s, tex_h) + side->y_offset;
+
+    Wall_Segment *seg = list->segments + list->segment_count++;
+    seg->part = part;
+    seg->texture_number = texture_number;
+    seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->light_level,
+                                side->x_offset, anchor, (f32)tex->width, tex_h, context->arena);
+    seg->mesh.texture_handle = tex->id;
+}
+
+static Wall_Segment_List
+build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Wall_Build_Context *context)
+{
+	Wall_Segment_List result = {};
+	result.segments = push_array(context->arena, 2, Wall_Segment); // NOTE(Fermin): at most upper + lower for a two-sided line
 
     V2 p1 = vertex_positions[line->v1];
     V2 p2 = vertex_positions[line->v2];
     Sector *front = line->front_sector;
     Sector *back  = line->back_sector;
+    Side_Def *fs  = line->front_side;
+    Side_Def *bs  = line->back_side;
+    u32 sky = context->cache->sky_flat_number;
 
     if(!back)
     {
-        // NOTE(Fermin): one-sided -- sidenum[1] == -1 in the WAD, solid floor-to-ceiling wall
-        Wall_Segment *seg = result.segments + result.segment_count++;
-        seg->mesh = build_wall_quad(p1, p2, front->floor_height, front->ceiling_height, front->light_level,
-                                      line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_number = line->front_side->middle_texture;
+		// NOTE(Fermin): one-sided -- sidenum[1] == -1 in the WAD, solid floor-to-ceiling wall
+        add_wall_segment(&result, WallPart_Middle, fs->middle_texture, line, fs, front, 0,
+                         p1, p2, front->floor_height, front->ceiling_height, context);
         return result;
     }
 
-    if(front->ceiling_height > back->ceiling_height)
+    if(front->ceiling_height > back->ceiling_height &&
+       !(front->ceiling_flat == sky && back->ceiling_flat == sky))
     {
-        // NOTE(Fermin): ceiling drops going from front sector into back sector
-        Wall_Segment *seg = result.segments + result.segment_count++;
-        seg->mesh = build_wall_quad(p1, p2, back->ceiling_height, front->ceiling_height, front->light_level,
-                                      line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_number = line->front_side->upper_texture;
+		// NOTE(Fermin): ceiling drops going from front sector into back sector.
+		// Skips it when both ceilings are sky.
+        add_wall_segment(&result, WallPart_Upper, fs->upper_texture, line, fs, front, back,
+                         p1, p2, back->ceiling_height, front->ceiling_height, context);
     }
 
     if(front->floor_height > back->floor_height)
     {
-        // NOTE(Fermin): Floor drops going from front sector into back sector.
+		// NOTE(Fermin): Floor drops going from front sector into back sector.
 		// We build the quad facing the back sector, hence the inverted p
-        Wall_Segment *seg = result.segments + result.segment_count++;
-        seg->mesh = build_wall_quad(p2, p1, back->floor_height, front->floor_height, back->light_level,
-                                      line->back_side->x_offset, line->back_side->y_offset, arena);
-        seg->texture_number = line->back_side->lower_texture;
+        add_wall_segment(&result, WallPart_Lower, bs->lower_texture, line, bs, back, front,
+                         p2, p1, back->floor_height, front->floor_height, context);
     }
 
     if(back->floor_height > front->floor_height)
     {
-        // NOTE(Fermin): floor rises going from front sector into back sector
-        Wall_Segment *seg = result.segments + result.segment_count++;
-        seg->mesh = build_wall_quad(p1, p2, front->floor_height, back->floor_height, front->light_level,
-                                      line->front_side->x_offset, line->front_side->y_offset, arena);
-        seg->texture_number = line->front_side->lower_texture;
+		// NOTE(Fermin): floor rises going from front sector into back sector
+        add_wall_segment(&result, WallPart_Lower, fs->lower_texture, line, fs, front, back,
+                         p1, p2, front->floor_height, back->floor_height, context);
     }
 
-    if(back->ceiling_height > front->ceiling_height)
+    if(back->ceiling_height > front->ceiling_height &&
+       !(front->ceiling_flat == sky && back->ceiling_flat == sky))
     {
-        // NOTE(Fermin): Ceiling rises going from front sector into back sector
+		// NOTE(Fermin): Ceiling rises going from front sector into back sector
 		// We build the quad facing the back sector, hence the inverted p
-        Wall_Segment *seg = result.segments + result.segment_count++;
-        seg->mesh = build_wall_quad(p2, p1, front->ceiling_height, back->ceiling_height, back->light_level,
-                                      line->back_side->x_offset, line->back_side->y_offset, arena);
-        seg->texture_number = line->back_side->upper_texture;
+        add_wall_segment(&result, WallPart_Upper, bs->upper_texture, line, bs, back, front,
+                         p2, p1, front->ceiling_height, back->ceiling_height, context);
     }
 
     return result;
@@ -740,18 +805,18 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 															     merged_loop.vertex_count,
 																 vertex_positions, tmp_arena);
 
-		Mesh floor_mesh   = build_flat_mesh(&floor_triangles, vertex_positions,
+		Mesh floor_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
 										 sector->floor_height, sector->light_level,
 										 true, tmp_arena);
+		floor_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->floor_flat, platform_API);
+		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
+
+		if(sector->ceiling_flat == texture_cache->sky_flat_number) { return; } // temp
 
 		Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
 										 sector->ceiling_height, sector->light_level,
 										 false, tmp_arena);
-
-		floor_mesh.texture_handle   = get_or_load_flat_id(wad, texture_cache, sector->floor_flat, platform_API);
 		ceiling_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->ceiling_flat, platform_API);
-
-		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
 		platform_API->upload_static_mesh_to_gpu(&ceiling_mesh);
 	}
 }

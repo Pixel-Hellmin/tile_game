@@ -466,16 +466,19 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 								 &game_memory->platform_API, &wad, &texture_cache);
 	}
 
+	Wall_Build_Context context = {};
+	context.cache = &texture_cache;
+	context.wad = &wad;
+	context.platform_API = &game_memory->platform_API;
+	context.scratch = tmp_arena;   // compositing scratch space
+	context.arena = tmp_arena;     // mesh storage
+
 	for(u32 i = 0; i < line_count; ++i)
 	{
-		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, tmp_arena);
+		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, &context);
 		for(u32 i = 0; i < segment_list.segment_count; ++i)
 		{
 			Wall_Segment *segment = segment_list.segments + i;
-		    Wall_Texture *texture = get_or_load_wall_texture(&wad, &texture_cache, segment->texture_number, // do this in build_wall_segments_for_line?
-											   &game_memory->platform_API, tmp_arena);
-			segment->mesh.texture_handle = texture->id;
-;
 			game_memory->platform_API.upload_static_mesh_to_gpu(&segment->mesh);
 		}
 	}

@@ -370,6 +370,8 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		/*
 		 * There is something very wrong with my matrices operations.
 		 * Check our convention and order of operations.
+		 *
+		 * Some of this code goes in opengl files
 		*/
 
 		f32 aspect_ratio = (f32)window_width / (f32)window_height;
@@ -391,7 +393,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		opengl.glBindFramebuffer(GL_FRAMEBUFFER, 0); // render to screen
 		glViewport(0, 0, window_width, window_height);
 
-		glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
+		glClearColor(1.0f, 1.0f, 0.0f, 0.0f);
 		glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
 
 		opengl.glUseProgram(opengl.program);

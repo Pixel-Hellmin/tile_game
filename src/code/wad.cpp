@@ -1,3 +1,7 @@
+#define ML_DONTPEGTOP    0x0008
+#define ML_DONTPEGBOTTOM 0x0010
+#define MAX_TEXTURE_SIDE 1024
+
 struct RGB8
 {
 	u8 r, g, b;
@@ -77,6 +81,7 @@ struct Line_Def
 	Sector *back_sector;  // NULL for a one-sided line -- same meaning as sidenum[1] == -1
 	Side_Def *front_side;
 	Side_Def *back_side;  // only meaningful when back_sector != NULL
+	u16 flags;
 };
 
 struct Sector
@@ -439,6 +444,7 @@ get_or_load_wall_texture(Wad_File *wad, Texture_Cache *cache, u32 number, Platfo
 	if(tex->id) { return tex; }
 
 	Composite_Texture_Def *def = cache->defs + number;
+	assert(def->width <= MAX_TEXTURE_SIDE && def->height <= MAX_TEXTURE_SIDE);
 	Decoded_Patch composited = composite_texture(wad, def, cache->palette, tmp_arena);
 	tex->id = platform_API->upload_texture_to_gpu((u32 *)composited.rgba, composited.width, composited.height);
 
@@ -614,21 +620,22 @@ load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_A
 	*/
 
 	u32 count = get_lump_size(wad, lump) / 14;
-	i16 *raw = (i16 *)get_lump_data(wad, lump);
+	u8 *raw = get_lump_data(wad, lump);
 
 	Line_Def *lines = push_array(arena, count, Line_Def);
 	for(u32 i = 0; i < count; ++i)
 	{
-		i16 *e = raw + i * 7; // by 7 because points to i16s
-		lines[i].v1 = (u32)(u16)e[0]; // double cast to avoid sign extension
-		lines[i].v2 = (u32)(u16)e[1];
-		// NOTE(Fermin): flags @ e[2], special @ e[3], tag @ e[4] -- not consumed yet
+		u8 *e = raw + i * 14; // by 14 because points to u8
+		lines[i].v1 = (u32)read_u16(e + 0); // double cast to avoid sign extension
+		lines[i].v2 = (u32)read_u16(e + 2);
+		lines[i].flags = read_u16(e + 4);
+		// NOTE(Fermin): special @ e[6], tag @ e[8] -- not consumed yet
 
-		i16 front_side_index = e[5];
+		i16 front_side_index = read_i16(e + 10);
 		lines[i].front_side   = &sides[front_side_index];
 		lines[i].front_sector = sides[front_side_index].sector;
 
-		i16 back_side_index = e[6];
+		i16 back_side_index = read_i16(e + 12);
 		if(back_side_index == -1)
 		{ 
 			lines[i].back_sector = NULL;
