@@ -84,12 +84,23 @@ null_terminated_string_length(char *a)
 	return result;
 }
 
+static inline char
+to_upper_ascii(char c)
+{
+    return (c >= 'a' && c <= 'z') ? (char)(c - ('a' - 'A')) : c;
+}
+
+// @Cleanup: Can we consolidate string compares?
 inline b32
 strings_are_equal(char *b, char *a, umm a_length)
 {
+	/*
+	 * a is the fixed-width field and b is the query, and a full-length match of a counts as equal even if b continues.
+	*/
+
     char *at = b;
-    for(umm index = 0;
-        index < a_length;
+	umm index = 0;
+    for(; index < a_length;
         ++index, ++at)
     {
 		if(a[index] == 0) { break; }
@@ -111,8 +122,46 @@ strings_are_equal(char *b, char *a, umm a_length)
 	}
 	*/
 
-    b32 result = (*at == 0);
-    return result;
+	if(index != a_length)
+	{
+		// broke early
+		return (*at == 0);
+	}
+	else
+	{
+		return 1;
+	}
+}
+inline b32
+strings_are_equal_case_insensitive(char *b, char *a, umm a_length)
+{
+	/*
+	 * a is the fixed-width field and b is the query, and a full-length match of a counts as equal even if b continues.
+	*/
+
+    char *at = b;
+	umm index = 0;
+    for(; index < a_length;
+        ++index, ++at)
+    {
+		if(a[index] == 0) { break; }
+
+        if((*at == 0) ||
+           (to_upper_ascii(a[index]) != to_upper_ascii(*at)))
+        {
+            return false;
+        }
+    }
+
+	if(index != a_length)
+	{
+		// broke early
+		return (*at == 0);
+	}
+	else
+	{
+		return 1;
+	}
 }
 
 inline b32

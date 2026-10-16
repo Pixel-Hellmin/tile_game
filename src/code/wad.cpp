@@ -120,7 +120,7 @@ find_lump(Wad_File *wad, char *name)
 {
 	for(u32 i = 0; i < wad->lump_count; ++i)
 	{
-		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return (i32)i; }
+		if(strings_are_equal_case_insensitive(wad->lumps[i].name, name, 8)) { return (i32)i; }
 	}
 
 	return -1; // matches W_CheckNumForName's "not found" convention
@@ -131,7 +131,7 @@ find_last_lump_between(Wad_File *wad, char *name, i32 first, i32 last_exclusive)
 {
 		for(i32 i = last_exclusive - 1; i >= first; --i)
 		{
-			if(strings_are_equal(wad->lumps[i].name, name, 8)) { return i; }
+			if(strings_are_equal_case_insensitive(wad->lumps[i].name, name, 8)) { return i; }
 		}
 
 		return -1;
@@ -157,7 +157,7 @@ find_texture_number(Texture_Cache *cache, char *name)
 
 	for(u32 i = cache->texture_count; i-- > 0; )   // backward, later definitions win
 	{
-		if(strings_are_equal(cache->defs[i].name, name, 8)) { return i; }
+		if(strings_are_equal_case_insensitive(cache->defs[i].name, name, 8)) { return i; }
 	}
 
 	printf("missing texture: %.8s\n", name);
@@ -171,7 +171,7 @@ find_map_lump(Wad_File *wad, i32 map_marker, char *name)
 	// NOTE(Fermin): map data lumps sit within 10 entries after the marker
 	for(i32 i = map_marker + 1; i <= map_marker + 10 && i < (i32)wad->lump_count; ++i)
 	{
-		if(strings_are_equal(name, wad->lumps[i].name, 8)) { return i; }
+		if(strings_are_equal_case_insensitive(wad->lumps[i].name, name, 8)) { return i; }
 	}
 	return -1;
 }
@@ -408,7 +408,12 @@ composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memo
 	for(u32 i = 0; i < def->patch_count; ++i)
 	{
 		Texture_Patch_Def *patch_def = def->patches + i;
-		if(patch_def->patch_lump < 0) { continue; }
+		if(patch_def->patch_lump < 0)
+		{
+			printf("patch_lump < 0 for %.8s\n", def->name);
+			continue;
+		}
+
 		u8 *lump_data = wad->data + wad->lumps[patch_def->patch_lump].file_pos;
 		Decoded_Patch patch = decode_patch(lump_data, palette, arena);
 
@@ -475,7 +480,7 @@ open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
 	result.data = file_data;
 
 	char *ident = (char *)file_data;
-	assert(strings_are_equal("IWAD", ident, 4) || strings_are_equal("PWAD", ident, 4));
+	assert(strings_are_equal(ident, "IWAD", 4) || strings_are_equal(ident, "PWAD", 4));
 	//Assert(memcmp(ident, "IWAD", 4) == 0 || memcmp(ident, "PWAD", 4) == 0);
 
 	i32 num_lumps    = *(i32 *)(file_data + 4);

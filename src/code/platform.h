@@ -70,6 +70,8 @@ struct Input_Keys
     b32 d;
     b32 q;
     b32 e;
+    b32 space;
+    b32 shift;
     b32 left_mouse;
     b32 f1;
     b32 f2;

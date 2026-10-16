@@ -414,8 +414,7 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 }
 
 static void
-load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat_arena,
-		   Level_Assets level_assets)
+load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat_arena)
 {
 	/*
 	 * TODO:
@@ -427,7 +426,7 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 	Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
 	Wad_File wad = open_wad_from_memory(wad_buffer.data, tmp_arena);
 
-	i32 map = find_lump(&wad, "E1M1");
+	i32 map = find_lump(&wad, "E1M3");
 	assert(map >= 0);
 	i32 playpal_lump  = find_lump(&wad, "PLAYPAL");
 	i32 vertexes_lump = find_map_lump(&wad, map, "VERTEXES");
@@ -541,7 +540,7 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		* uploading a decoded texture to opengl.
 		*
 		*/
-		load_level(&game_state->tmp_arena, game_memory, &game_state->flat_arena, game_state->level_assets);
+		load_level(&game_state->tmp_arena, game_memory, &game_state->flat_arena);
 
 		set_flag(game_state, game_state_flag_prints);
 
@@ -625,6 +624,14 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if(new_input.e)
     {
 		*game_memory->debug_player_angle += -0.2f * dude_speed;
+    }
+    if(new_input.space)
+    {
+		game_memory->debug_player_pos->z += 3.0f * dude_speed;
+    }
+    if(new_input.shift)
+    {
+		game_memory->debug_player_pos->z -= 3.0f * dude_speed;
     }
 
     if(!is_set(game_state, game_state_flag_free_cam_mode))

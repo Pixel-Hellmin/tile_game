@@ -631,9 +631,13 @@ win32_process_pending_messages(Input_Keys *new_input)
                     {
                         //win32_process_keyboard_message(&new_input->w, is_down);
                     }
+                    else if(vk_code == VK_SHIFT)
+                    {
+                        win32_process_keyboard_message(&new_input->shift, is_down);
+                    }
                     else if(vk_code == VK_SPACE)
                     {
-                        //win32_process_keyboard_message(&new_input->w, is_down);
+                        win32_process_keyboard_message(&new_input->space, is_down);
                     }
                     else if(vk_code == VK_F1)
                     {
