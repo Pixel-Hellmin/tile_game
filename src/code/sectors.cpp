@@ -54,7 +54,8 @@ struct Triangulated_Loop
 enum Wall_Part {
 	WallPart_Upper,
 	WallPart_Lower,
-	WallPart_Middle
+	WallPart_Middle,
+	WallPart_Masked_Middle
 };
 
 struct Wall_Segment
@@ -708,11 +709,46 @@ add_wall_segment(Wall_Segment_List *list, Wall_Part part, u32 texture_number,
     seg->mesh.texture_handle = tex->id;
 }
 
+static void
+add_masked_middle_segment(Wall_Segment_List *list, Line_Def *line, Side_Def *side,
+						  Sector *near_s, Sector *far_s, V2 p1, V2 p2,
+						  Wall_Build_Context *ctx)
+{
+	if(side->middle_texture == 0) { return; } // NOTE(Fermin): "-" means no texture
+
+	Wall_Texture *tex = get_or_load_wall_texture(ctx->wad, ctx->cache, side->middle_texture,
+									  ctx->platform_API, ctx->scratch);
+	f32 tex_w = (f32)tex->width;
+	f32 tex_h = (f32)tex->height;
+
+	// NOTE(Fermin): the opening between the two sectors. Symmetric, so near/far order doesn't matter.
+	f32 opening_bottom = max(near_s->floor_height,   far_s->floor_height);
+	f32 opening_top    = min(near_s->ceiling_height, far_s->ceiling_height);
+
+	// NOTE(Fermin): vanilla rule (R_RenderMaskedSegRange): DONTPEGBOTTOM puts the texture
+	// bottom on the higher floor, otherwise it hangs from the lower ceiling.
+	f32 anchor = (line->flags & ML_DONTPEGBOTTOM) ? opening_bottom + tex_h : opening_top;
+	anchor += side->y_offset;
+
+	// NOTE(Fermin): drawn once (no vertical tiling), clipped to the opening.
+	f32 top_z    = min(opening_top,    anchor);
+	f32 bottom_z = max(opening_bottom, anchor - tex_h);
+	if(top_z <= bottom_z) { return; }
+
+	Wall_Segment *seg = list->segments + list->segment_count++;
+	seg->part = WallPart_Masked_Middle;
+	seg->texture_number = side->middle_texture;
+	seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->light_level,
+							 side->x_offset, anchor, tex_w, tex_h, ctx->arena);
+	seg->mesh.texture_handle = tex->id;
+}
+
 static Wall_Segment_List
 build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Wall_Build_Context *context)
 {
+	// NOTE(Fermin): 4 max -- at most upper + lower for a two-sided line + one masked middle PER SIDE
 	Wall_Segment_List result = {};
-	result.segments = push_array(context->arena, 2, Wall_Segment); // NOTE(Fermin): at most upper + lower for a two-sided line
+	result.segments = push_array(context->arena, 4, Wall_Segment); 
 
     V2 p1 = vertex_positions[line->v1];
     V2 p2 = vertex_positions[line->v2];
@@ -762,6 +798,9 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Wall_Build_Co
         add_wall_segment(&result, WallPart_Upper, bs->upper_texture, line, bs, back, front,
                          p2, p1, front->ceiling_height, back->ceiling_height, context);
     }
+
+	add_masked_middle_segment(&result, line, fs, front, back, p1, p2, context);
+	add_masked_middle_segment(&result, line, bs, back, front, p2, p1, context);
 
     return result;
 }

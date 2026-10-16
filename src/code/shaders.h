@@ -63,6 +63,9 @@ char *doom_fragment_code = R"FOO(
 	void main()
 	{
 		vec4 tex_color = texture(u_flat_texture, v_uv);
+		// NOTE(Fermin): binary transparency, like vanilla.
+		// This disables or weakens early-z testing for all fragments
+		if(tex_color.a < 0.5) { discard; }
 		out_color = vec4(tex_color.rgb * v_light, tex_color.a);
 	}
 )FOO";
