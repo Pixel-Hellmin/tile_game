@@ -462,7 +462,8 @@ load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat
 	for(u32 i = 0; i < sector_count; ++i)
 	{
 		build_sector_render_data(&sectors[i], vertex_positions, tmp_arena,
-								 &game_memory->platform_API, &wad, &texture_cache);
+								 &game_memory->platform_API, &wad, &texture_cache, i,
+								 map);
 	}
 
 	Wall_Build_Context context = {};

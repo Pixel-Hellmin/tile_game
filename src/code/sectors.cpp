@@ -88,6 +88,74 @@ enum Point_Location
 	PointLocation_On_Boundary,
 };
 
+// NOTE(Fermin): hand-found gaps in the original DOOM.WAD data. A sector whose outline is
+// missing a linedef gets a synthetic edge so it can be triangulated. Vanilla never notices
+// because it renders through the BSP. Synthetic edges build no wall geometry.
+struct Edge_Patch
+{
+	char *map_name;
+	u32 sector_index;
+	u32 from_vertex;
+	u32 to_vertex;
+};
+
+static Edge_Patch edge_patches[] =
+{
+	{ "E1M3", 7, 771, 764 },
+};
+
+static b32
+edge_patch_applies(Edge_Patch *patch, Wad_File *wad, i32 map_marker, u32 sector_index)
+{
+	// NOTE(Fermin): lump name is the unterminated 8 byte field, same argument order as find_lump
+	b32 result;
+
+	result =  (strings_are_equal_case_insensitive(wad->lumps[map_marker].name, patch->map_name, 8)) &&
+			  (patch->sector_index == sector_index);
+
+	return result;
+}
+
+static u32
+count_edge_patches(Wad_File *wad, i32 map_marker, u32 sector_index)
+{
+	u32 result = 0;
+	for(u32 i = 0; i < array_count(edge_patches); ++i)
+	{
+		if(edge_patch_applies(edge_patches + i, wad, map_marker, sector_index)) { ++result; }
+	}
+	return result;
+}
+
+// NOTE(Fermin): debug only. In a closed, consistent sector every vertex has
+// in_degree == out_degree. Print the vertices where that fails.
+static void
+debug_check_edge_balance(Sector_Edge *edges, u32 edge_count, V2 *vp, u32 sector_index, Memory_Arena *arena)
+{
+	u32 max_v = 0;
+	for(u32 i = 0; i < edge_count; ++i)
+	{
+		if(edges[i].v1 > max_v) { max_v = edges[i].v1; }
+		if(edges[i].v2 > max_v) { max_v = edges[i].v2; }
+	}
+
+	i32 *balance = push_array(arena, max_v + 1, i32);
+	for(u32 i = 0; i < edge_count; ++i)
+	{
+		balance[edges[i].v1] += 1; // outgoing
+		balance[edges[i].v2] -= 1; // incoming
+	}
+
+	for(u32 v = 0; v <= max_v; ++v)
+	{
+		if(balance[v] != 0)
+		{
+			printf("sector %u: vertex %u (%d, %d) out-in = %d\n",
+			       sector_index, v, (i32)vp[v].x, (i32)vp[v].y, balance[v]);
+		}
+	}
+};
+
 static u32
 turn_class(V2 in, V2 out)
 {
@@ -807,7 +875,8 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Wall_Build_Co
 
 static void
 build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena,
-						 Platform_API *platform_API, Wad_File *wad, Texture_Cache *texture_cache)
+						 Platform_API *platform_API, Wad_File *wad, Texture_Cache *texture_cache,
+						 u32 sector_index, i32 map_marker)
 {
 	/* 
 	* The front of a Line_Def is always 90 degrees to the right / clockwise from the ray you
@@ -816,7 +885,8 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 
 	if(sector->line_count == 0) { return; }  // NOTE(Fermin): orphan sector, nothing to triangulate
 
-	Sector_Edge *edges = push_array(tmp_arena, sector->line_count, Sector_Edge);
+	u32 patch_count = count_edge_patches(wad, map_marker, sector_index);
+	Sector_Edge *edges = push_array(tmp_arena, sector->line_count + patch_count, Sector_Edge);
 	u32 edge_count = 0;
 	for(u32 i = 0; i < sector->line_count; ++i)
 	{
@@ -826,6 +896,19 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 		else                             { edges[edge_count++] = { line->v2, line->v1 }; }
 	}
 
+	for(u32 i = 0; i < array_count(edge_patches); ++i)
+	{
+		Edge_Patch *patch = edge_patches + i;
+		if(!edge_patch_applies(patch, wad, map_marker, sector_index)) { continue; }
+
+		edges[edge_count++] = { patch->from_vertex, patch->to_vertex };
+		printf("PATCHED level %s, sector %u: added edge %u -> %u\n",
+		 wad->lumps[map_marker].name, sector_index, patch->from_vertex, patch->to_vertex);
+	}
+
+#if 0 // TODO(Fermin): Control through cmd params
+	debug_check_edge_balance(edges, edge_count, vertex_positions, sector_index, tmp_arena);
+#endif
 	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, vertex_positions, tmp_arena);
 
 	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
@@ -850,7 +933,7 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 		floor_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->floor_flat, platform_API);
 		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
 
-		if(sector->ceiling_flat == texture_cache->sky_flat_number) { return; } // temp
+		if(sector->ceiling_flat == texture_cache->sky_flat_number) { continue; } // temp
 
 		Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
 										 sector->ceiling_height, sector->light_level,
