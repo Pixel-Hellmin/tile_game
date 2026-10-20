@@ -144,7 +144,6 @@ decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
 	result.top_offset  = header[3];
 
 	u32 pixel_count = result.width * result.height;
-	// IMPORTANT (FERMIN): Make sure this is init to 0
 	result.rgba = push_array(arena, pixel_count * 4, u8); // push_array zero-inits -> alpha=0 (transparent) everywhere by default
 
 	i32 *column_offsets = (i32 *)(lump_data + 8); // 4 x i16
@@ -301,7 +300,6 @@ composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memo
 	result.height = def->height;
 
 	u32 pixel_count = result.width * result.height;
-	// IMPORTANT (FERMIN): Make sure this is init to 0
 	result.rgba = push_array(arena, pixel_count * 4, u8); // zero-init -> fully transparent base
 
 	for(u32 i = 0; i < def->patch_count; ++i)

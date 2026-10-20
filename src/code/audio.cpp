@@ -57,8 +57,9 @@ output_playing_sounds(Game_Audio_State *audio_state, Game_Sound_Output_Buffer *s
 	u32 samples_per_chunk = 4;
 	u32 chunk_count = sound_output_buffer->sample_count / samples_per_chunk;
 
-	__m128 *real_channel_0 = push_array(tmp_arena, chunk_count, __m128, 4);
-	__m128 *real_channel_1 = push_array(tmp_arena, chunk_count, __m128, 4);
+	Arena_Push_Params params = { 0, 4 };
+	__m128 *real_channel_0 = push_array(tmp_arena, chunk_count, __m128, params);
+	__m128 *real_channel_1 = push_array(tmp_arena, chunk_count, __m128, params);
 
 	f32 seconds_per_sample = 1.0f / (f32)sound_output_buffer->samples_per_second;
 

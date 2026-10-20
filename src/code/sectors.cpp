@@ -88,7 +88,8 @@ struct Triangulated_Loop
 	u32 triangle_count;
 };
 
-enum Wall_Part {
+enum Wall_Part
+{
 	WallPart_Upper,
 	WallPart_Lower,
 	WallPart_Middle,

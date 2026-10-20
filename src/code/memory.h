@@ -1,5 +1,25 @@
 #if !defined(MEMORY_H)
 
+enum Arena_Push_Flags
+{
+	ArenaPushFlags_Clear_To_Zero = 0x1,
+};
+struct Arena_Push_Params
+{
+	u32 flags;
+	u32 alignment;
+};
+
+inline Arena_Push_Params
+default_arena_params()
+{
+	Arena_Push_Params params;
+	params.flags = ArenaPushFlags_Clear_To_Zero;
+	params.alignment = 4;
+
+	return params;
+}
+
 struct Memory_Arena
 {
 	size_t size;
@@ -65,6 +85,16 @@ get_alignment_offset(Memory_Arena *arena, size_t alignment)
 	return alignment_offset;
 }
 
+static void
+zero_size(size_t size, void *ptr)
+{
+	u8 *byte = (u8 *)ptr;
+	while(size--)
+	{
+		*byte++ = 0;
+	}
+}
+
 /*
     ## is the token pasting operator in the preprocessor.
 	Normally it glues two tokens together (e.g. foo##bar becomes foobar),
@@ -74,7 +104,8 @@ get_alignment_offset(Memory_Arena *arena, size_t alignment)
 #define push_struct(arena, Type, ...) (Type *)push_size_(arena, sizeof(Type), ## __VA_ARGS__)
 #define push_array(arena, count, Type, ...) (Type *)push_size_(arena, (count)*sizeof(Type), ## __VA_ARGS__)
 static void *
-push_size_(Memory_Arena *arena, size_t size, size_t alignment = 4)
+push_size_(Memory_Arena *arena, size_t size,
+		   Arena_Push_Params params = default_arena_params())
 {
 	void *cached = arena->base + arena->cached;
 	void *at = arena->base + arena->used;
@@ -84,13 +115,18 @@ push_size_(Memory_Arena *arena, size_t size, size_t alignment = 4)
 		arena->used = arena->cached;
 	}
 
-	size_t alignment_offset = get_alignment_offset(arena, 4);
+	size_t alignment_offset = get_alignment_offset(arena, params.alignment);
 	size += alignment_offset;
 
 	assert((arena->used + size) <= arena->size);
 
 	void *result = arena->base + arena->used + alignment_offset;
 	arena->used += size;
+
+	if(params.flags & ArenaPushFlags_Clear_To_Zero)
+	{
+		zero_size(size, result);
+	}
 
 	return result;
 }
