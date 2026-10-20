@@ -812,6 +812,7 @@ int main(int argc, char** argv)
     my_argc = argc; 
     my_argv = argv; 
 	cmd_params.edges = check_param("-edges");
+	cmd_params.edge_balance = check_param("-edge_balance");
 
     LARGE_INTEGER perf_count_frequency_result;
     QueryPerformanceFrequency(&perf_count_frequency_result);
@@ -927,6 +928,8 @@ int main(int argc, char** argv)
 			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
 			game_memory.platform_API.upload_texture_to_gpu = upload_texture_to_gpu;
 			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
+
+			game_memory.cmd_params = &cmd_params;
 
 			game_memory.debug_player_pos = &debug_player_pos;
 			game_memory.debug_player_angle = &debug_player_angle;

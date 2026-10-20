@@ -1,4 +1,41 @@
-// change file name
+/*
+change file name
+
+1. Per-map loading and a map selector.
+
+Every loader (VERTEXES, SECTORS, SIDEDEFS, LINEDEFS, and later THINGS) goes through find_map_lump with a marker index.
+One load_map(marker) call tears down the old map’s meshes and builds the new one.
+The decision is how to free GPU meshes and arena memory when switching, so it needs a per-map arena and a
+list of GL buffers to delete.
+A key binding or command-line argument picks the map.
+
+2. Spawn point and level camera.
+
+Read THINGS type 1 for position and angle, and put a free-fly camera there so you can inspect the level.
+The eye height needs the floor under the spawn. A simple point-in-sector test is enough for now.
+The BSP lookup can wait for gameplay.
+
+3. Lighting. This is the biggest design decision, and it should come before animation.
+
+Today the light level is baked into each mesh vertex. Sector specials such as flicker, strobe and glow change
+a sector’s light at runtime, so baking blocks them.
+I’d propose a per-sector light table, uploaded as a small texture or uniform buffer, with each vertex
+carrying a sector index. Changing a light then costs one table write and no mesh rebuild.
+Then comes the fake contrast, where walls aligned to the x or y axis get a ±1 light level,
+which is cheap once the table exists.
+Then distance dimming. It needs the palette shader (Option B) with COLORMAP,
+so we’d decide whether to switch to it here.
+
+4. Sky. Draw SKY1 mapped by view angle as a background, using the sky ceilings and the skipped upper walls as the mask.
+
+5. Visual animation.
+
+Animated flats and wall textures, using the number remap we designed.
+Scrolling walls (linedef special 48).
+Sector light effects, which build on the light table from step 3.
+
+6. Static things (optional here). Decorations such as lamps and barrels.
+*/
 
 struct Sector_Edge
 {
@@ -78,7 +115,6 @@ struct Wall_Build_Context
 	Wad_File *wad;
 	Platform_API *platform_API;
 	Memory_Arena *scratch;   // compositing scratch space
-	Memory_Arena *arena;     // mesh storage
 };
 
 enum Point_Location
@@ -773,7 +809,7 @@ add_wall_segment(Wall_Segment_List *list, Wall_Part part, u32 texture_number,
     seg->part = part;
     seg->texture_number = texture_number;
     seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->light_level,
-                                side->x_offset, anchor, (f32)tex->width, tex_h, context->arena);
+                                side->x_offset, anchor, (f32)tex->width, tex_h, context->scratch);
     seg->mesh.texture_handle = tex->id;
 }
 
@@ -807,7 +843,7 @@ add_masked_middle_segment(Wall_Segment_List *list, Line_Def *line, Side_Def *sid
 	seg->part = WallPart_Masked_Middle;
 	seg->texture_number = side->middle_texture;
 	seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->light_level,
-							 side->x_offset, anchor, tex_w, tex_h, ctx->arena);
+							 side->x_offset, anchor, tex_w, tex_h, ctx->scratch);
 	seg->mesh.texture_handle = tex->id;
 }
 
@@ -816,7 +852,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Wall_Build_Co
 {
 	// NOTE(Fermin): 4 max -- at most upper + lower for a two-sided line + one masked middle PER SIDE
 	Wall_Segment_List result = {};
-	result.segments = push_array(context->arena, 4, Wall_Segment); 
+	result.segments = push_array(context->scratch, 4, Wall_Segment); 
 
     V2 p1 = vertex_positions[line->v1];
     V2 p2 = vertex_positions[line->v2];
@@ -874,7 +910,7 @@ build_wall_segments_for_line(Line_Def *line, V2 *vertex_positions, Wall_Build_Co
 }
 
 static void
-build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp_arena,
+build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *scratch,
 						 Platform_API *platform_API, Wad_File *wad, Texture_Cache *texture_cache,
 						 u32 sector_index, i32 map_marker)
 {
@@ -886,7 +922,7 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 	if(sector->line_count == 0) { return; }  // NOTE(Fermin): orphan sector, nothing to triangulate
 
 	u32 patch_count = count_edge_patches(wad, map_marker, sector_index);
-	Sector_Edge *edges = push_array(tmp_arena, sector->line_count + patch_count, Sector_Edge);
+	Sector_Edge *edges = push_array(scratch, sector->line_count + patch_count, Sector_Edge);
 	u32 edge_count = 0;
 	for(u32 i = 0; i < sector->line_count; ++i)
 	{
@@ -906,12 +942,14 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 		 wad->lumps[map_marker].name, sector_index, patch->from_vertex, patch->to_vertex);
 	}
 
-#if 0 // TODO(Fermin): Control through cmd params
-	debug_check_edge_balance(edges, edge_count, vertex_positions, sector_index, tmp_arena);
+#if 0
+	// TODO(Fermin): Control through cmd params?
+	debug_check_edge_balance(edges, edge_count, vertex_positions, sector_index, scratch);
 #endif
-	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, vertex_positions, tmp_arena);
 
-	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, tmp_arena);
+	Chained_Loops chained_loops = chain_edges_to_loops(edges, edge_count, vertex_positions, scratch);
+
+	Classified_Sector_Loops	classified_loops = classify_loops(&chained_loops, vertex_positions, scratch);
 
 	for(u32 o = 0; o < classified_loops.outer_count; ++o)
 	{
@@ -920,16 +958,16 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 		{
 			merged_loop = merge_hole_into_outer(&merged_loop,
 											    classified_loops.holes + merged_loop.hole_indices[h],
-												vertex_positions, tmp_arena);
+												vertex_positions, scratch);
 		}
 
 		Triangulated_Loop floor_triangles = triangulate_ear_clip(merged_loop.vertices,
 															     merged_loop.vertex_count,
-																 vertex_positions, tmp_arena);
+																 vertex_positions, scratch);
 
 		Mesh floor_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
 										 sector->floor_height, sector->light_level,
-										 true, tmp_arena);
+										 true, scratch);
 		floor_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->floor_flat, platform_API);
 		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
 
@@ -937,16 +975,17 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *tmp
 
 		Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
 										 sector->ceiling_height, sector->light_level,
-										 false, tmp_arena);
+										 false, scratch);
 		ceiling_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->ceiling_flat, platform_API);
 		platform_API->upload_static_mesh_to_gpu(&ceiling_mesh);
 	}
 }
 
 static void
-group_lines_into_sectors(Line_Def *lines, u32 line_count, Sector *sectors, u32 sector_count, Memory_Arena *arena)
+group_lines_into_sectors(Line_Def *lines, u32 line_count, Sector *sectors, u32 sector_count,
+						 Memory_Arena *arena, Memory_Arena *scratch)
 {
-	u32 *counts = push_array(arena, sector_count, u32);
+	u32 *counts = push_array(scratch, sector_count, u32);
 	for(u32 i = 0; i < line_count; ++i)
 	{
 		// How many lines reference each sector -- Sector 0 -> 2 lines.

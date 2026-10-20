@@ -7,6 +7,7 @@
 #include <stdarg.h> // move to shared?
 #include "asset.h"
 #include "audio.h"
+#include "wad.h"
 
 union Tile
 {
@@ -71,6 +72,21 @@ struct Level_Assets
     u32 roof_texture_id;
 };
 
+struct Loaded_Level
+{
+	V2 *vertex_positions;
+	u32 vertex_count;
+
+	Sector *sectors;
+	u32 sector_count;
+
+	Side_Def *sides;
+	u32 side_count;
+
+	Line_Def *lines;
+	u32 line_count;
+};
+
 struct Game_State
 {
     Random_Series entropy;
@@ -116,6 +132,10 @@ struct Game_State
 	Loaded_Sound test_sound;
 	Playing_Sound *test_music;
 	Game_Audio_State audio_state;
+
+	Wad_File wad;
+	Loaded_Level loaded_level;
+	Texture_Cache texture_cache;
 };
 
 inline b32

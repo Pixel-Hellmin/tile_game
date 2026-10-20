@@ -53,6 +53,7 @@ global const f32 font_point_size = 64.0f;
 struct Cmd_Params
 {
 	b32 edges;
+	b32 edge_balance;
 };
 
 struct Quad
@@ -178,6 +179,7 @@ struct Game_Memory
 	f32 *debug_player_angle;
 
 	Platform_API platform_API;
+	Cmd_Params *cmd_params;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Memory_Arena *render_arena, Input_Keys *input)

@@ -414,74 +414,77 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 }
 
 static void
-load_level(Memory_Arena *tmp_arena, Game_Memory *game_memory, Memory_Arena *flat_arena)
+load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 {
 	/*
 	 * TODO:
 	 * - Use appropiate arenas
 	 * - Keep the stored the data we need; WAD, Sectors, Flats...
 	 * - Distinguish between map specific data (sectors...) and game data (wad, palette...)
+	 *
+	 * - Keep pointers to data in level_arena in a Loaded_Level struct?
+	 * - Zero out the level arena each load level?
+	 * - Delete static meshes in GPU each load level?
 	*/
 
-	Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
-	Wad_File wad = open_wad_from_memory(wad_buffer.data, tmp_arena);
+	Wad_File *wad                = &game_state->wad;
+	Memory_Arena *level_arena    = &game_state->flat_arena;
+	Memory_Arena *scratch        = &game_state->tmp_arena;
+	Texture_Cache *texture_cache = &game_state->texture_cache;
 
-	i32 map = find_lump(&wad, "E1M3");
-	assert(map >= 0);
-	i32 playpal_lump  = find_lump(&wad, "PLAYPAL");
-	i32 vertexes_lump = find_map_lump(&wad, map, "VERTEXES");
-	i32 sectors_lump  = find_map_lump(&wad, map, "SECTORS");
-	i32 sidedefs_lump = find_map_lump(&wad, map, "SIDEDEFS");
-	i32 linedefs_lump = find_map_lump(&wad, map, "LINEDEFS");
-	assert(vertexes_lump >= 0 &&
-		   sectors_lump  >= 0 &&
-		   sidedefs_lump >= 0 &&
-		   linedefs_lump >= 0 &&
-		   playpal_lump  >= 0
-	);
+	Tmp_Memory tmp_memory = begin_tmp_memory(scratch);
 
-	RGB8 *palette = load_playpal(&wad, playpal_lump, tmp_arena);
+	i32 map			  = find_lump(wad, level_name);		     assert(map >= 0);
+	i32 playpal_lump  = find_lump(wad, "PLAYPAL");			 assert(playpal_lump  >= 0);
+	i32 vertexes_lump = find_map_lump(wad, map, "VERTEXES"); assert(vertexes_lump >= 0);
+	i32 sectors_lump  = find_map_lump(wad, map, "SECTORS");  assert(sectors_lump  >= 0);
+	i32 sidedefs_lump = find_map_lump(wad, map, "SIDEDEFS"); assert(sidedefs_lump >= 0);
+	i32 linedefs_lump = find_map_lump(wad, map, "LINEDEFS"); assert(linedefs_lump >= 0);
 
-	Texture_Cache texture_cache = {};
-	init_texture_cache(&texture_cache, &wad, palette, &game_memory->platform_API, tmp_arena);
+	RGB8 *palette = load_playpal(wad, playpal_lump, level_arena);
+	init_texture_cache(wad, texture_cache, palette, platform_API, level_arena);
 
 	/*
 	 * NOTE(Fermin): Load order matters and is fixed:
 	 *	Sectors -> Side_Defs -> Line_Defs
 	*/
 	u32 vertex_count, sector_count, side_count, line_count;
-	V2       *vertex_positions = load_vertexes(&wad, vertexes_lump, &vertex_count, tmp_arena);
-	Sector   *sectors          = load_sectors(&wad, sectors_lump, &sector_count, tmp_arena, &texture_cache);
-	Side_Def *sides            = load_sidedefs(&wad, sidedefs_lump, sectors, &side_count, tmp_arena, &texture_cache);
-	Line_Def *lines            = load_linedefs(&wad, linedefs_lump, sides, &line_count, tmp_arena);
+	V2       *vertex_positions = load_vertexes(wad, vertexes_lump, &vertex_count, level_arena);
+	Sector   *sectors          = load_sectors(wad, sectors_lump, &sector_count, level_arena, texture_cache);
+	Side_Def *sides            = load_sidedefs(wad, sidedefs_lump, sectors, &side_count, level_arena, texture_cache);
+	Line_Def *lines            = load_linedefs(wad, linedefs_lump, sides, &line_count, level_arena);
 
-	group_lines_into_sectors(lines, line_count, sectors, sector_count, tmp_arena);
-
-	Tmp_Memory tmp_memory = begin_tmp_memory(tmp_arena);
-
+	group_lines_into_sectors(lines, line_count, sectors, sector_count, level_arena, scratch);
 	for(u32 i = 0; i < sector_count; ++i)
 	{
-		build_sector_render_data(&sectors[i], vertex_positions, tmp_arena,
-								 &game_memory->platform_API, &wad, &texture_cache, i,
+		build_sector_render_data(&sectors[i], vertex_positions, scratch,
+								 platform_API, wad, texture_cache, i,
 								 map);
 	}
 
 	Wall_Build_Context context = {};
-	context.cache = &texture_cache;
-	context.wad = &wad;
-	context.platform_API = &game_memory->platform_API;
-	context.scratch = tmp_arena;   // compositing scratch space
-	context.arena = tmp_arena;     // mesh storage
-
+	context.cache = texture_cache;
+	context.wad = wad;
+	context.platform_API = platform_API;
+	context.scratch = scratch;
 	for(u32 i = 0; i < line_count; ++i)
 	{
 		Wall_Segment_List segment_list = build_wall_segments_for_line(&lines[i], vertex_positions, &context);
 		for(u32 i = 0; i < segment_list.segment_count; ++i)
 		{
 			Wall_Segment *segment = segment_list.segments + i;
-			game_memory->platform_API.upload_static_mesh_to_gpu(&segment->mesh);
+			platform_API->upload_static_mesh_to_gpu(&segment->mesh);
 		}
 	}
+
+	game_state->loaded_level.vertex_positions = vertex_positions;
+	game_state->loaded_level.vertex_count	  = vertex_count;
+	game_state->loaded_level.sectors          = sectors;
+	game_state->loaded_level.sector_count     = sector_count;
+	game_state->loaded_level.sides            = sides;
+	game_state->loaded_level.side_count       = side_count;
+	game_state->loaded_level.lines            = lines;
+	game_state->loaded_level.line_count       = line_count;
 
 	end_tmp_memory(tmp_memory);
 }
@@ -533,15 +536,18 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		initialize_audio_state(&game_state->audio_state);
 
+		// @Cleanup: Lets use the arena instead of Buffer?
+		Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
+		game_state->wad = open_wad_from_memory(wad_buffer.data, &game_state->flat_arena); // use proper arena
+
         generate_level(game_state, map_z);
 
 		/*
 		* Textures
 		* Keep the index texture, do the palette lookup in the shader instead of 
 		* uploading a decoded texture to opengl.
-		*
 		*/
-		load_level(&game_state->tmp_arena, game_memory, &game_state->flat_arena);
+		load_level("E1M9", &game_memory->platform_API, game_state);
 
 		set_flag(game_state, game_state_flag_prints);
 
