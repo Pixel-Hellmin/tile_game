@@ -411,6 +411,24 @@ opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
 	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
 }
 
+static void
+opengl_clear_static_mesh_buffers(Memory_Arena *arena, u32 count)
+{
+	/* 
+	* TODO(Fermin): Store each of these in a separate table?
+	* That way its easier to handle directly yo opengl
+	*/
+
+	for(u32 i = 0; i < count; i++)
+	{
+		GPU_Mesh *mesh = (GPU_Mesh *)arena->base + i;
+		opengl.glDeleteBuffers(1, &mesh->vbo);
+		opengl.glDeleteBuffers(1, &mesh->ebo);
+		opengl.glDeleteVertexArrays(1, &mesh->vao);
+	}
+	count = 0;
+}
+
 static GLuint
 opengl_upload_texture_to_gpu(u32 *rgba, u32 width, u32 height)
 {

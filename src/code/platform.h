@@ -145,12 +145,19 @@ struct Decoded_Patch
 
 #define PLATFORM_LOAD_TEXTURE(name) void name(char *path, u32 *id)
 	typedef PLATFORM_LOAD_TEXTURE(Platform_Load_Texture);
+
 #define PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(name) void name(Mesh *mesh)
 	typedef PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(Platform_Upload_Static_Mesh_To_Gpu);
+
 #define PLATFORM_UPLOAD_PATCH_TO_GPU(name) void name(Decoded_Patch *patch)
 	typedef PLATFORM_UPLOAD_PATCH_TO_GPU(Platform_Upload_Patch_To_Gpu);
+
 #define PLATFORM_UPLOAD_TEXTURE_TO_GPU(name) u32 name(u32 *rgba, u32 width, u32 height)
 	typedef PLATFORM_UPLOAD_TEXTURE_TO_GPU(Platform_Upload_Texture_To_Gpu);
+
+#define PLATFORM_CLEAR_STATIC_MESH_BUFFERS(name) void name()
+	typedef PLATFORM_CLEAR_STATIC_MESH_BUFFERS(Platform_Clear_Static_Mesh_Buffers);
+
 #define PLATFORM_READ_FILE_FROM_DISK(name) Buffer name(char *file_name)
 	typedef PLATFORM_READ_FILE_FROM_DISK(Platform_Read_File_From_Disk);
 struct Platform_API
@@ -159,6 +166,7 @@ struct Platform_API
 	Platform_Upload_Static_Mesh_To_Gpu *upload_static_mesh_to_gpu;
 	Platform_Upload_Patch_To_Gpu *upload_patch_to_gpu;
 	Platform_Upload_Texture_To_Gpu *upload_texture_to_gpu;
+	Platform_Clear_Static_Mesh_Buffers *clear_static_mesh_buffers;
 	Platform_Read_File_From_Disk *read_file_from_disk;
 };
 

@@ -22,6 +22,7 @@ global LPDIRECTSOUNDBUFFER secondary_buffer;
 global V3 debug_player_pos;
 global f32 debug_player_angle;
 global Memory_Arena debug_static_gpu_mesh_arena;
+global u32 debug_static_gpu_mesh_count;
 
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
@@ -153,6 +154,8 @@ win32_init_opengl(HWND window)
 		win32_get_opengl_function(GL_Buffer_Data,			     glBufferData)
 		win32_get_opengl_function(GL_Vertex_Attrib_Pointer,	     glVertexAttribPointer)
 		win32_get_opengl_function(GL_Enable_Vertex_Attrib_Array, glEnableVertexAttribArray)
+		win32_get_opengl_function(GL_Delete_Buffers,             glDeleteBuffers)
+		win32_get_opengl_function(GL_Delete_Vertex_Arrays,		 glDeleteVertexArrays)
 		
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
@@ -407,8 +410,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 
 		opengl.glUniform1i(opengl.texture_sampler_id, 0);
 
-		u32 count = debug_static_gpu_mesh_arena.used / sizeof(GPU_Mesh);
-		for(u32 i = 0; i < count; i++)
+		for(u32 i = 0; i < debug_static_gpu_mesh_count; i++)
 		{
 			GPU_Mesh *mesh = (GPU_Mesh *)debug_static_gpu_mesh_arena.base + i;
 			opengl_draw_gpu_mesh(mesh);
@@ -772,19 +774,34 @@ static PLATFORM_LOAD_TEXTURE(load_texture)
 	// @Cleanup: More explicit name; upload text to gpu
 	// Refactor this to upload flat to gpu?
 	opengl_load_texture(path, id, GL_RGBA);
+	//printf("platform API load_texture %s\n", path);
 }
 
 static PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(upload_static_mesh_to_gpu)
 {
 	// Maybe return an id later passed with the render command for drawing?
 	GPU_Mesh *pushed = push_struct(&debug_static_gpu_mesh_arena, GPU_Mesh);
+	debug_static_gpu_mesh_count++;
 	opengl_upload_static_mesh_to_gpu(pushed, mesh);
+	printf("platform API upload_static_mesh_to_gpu debug_static_gpu_mesh_arena used: %zi\n", debug_static_gpu_mesh_arena.used);
+}
+
+static PLATFORM_CLEAR_STATIC_MESH_BUFFERS(clear_static_mesh_buffers)
+{
+	opengl_clear_static_mesh_buffers(&debug_static_gpu_mesh_arena, debug_static_gpu_mesh_count);
+	initialize_arena(&debug_static_gpu_mesh_arena,
+					 debug_static_gpu_mesh_arena.size,
+					 debug_static_gpu_mesh_arena.base);
+	debug_static_gpu_mesh_count = 0;
+	printf("platform API clear_static_mesh_buffers\n");
 }
 
 static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
 {
+	// NOTE(Fermin): We dont use this. DELETE?
 	// TODO: Return texture handle
 	opengl_upload_patch_to_gpu(patch);
+	printf("platform API upload_patch_to_gpu\n");
 }
 
 static PLATFORM_UPLOAD_TEXTURE_TO_GPU(upload_texture_to_gpu)
@@ -792,6 +809,7 @@ static PLATFORM_UPLOAD_TEXTURE_TO_GPU(upload_texture_to_gpu)
 	u32 result = 0;
 
 	result = (u32)opengl_upload_texture_to_gpu(rgba, width, height);
+	printf("platform API upload_texture_to_gpu id: %i\n", result);
 
 	return result;
 }
@@ -927,6 +945,7 @@ int main(int argc, char** argv)
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
 			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
 			game_memory.platform_API.upload_texture_to_gpu = upload_texture_to_gpu;
+			game_memory.platform_API.clear_static_mesh_buffers = clear_static_mesh_buffers;
 			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
 
 			game_memory.cmd_params = &cmd_params;
@@ -940,6 +959,7 @@ int main(int argc, char** argv)
 			initialize_arena(&debug_static_gpu_mesh_arena,
 							 debug_static_gpu_mesh_buffer.size,
 							 debug_static_gpu_mesh_buffer.data);
+			debug_static_gpu_mesh_count = 0;
 
             // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
             Buffer render_buffer = allocate_buffer(gigabytes(1));

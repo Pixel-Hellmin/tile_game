@@ -72,6 +72,8 @@ opengl_binding(void,   GL_Bind_Buffer,				  glBindBuffer,			     GLenum target, 
 opengl_binding(void,   GL_Buffer_Data,				  glBufferData,			     GLenum target, GLsizeiptr size, const void *data, GLenum usage)
 opengl_binding(void,   GL_Vertex_Attrib_Pointer,      glVertexAttribPointer,	 GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer)
 opengl_binding(void,   GL_Enable_Vertex_Attrib_Array, glEnableVertexAttribArray, GLuint index)
+opengl_binding(void,   GL_Delete_Buffers,             glDeleteBuffers,           GLsizei n, const GLuint *buffers)
+opengl_binding(void,   GL_Delete_Vertex_Arrays,       glDeleteVertexArrays,      GLsizei n, const GLuint *arrays)
 #undef opengl_binding
 
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
@@ -123,6 +125,8 @@ struct Opengl {
 	GL_Buffer_Data				  *glBufferData;
 	GL_Vertex_Attrib_Pointer      *glVertexAttribPointer;
 	GL_Enable_Vertex_Attrib_Array *glEnableVertexAttribArray;
+	GL_Delete_Buffers             *glDeleteBuffers;
+	GL_Delete_Vertex_Arrays       *glDeleteVertexArrays;
 };
 
 struct Opengl_Info
@@ -140,6 +144,11 @@ struct Opengl_Info
 
 struct GPU_Mesh
 {
+	/* 
+	* TODO(Fermin): Store each of these in a separate table?
+	* That way its easier to handle directly yo opengl
+	*/
+
     GLuint vao;
     GLuint vbo;
     GLuint ebo;

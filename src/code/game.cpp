@@ -432,17 +432,17 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 	Memory_Arena *scratch        = &game_state->tmp_arena;
 	Texture_Cache *texture_cache = &game_state->texture_cache;
 
+	// reset level arena and clear platform and gpu memory
+	initialize_arena(level_arena, level_arena->size, level_arena->base);
+	platform_API->clear_static_mesh_buffers();
+
 	Tmp_Memory tmp_memory = begin_tmp_memory(scratch);
 
 	i32 map			  = find_lump(wad, level_name);		     assert(map >= 0);
-	i32 playpal_lump  = find_lump(wad, "PLAYPAL");			 assert(playpal_lump  >= 0);
 	i32 vertexes_lump = find_map_lump(wad, map, "VERTEXES"); assert(vertexes_lump >= 0);
 	i32 sectors_lump  = find_map_lump(wad, map, "SECTORS");  assert(sectors_lump  >= 0);
 	i32 sidedefs_lump = find_map_lump(wad, map, "SIDEDEFS"); assert(sidedefs_lump >= 0);
 	i32 linedefs_lump = find_map_lump(wad, map, "LINEDEFS"); assert(linedefs_lump >= 0);
-
-	RGB8 *palette = load_playpal(wad, playpal_lump, level_arena);
-	init_texture_cache(wad, texture_cache, palette, platform_API, level_arena);
 
 	/*
 	 * NOTE(Fermin): Load order matters and is fixed:
@@ -538,7 +538,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		// @Cleanup: Lets use the arena instead of Buffer?
 		Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
-		game_state->wad = open_wad_from_memory(wad_buffer.data, &game_state->flat_arena); // use proper arena
+		game_state->wad = open_wad_from_memory(wad_buffer.data, &game_state->tmp_arena); // use proper arena
+		init_texture_cache(game_state, &game_memory->platform_API);
 
         generate_level(game_state, map_z);
 
@@ -591,6 +592,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     f32 camera_speed = 30.0 * dt_in_seconds;
     if(new_input.f1 && !old_input.f1)
     {
+		// NOTE(Fermin): We need to reset the render buffer in the platform layer
+		// to stop rendering the previous level. Also unload the static meshes
+		// GPU.
+		load_level("E1M1", &game_memory->platform_API, game_state);
+
         toggle_flag(game_state, game_state_flag_prints);
     }
     if(new_input.f3 && !old_input.f3)

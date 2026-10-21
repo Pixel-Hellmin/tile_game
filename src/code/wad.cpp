@@ -83,8 +83,8 @@ get_lump_size(Wad_File *wad, i32 idx)
 	return (u32)wad->lumps[idx].size;
 }
 
-static RGB8 *
-load_playpal(Wad_File *wad, i32 lump, Memory_Arena *arena)
+static void
+load_playpal(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 {
 	/*
 	* Parses PLAYPAL lump
@@ -93,17 +93,19 @@ load_playpal(Wad_File *wad, i32 lump, Memory_Arena *arena)
 	* Loads pallete of colors textures index into.
 	*/
 
+	i32 lump = find_lump(wad, "PLAYPAL");
+	assert(lump  >= 0);
+
 	u8 *raw = (u8 *)get_lump_data(wad, lump);
 
-    RGB8 *palette = push_array(arena, 256, RGB8);
+	// NOTE(Fermin): Loading palette 0 only
+    cache->palette = push_array(arena, 256, RGB8);
     for(u32 i = 0; i < 256; ++i)
     {
-        palette[i].r = raw[i*3 + 0];
-        palette[i].g = raw[i*3 + 1];
-        palette[i].b = raw[i*3 + 2];
+        cache->palette[i].r = raw[i*3 + 0];
+        cache->palette[i].g = raw[i*3 + 1];
+        cache->palette[i].b = raw[i*3 + 2];
     }
-
-    return palette; // NOTE(Fermin): palette 0 only
 }
 
 static Decoded_Patch
@@ -580,10 +582,12 @@ get_or_load_flat_id(Wad_File *wad, Texture_Cache *cache, u32 flat_number, Platfo
 }
 
 static void
-init_texture_cache(Wad_File *wad, Texture_Cache *cache, RGB8 *palette,
-				   Platform_API *platform_API, Memory_Arena *arena)
+init_texture_cache(Game_State *game_state, Platform_API *platform_API)
 {
-	cache->palette = palette;
+	Wad_File *wad = &game_state->wad;
+	Memory_Arena *arena = &game_state->tmp_arena; // TODO(Fermin): Use right arena
+	Texture_Cache *cache = &game_state->texture_cache;
+
 	u32 fallback_texture = make_magenta_texture(platform_API);
 
 	cache->first_flat = find_last_lump_between(wad, "F_START", 0, wad->lump_count) + 1;
@@ -595,6 +599,7 @@ init_texture_cache(Wad_File *wad, Texture_Cache *cache, RGB8 *palette,
 	cache->sky_flat_number = find_flat_number(cache, wad, "F_SKY1");
 
 	load_pnames(wad, cache, arena);
+	load_playpal(wad, cache, arena);
 	load_texture_defs(wad, cache, arena);
 
 	cache->textures[cache->texture_count] = { fallback_texture, 64, 64 };
