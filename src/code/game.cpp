@@ -432,8 +432,7 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 	Memory_Arena *scratch        = &game_state->tmp_arena;
 	Texture_Cache *texture_cache = &game_state->texture_cache;
 
-	// reset level arena and clear platform and gpu memory
-	initialize_arena(level_arena, level_arena->size, level_arena->base);
+	reset_arena(level_arena);
 	platform_API->clear_static_mesh_buffers();
 
 	Tmp_Memory tmp_memory = begin_tmp_memory(scratch);

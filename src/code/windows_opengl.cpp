@@ -426,7 +426,6 @@ opengl_clear_static_mesh_buffers(Memory_Arena *arena, u32 count)
 		opengl.glDeleteBuffers(1, &mesh->ebo);
 		opengl.glDeleteVertexArrays(1, &mesh->vao);
 	}
-	count = 0;
 }
 
 static GLuint

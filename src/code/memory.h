@@ -44,6 +44,12 @@ initialize_arena(Memory_Arena *arena, size_t size, u8 *base)
 	arena->cached = 0;
 }
 
+static void
+reset_arena(Memory_Arena *arena)
+{
+	initialize_arena(arena, arena->size, arena->base);
+}
+
 inline Tmp_Memory
 begin_tmp_memory(Memory_Arena *arena)
 {
