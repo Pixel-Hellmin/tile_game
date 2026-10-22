@@ -9,6 +9,93 @@
 #include "audio.h"
 #include "wad.h"
 
+enum Game_State_Debug_Flags
+{
+    game_state_flag_prints = (1 << 1),
+    game_state_flag_free_cam_mode = (1 << 2),
+};
+
+struct Particle
+{
+    V3 p;
+    V3 d_p;
+    V4 color_trans;
+    V4 d_color;
+    f32 rotation;
+    f32 d_rotation;
+};
+
+struct Loaded_Level
+{
+	V2 *vertex_positions;
+	u32 vertex_count;
+
+	Sector *sectors;
+	u32 sector_count;
+
+	Side_Def *sides;
+	u32 side_count;
+
+	Line_Def *lines;
+	u32 line_count;
+};
+
+struct Game_State
+{
+    Random_Series entropy;
+
+    u32 debug_flags;
+
+    b32 initialized;
+
+    // NOTE(Fermin): Testing particle system stuff. Move this to where it makes sense
+    u32 next_particle;
+    Particle particles[64];
+
+	Memory_Arena tmp_arena;
+	Memory_Arena world_arena;
+	Memory_Arena ui_arena;
+	Memory_Arena flat_arena;
+
+	Loaded_Sound test_sound;
+	Playing_Sound *test_music;
+	Game_Audio_State audio_state;
+
+	Wad_File wad;
+	Loaded_Level loaded_level;
+	Texture_Cache texture_cache;
+};
+
+inline b32
+is_set(Game_State *game_state, u32 flag)
+{
+    b32 result = game_state->debug_flags & flag;
+    
+    return result;
+}
+
+inline void
+set_flag(Game_State *game_state, u32 flag)
+{
+    game_state->debug_flags |= flag;
+}
+
+inline void
+unset_flag(Game_State *game_state, u32 flag)
+{
+    game_state->debug_flags &= ~flag;
+}
+
+inline void
+toggle_flag(Game_State *game_state, u32 flag)
+{
+    game_state->debug_flags ^= flag;
+}
+
+/*
+ * Left this here for now. I'll delete/refactor when I get to debug
+ * tools for the game
+*/
 union Tile
 {
 	// NOTE(Fermin): This is how we store tiles in the game memory. Later these
@@ -43,195 +130,6 @@ union Tile
         f32 rotation;
     };
 };
-
-enum Game_State_Debug_Flags
-{
-    game_state_flag_prints = (1 << 1),
-    game_state_flag_free_cam_mode = (1 << 2),
-};
-
-struct Camera
-{
-    V3 pos;
-};
-
-struct Particle
-{
-    V3 p;
-    V3 d_p;
-    V4 color_trans;
-    V4 d_color;
-    f32 rotation;
-    f32 d_rotation;
-};
-
-struct Level_Assets
-{
-    u32 floor_texture_id;
-    u32 wall_texture_id;
-    u32 roof_texture_id;
-};
-
-struct Loaded_Level
-{
-	V2 *vertex_positions;
-	u32 vertex_count;
-
-	Sector *sectors;
-	u32 sector_count;
-
-	Side_Def *sides;
-	u32 side_count;
-
-	Line_Def *lines;
-	u32 line_count;
-};
-
-struct Game_State
-{
-    Random_Series entropy;
-
-    u32 debug_flags;
-    f32 tile_size_in_px;
-
-    Camera camera;
-
-    i32 window_width;
-    i32 window_height;
-
-    // TODO(Fermin): Store tile index into Render_Buffer instead of this
-    b32 editing_tile;
-    i32 editing_tile_x;
-    i32 editing_tile_y;
-
-    i32 level_rows;
-    i32 level_cols;
-
-	Level_Assets level_assets;
-    u32 dude_texture_id;
-    u32 highlight_texture_id;
-
-    b32 initialized;
-
-    // NOTE(Fermin): Testing particle system stuff. Move this to where it makes sense
-    u32 next_particle;
-    Particle particles[64];
-
-	Tile dude;
-	u32 dude_next_sprite_index;
-	u32 *dude_animation_sprite_ids;
-	u32 dude_flipbook_size;
-	u32 dude_flipbook_fps; // What's the best unit to store this info?
-	f32 dude_current_sprite_timer_in_seconds;
-
-	Memory_Arena tmp_arena;
-	Memory_Arena world_arena;
-	Memory_Arena ui_arena;
-	Memory_Arena flat_arena;
-
-	Loaded_Sound test_sound;
-	Playing_Sound *test_music;
-	Game_Audio_State audio_state;
-
-	Wad_File wad;
-	Loaded_Level loaded_level;
-	Texture_Cache texture_cache;
-};
-
-inline b32
-is_tile_index_valid(f32 x, f32 y, i32 cols, i32 rows)
-{
-    b32 result = (x >= 0 && x < cols && y >= 0 && y < rows);
-
-    return result;
-}
-
-inline b32
-get_tile(Memory_Arena *arena, i32 cols, i32 rows, i32 x, i32 y, Tile **out)
-{
-    // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
-    // have null pointers and can instead check on that pointer instead of 
-    // returning a success/fail result?
-    b32 result = 0;
-
-    if(is_tile_index_valid(x, y, cols, rows))
-    {
-        Tile *tiles = (Tile *)arena->base;
-        *out = tiles + x + y * cols;
-        result = 1;
-    }
-
-    return result;
-}
-
-inline b32
-get_tile(Buffer *buffer, i32 cols, i32 rows, i32 x, i32 y, Tile **out)
-{
-    // TODO(Fermin): Create a NULL_ENTITY global and point to that so we dont
-    // have null pointers and can instead check on that pointer instead of 
-    // returning a success/fail result?
-    b32 result = 0;
-
-    if(is_tile_index_valid(x, y, cols, rows))
-    {
-        Tile *tiles = (Tile *)buffer->data;
-        *out = tiles + x + y * cols;
-        result = 1;
-    }
-
-    return result;
-}
-
-inline b32
-is_set(Game_State *game_state, u32 flag)
-{
-    b32 result = game_state->debug_flags & flag;
-    
-    return result;
-}
-
-inline void
-set_flag(Game_State *game_state, u32 flag)
-{
-    game_state->debug_flags |= flag;
-}
-
-inline void
-unset_flag(Game_State *game_state, u32 flag)
-{
-    game_state->debug_flags &= ~flag;
-}
-
-inline void
-toggle_flag(Game_State *game_state, u32 flag)
-{
-    game_state->debug_flags ^= flag;
-}
-
-V3
-tile_index_to_world_coord(i32 x, i32 y, f32 tile_size_in_meters)
-{
-    // NOTE(Fermin): For now we assume the world coord is in z = 0 since that's the only plane there's world at
-    V3 result = {};
-    result.x = (f32)x * tile_size_in_meters;
-    result.y = (f32)y * tile_size_in_meters;
-    result.z = 0.0;
-    
-    return result;
-}
-
-void
-world_coord_to_tile_index(V3 *world_pos, f32 tile_size_in_meters, i32 *index_x, i32 *index_y)
-{
-    // NOTE(Fermin): For now we assume the world coord is in z = 0 since that's the only plane there's world at
-    assert(tile_size_in_meters != 0.0);
-
-    f32 world_x = world_pos->x;
-    f32 world_y = world_pos->y;
-
-    *index_x = (i32)(world_x / tile_size_in_meters);
-    *index_y = (i32)floor(world_y / tile_size_in_meters); //TODO(Fermin): math.cpp/instrinsics
-}
 
 static void
 get_character_metadata(char character, Glyph_Metadata *out, Font *font) // here for now. where should it go?
@@ -293,28 +191,6 @@ print_debug_text(char *string, Memory_Arena *arena, V4 color = {0.0f, 1.0f, 0.0f
             x += space_width;
         }
     }
-}
-
-static void
-print_debug_text(Memory_Arena *arena, char *format, ...)
-{
-	char text_buffer[256];
-	assert(sizeof(format) <= sizeof(text_buffer))
-
-    va_list args;
-    va_start(args, format);
-    _vsnprintf_s(text_buffer, sizeof(text_buffer), _TRUNCATE, format, args);
-	print_debug_text(text_buffer, arena);
-    va_end(args);
-}
-
-static void
-print_debug_arena(Memory_Arena *ui_arena, char *header, Memory_Arena *arena)
-{
-	print_debug_text(ui_arena, header);
-	print_debug_text(ui_arena, "   cached %zu", arena->cached);
-	print_debug_text(ui_arena, "   used   %zu", arena->used);
-	print_debug_text(ui_arena, "   size   %zu", arena->size);
 }
 
 #define GAME_H

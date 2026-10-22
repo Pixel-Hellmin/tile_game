@@ -5,390 +5,6 @@
 #include "sectors.cpp"
 
 static void
-set_texture_to_tile_range(i32 x_start, i32 x_end, i32 y_start, i32 y_end, i32 texture_id, i32 cols, i32 rows, Memory_Arena *arena)
-{
-    Tile *tile;
-    for(u32 x = x_start; x <= x_end; x++)
-    {
-        for(u32 y = y_start; y <= y_end; y++)
-        {
-            if(get_tile(arena, cols, rows, x, y, &tile))
-            {
-                tile->texture_id = texture_id;
-            }
-        }
-    }
-}
-
-static void
-generate_level(Game_State *game_state, f32 map_z)
-{
-#define rooms_in_x 4
-#define rooms_in_y 4
-    u32 room_width = 6; // tiles
-
-    // NOTE(Fermin): We add 3 because of the additional roof and wall tiles
-    game_state->level_cols = room_width * rooms_in_x + 3; 
-    game_state->level_rows = room_width * rooms_in_y + 3;
-
-	push_array(&game_state->world_arena,
-			   (game_state->level_cols * game_state->level_rows),
-			   Tile);
-
-    // NOTE(Fermin): This only draws a grid, which will be turned into a maze later.
-    for(i32 row = 0; row < game_state->level_rows; row++)
-    {
-        for(i32 col = 0; col < game_state->level_cols; col++)
-        {
-            Tile *tile = (Tile *)game_state->world_arena.base + col + row * game_state->level_rows;
-            tile->world_index = V3{(f32)col, (f32)row, map_z};
-            tile->dim_in_tiles = V2{1.0f, 1.0f};
-            tile->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
-
-            // NOTE(Fermin): From left to right and down to up. (0, 0) == bottom left 
-            if(col == 0 || row == 0 || col == game_state->level_cols - 1 || row == game_state->level_rows - 1) // Roof all around
-            {
-                tile->texture_id = game_state->level_assets.roof_texture_id;
-
-                if(col == 0) // First col
-                {
-                    tile->rotation = Pi32/2.0f;
-                }
-                else if(col == game_state->level_cols - 1) // Last col
-                {
-                    tile->rotation = -Pi32/2.0f;
-                }
-                else if(row == 0) // First row
-                {
-                    tile->rotation = Pi32;
-                }
-            }
-            else if(row == 1 || row == game_state->level_rows - 2) // Wall top and bottom
-            {
-                if((col - 1) % room_width != 0)
-                {
-                    tile->texture_id = game_state->level_assets.wall_texture_id;
-                    if(row == 1)
-                    {
-                        tile->rotation = Pi32;
-                    }
-                }
-                else
-            {
-                    tile->texture_id = game_state->level_assets.roof_texture_id; // Roof for grid
-                }
-            }
-            else if(col == 1 || col == game_state->level_cols - 2) // Wall left and right
-            {
-                if((row - 1) % room_width != 0)
-                {
-                    tile->texture_id = game_state->level_assets.wall_texture_id;
-                    if(col == 1)
-                    {
-                        tile->rotation = Pi32/2.0f;
-                    }
-                    else
-                {
-                        tile->rotation = -Pi32/2.0f;
-                    }
-                }
-                else
-            {
-                    tile->texture_id = game_state->level_assets.roof_texture_id; // Roof for grid
-                }
-            }
-            else if((col - 1) % room_width == 0 || (row - 1) % room_width == 0)
-            {
-                tile->texture_id = game_state->level_assets.roof_texture_id; // Roof for grid
-            }
-            else
-        {
-                tile->texture_id = game_state->level_assets.floor_texture_id;
-            }
-
-            // Corners
-            if((col == 1 && row == 1) ||
-                (col == 1 && row == game_state->level_rows - 2) ||
-                (col == game_state->level_cols - 2 && row == 1) ||
-                (col == game_state->level_cols - 2 && row == game_state->level_rows - 2))
-            { 
-                tile->texture_id = game_state->level_assets.wall_texture_id; 
-            }
-        }
-    }
-
-    // NOTE(Fermin): DEBUG test maze gen algorithm (aldous-broder)
-    // Organize data in a way its coherent with the game state
-    assert(rooms_in_x == game_state->level_cols / room_width);
-    assert(rooms_in_y == game_state->level_rows / room_width);
-
-    // NOTE(Fermin): Room (0, 0) is bottom left
-    u32 rooms[rooms_in_x][rooms_in_y] = {};
-    u32 visited = 0;
-    u32 current_room_x = rooms_in_x / 2;
-    u32 current_room_y = rooms_in_y / 2;
-    i32 direction;
-    i32 x_start;
-    i32 x_end;
-    i32 y_start;
-    i32 y_end;
-    while (visited < rooms_in_x * rooms_in_y)
-    {
-        direction = random_between(&game_state->entropy, 0, 3); 
-        switch(direction)
-        {
-            case(0): // Move bottom of current room
-                {
-                    if(current_room_y > 0)
-                    {
-                        current_room_y--;
-
-                        // Remove top wall
-                        x_start = current_room_x * room_width + 2;
-                        x_end = x_start + room_width - 2;
-                        y_start = current_room_y * room_width + room_width + 1;
-                        y_end = y_start;
-                    }
-                } break;
-            case(1): // Move right of current room
-                {
-                    if(current_room_x < (rooms_in_x - 1))
-                    {
-                        current_room_x++;
-
-                        // Remove left wall
-                        x_start = current_room_x * room_width + 1;
-                        x_end = x_start;
-                        y_start = current_room_y * room_width + 2;
-                        y_end = y_start + room_width - 2;
-                    }
-                } break;
-            case(2): // Move top of current room
-                {
-                    if(current_room_y < (rooms_in_y - 1))
-                    {
-                        current_room_y++;
-
-                        // Remove bottom wall
-                        x_start = current_room_x * room_width + 2;
-                        x_end = x_start + room_width - 2;
-                        y_start = current_room_y * room_width + 1;
-                        y_end = y_start;
-                    }
-                } break;
-            case(3):  // Move left of current room
-                {
-                    if(current_room_x > 0)
-                    {
-                        current_room_x--;
-
-                        // Remove right wall
-                        x_start = current_room_x * room_width + room_width + 1;
-                        x_end = x_start;
-                        y_start = current_room_y * room_width + 2;
-                        y_end = y_start + room_width - 2;
-                    }
-                } break;
-        }
-
-        u32 current_room = rooms[current_room_x][current_room_y];
-        if(current_room == 0) // Not visited before
-        {
-            // NOTE(Fermin): Place walls in gaps left by the removed roofs
-            if(x_start == 2) // Left
-            {
-                Tile *tile;
-                if(get_tile(&game_state->world_arena,
-							game_state->level_cols, game_state->level_rows,
-							x_start-1, y_start, &tile))
-                {
-                    tile->texture_id = game_state->level_assets.wall_texture_id;
-                    tile->rotation = Pi32/2.0f;
-                }
-            }
-            if(x_end == game_state->level_cols - 3) // Right
-            {
-                Tile *tile;
-                if(get_tile(&game_state->world_arena,
-							game_state->level_cols, game_state->level_rows,
-							x_end+1, y_end, &tile))
-                {
-                    tile->texture_id = game_state->level_assets.wall_texture_id;
-                    tile->rotation = -Pi32/2.0f;
-                }
-            }
-            if(y_start == 2) // Bottom
-            {
-                Tile *tile;
-                if(get_tile(&game_state->world_arena,
-							game_state->level_cols, game_state->level_rows,
-							x_start, y_start-1, &tile))
-                {
-                    tile->texture_id = game_state->level_assets.wall_texture_id;
-                    tile->rotation = Pi32;
-                }
-            }
-            if(y_end == game_state->level_rows - 3) // Top
-            {
-                Tile *tile;
-                if(get_tile(&game_state->world_arena,
-							game_state->level_cols, game_state->level_rows,
-							x_start, y_end+1, &tile))
-                {
-                    tile->texture_id = game_state->level_assets.wall_texture_id;
-                }
-            }
-
-            // NOTE(Fermin): If this room hasn't been visited before, remove wall
-            set_texture_to_tile_range(x_start, x_end, y_start, y_end,
-									  game_state->level_assets.floor_texture_id,
-                                      game_state->level_cols,
-									  game_state->level_rows,
-									  &game_state->world_arena);
-
-            rooms[current_room_x][current_room_y] = 1;
-            visited++;
-        }
-    }
-
-    // NOTE(Fermin): Set walls under roofs after we define every roof. 
-    // Can we do this without looping over again?
-    for(i32 row = 2; row <= game_state->level_rows - 2; row++)
-    {
-        for(i32 col = 2; col <= game_state->level_cols - 2; col++)
-        {
-            Tile *test_roof_tile = {};
-            if(get_tile(&game_state->world_arena, game_state->level_cols, game_state->level_rows, col, row, &test_roof_tile))
-            {
-                if(test_roof_tile->texture_id == game_state->level_assets.roof_texture_id)
-                {
-                    Tile *wall_tile = {};
-                    if(get_tile(&game_state->world_arena, game_state->level_cols, game_state->level_rows, col, row-1, &wall_tile))
-                    {
-                        if(wall_tile->texture_id == game_state->level_assets.floor_texture_id)
-                        {
-                            wall_tile->texture_id = game_state->level_assets.wall_texture_id;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-	// NOTE(Fermin): Cache the level
-	game_state->world_arena.cached = game_state->world_arena.used;
-}
-
-static void
-render_tiles(Game_State *game_state, Memory_Arena *render_arena)
-{
-	// NOTE(Fermin): @Speed - We should only render the tiles that are visible on screen
-
-	f32 tile_size_in_px = game_state->tile_size_in_px;
-
-    // NOTE(Fermin): We need to be careful with decimals here, otherwise we'll see gaps between tiles.
-    // Should we truncate? round? Not sure
-    V2 half_window =
-    {
-        ((f32)game_state->window_width) / 2.0f,
-        ((f32)game_state->window_height) / 2.0f
-    };
-
-	Tile *tiles = (Tile *)game_state->world_arena.base;
-	u32 tiles_count = (u32)(game_state->world_arena.used / sizeof(Tile));
-	Quad *quad = push_array(render_arena, tiles_count, Quad);
-
-	for(u32 index = 0; index < tiles_count; index++)
-	{
-		Tile *tile = tiles + index;
-
-		// rotate axis. Perp.
-		V2 x_axis = V2{_cos(tile->rotation), _sin(tile->rotation)};
-		V2 y_axis = V2{-x_axis.y, x_axis.x};
-
-		// scale by half dim because origin is at the center of the tile
-		x_axis *= tile->dim_in_tiles.x * 0.5f;
-		y_axis *= tile->dim_in_tiles.y * 0.5f;
-
-		V3 origin = tile->world_index - game_state->camera.pos; // move into camera space
-		origin.xy = origin.xy + tile->dim_in_tiles * 0.5f; // set origin in center of tile
-
-		// NOTE(Fermin): We dont need all the z
-		V3 corners[4];
-		corners[0].xy = origin.xy - x_axis - y_axis; // Lower left
-		corners[0].z = origin.z;
-		corners[1].xy = origin.xy + x_axis - y_axis; // Lower right
-		corners[1].z = origin.z;
-		corners[2].xy = origin.xy + x_axis + y_axis; // Upper right
-		corners[2].z = origin.z;
-		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
-		corners[3].z = origin.z;
-
-		// Transform from world index to pixels. Not Z since that is used for z-buffer
-		corners[0].xy *= tile_size_in_px;
-		corners[1].xy *= tile_size_in_px;
-		corners[2].xy *= tile_size_in_px;
-		corners[3].xy *= tile_size_in_px;
-
-		// Move the origin of the camera from bottom left to the center of the window
-		corners[0].xy += half_window;
-		corners[1].xy += half_window;
-		corners[2].xy += half_window;
-		corners[3].xy += half_window;
-
-		quad->corners[0] = corners[0];
-		quad->corners[1] = corners[1];
-		quad->corners[2] = corners[2];
-		quad->corners[3] = corners[3];
-		quad->texture_id = tile->texture_id;
-		quad->color = tile->color;
-		++quad;
-	}
-}
-
-static void
-render_ui(Game_State *game_state, Memory_Arena *render_arena)
-{
-	Tile *tiles = (Tile *)game_state->ui_arena.base;
-	u32 tiles_count = (u32)(game_state->ui_arena.used / sizeof(Tile));
-	Quad *quad = push_array(render_arena, tiles_count, Quad);
-
-	for(u32 index = 0; index < tiles_count; index++)
-	{
-		Tile *tile = tiles + index;
-
-		// rotate axis. Perp.
-		V2 x_axis = V2{_cos(tile->rotation), _sin(tile->rotation)};
-		V2 y_axis = V2{-x_axis.y, x_axis.x};
-
-		// scale by half dim because origin is at the center of the tile
-		x_axis *= tile->dim_in_px.x * 0.5f;
-		y_axis *= tile->dim_in_px.y * 0.5f;
-
-		V3 origin = tile->pos_in_screen;
-		origin.xy = origin.xy + tile->dim_in_px * 0.5f; // set origin in center of tile
-		// NOTE(Fermin): We dont need all the z
-		V3 corners[4];
-		corners[0].xy = origin.xy - x_axis - y_axis; // Lower left
-		corners[0].z = origin.z;
-		corners[1].xy = origin.xy + x_axis - y_axis; // Lower right
-		corners[1].z = origin.z;
-		corners[2].xy = origin.xy + x_axis + y_axis; // Upper right
-		corners[2].z = origin.z;
-		corners[3].xy = origin.xy - x_axis + y_axis; // Upper left
-		corners[3].z = origin.z;
-
-		quad->corners[0] = corners[0];
-		quad->corners[1] = corners[1];
-		quad->corners[2] = corners[2];
-		quad->corners[3] = corners[3];
-		quad->texture_id = tile->texture_id;
-		quad->color = tile->color;
-		++quad;
-	}
-}
-
-static void
 partition_memory(Game_State *game_state, Game_Memory *game_memory)
 {
 	size_t total_memory_partitioned = sizeof(Game_State);
@@ -492,41 +108,13 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 // name so we can link to it with GetProcAddress for dynamic loading
 extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
-    // TODO(Fermin): Where should this be?
-    // Also we should have separate z-buffer values
-    // Also we should set a z level for the actual level and dude that is > than 0 so the camera can zoom out
-    f32 dude_z = 2.0f;
-    f32 map_z = 2.0f;
-    f32 camera_z = 2.0f;
-
     assert(game_memory->permanent_storage.size >= sizeof(Game_State));
 	Game_State *game_state = (Game_State *)game_memory->permanent_storage.data;
-	Tile *dude = &game_state->dude;
 	debug_print_font = &game_memory->debug_font_consola;
-
-	f64 last_frame_render_buffer_used = (f64)render_arena->used;
-	f64 last_frame_ui_buffer_used = (f64)game_state->ui_arena.used;
-	game_state->world_arena.used = game_state->world_arena.cached;
-	game_state->ui_arena.used = game_state->ui_arena.cached;
 
     if(!game_state->initialized)
     {
 		game_state->entropy.index = 666;
-		game_state->camera.pos   = {10.0f, 10.0f, 10.0f};
-		game_state->tile_size_in_px = 64.0f;
-		// TODO(Fermin): Handle assets properly. How? Dont load right now, but queue and let the
-		// platform layer handle it?
-		// Refactor this to upload flat to gpu?
-		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\floor.texture",
-											   &game_state->level_assets.floor_texture_id);
-		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\wall.texture",
-											   &game_state->level_assets.wall_texture_id);
-		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\roof.texture",
-											   &game_state->level_assets.roof_texture_id);
-		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\highlight.texture",
-											   &game_state->highlight_texture_id);
-		game_memory->platform_API.load_texture("..\\src\\misc\\assets\\textures\\direction.texture",
-											   &game_state->dude_texture_id);
 
 		partition_memory(game_state, game_memory);
 		initialize_arena(&game_state->tmp_arena,
@@ -540,8 +128,6 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_state->wad = open_wad_from_memory(wad_buffer.data, &game_state->tmp_arena); // use proper arena
 		init_texture_cache(game_state, &game_memory->platform_API);
 
-        generate_level(game_state, map_z);
-
 		/*
 		* Textures
 		* Keep the index texture, do the palette lookup in the shader instead of 
@@ -554,48 +140,20 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_state->test_sound = DEBUG_load_WAV("..\\src\\misc\\assets\\sounds\\test_music.wav");
 		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
 
-		dude->world_index = V3{0.0f, 0.0f, 0.0f};
-		dude->dim_in_tiles = V2{1.0f, 1.0f};
-		dude->texture_id = game_state->dude_texture_id;
-		dude->color = V4{1.0f, 1.0f, 1.0f, 1.0f};
 		*game_memory->debug_player_pos = { 1544.0f, -3380.0f, 0.0f };
 		*game_memory->debug_player_angle = 1.5707963f;
-
-		// TODO(Fermin): Proper initialization of flipbooks
-		game_state->dude_next_sprite_index = 1;
-		game_state->dude_flipbook_size = 3;
-		game_state->dude_current_sprite_timer_in_seconds = 0.0f;
-		game_state->dude_animation_sprite_ids = push_array(&game_state->tmp_arena,
-														   game_state->dude_flipbook_size,
-														   u32);
-		u32 *id = game_state->dude_animation_sprite_ids;
-		*id = game_state->dude_texture_id;
-		id++;
-		*id = game_state->highlight_texture_id;
-		id++;
-		*id = game_state->level_assets.floor_texture_id;
 
         game_state->initialized = 1;
     }
 	change_pitch(&game_state->audio_state, game_state->test_music, 1.125f);
-
-	game_state->window_width = game_memory->window_width;
-	game_state->window_height = game_memory->window_height;
     
-    // NOTE(Fermin): Update dude
     Input_Keys new_input = input[0];
     Input_Keys old_input = input[1];
-    //Input_Keys last_frame_input_state = game_state->last_frame_input_state;
     f32 dt_in_seconds = new_input.dt_in_seconds;
     f32 dude_speed = 50.0 * dt_in_seconds;
-    f32 camera_speed = 30.0 * dt_in_seconds;
     if(new_input.f1 && !old_input.f1)
     {
-		// NOTE(Fermin): We need to reset the render buffer in the platform layer
-		// to stop rendering the previous level. Also unload the static meshes
-		// GPU.
 		load_level("E1M1", &game_memory->platform_API, game_state);
-
         toggle_flag(game_state, game_state_flag_prints);
     }
     if(new_input.f3 && !old_input.f3)
@@ -604,28 +162,23 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
     }
 
-    V3 d_pos = {};
     if(new_input.w)
     {
-        d_pos.y = 1.0f; 
 		game_memory->debug_player_pos->y += 3.0f * dude_speed;
 		change_volume(game_state->test_music, 2.0f, V2{1.0f, 1.0f});
     }
     if(new_input.s)
     {
-        d_pos.y = -1.0f; 
 		game_memory->debug_player_pos->y += -3.0f * dude_speed;
 		change_volume(game_state->test_music, 2.0f, V2{0.0f, 0.0f});
     }
     if(new_input.a)
     {
-        d_pos.x = -1.0f; 
 		game_memory->debug_player_pos->x += -3.0f * dude_speed;
 		change_volume(game_state->test_music, 5.0f, V2{1.0f, 0.0f});
     }
     if(new_input.d)
     {
-        d_pos.x = 1.0f; 
 		game_memory->debug_player_pos->x += 3.0f * dude_speed;
 		change_volume(game_state->test_music, 5.0f, V2{0.0f, 1.0f});
     }
@@ -646,46 +199,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		game_memory->debug_player_pos->z -= 3.0f * dude_speed;
     }
 
-    if(!is_set(game_state, game_state_flag_free_cam_mode))
-    {
-        d_pos *= dude_speed;
-        dude->world_index += d_pos; 
-        game_state->camera.pos = dude->world_index;
-    }
-    else
-    {
-        d_pos *= camera_speed;
-        game_state->camera.pos += d_pos; 
-    }
-    dude->world_index.z = dude_z;
-    game_state->camera.pos.z = camera_z;
-
-    // NOTE(Fermin): This needs to happen after we update dude and camera position
-    if(new_input.left_mouse && !old_input.left_mouse)
-    {
-        // TODO(Fermin): Intrinsics.
-        // Store ortho somewhere and only update when screen size changes.
-        M4 ortho = orthogonal(game_state->window_width, game_state->window_height);
-        V4 cursor_pos_ndc = V4{new_input.cursor.x, new_input.cursor.y, 0.0, 1.0};
-        V4 cursor_pos_in_px = invert(&ortho) * cursor_pos_ndc;
-        f32 map_tile_size_in_px_with_perspective = safe_ratio_n(game_state->tile_size_in_px, (map_z - game_state->camera.pos.z + 1.0f), game_state->tile_size_in_px);
-        V2 cursor_pos_in_tiles = (cursor_pos_in_px).xy / map_tile_size_in_px_with_perspective;
-        V2 cursor_pos_in_world_index = cursor_pos_in_tiles + game_state->camera.pos.xy;
-
-        if(is_tile_index_valid(cursor_pos_in_world_index.x, cursor_pos_in_world_index.y, game_state->level_cols, game_state->level_rows))
-        {
-            // TODO(Fermin): This logic is broken, highligh is drawn on top of dude alwasys
-            game_state->editing_tile = 1;
-            game_state->editing_tile_x = (i32)cursor_pos_in_world_index.x;
-            game_state->editing_tile_y = (i32)cursor_pos_in_world_index.y;
-        }
-        else
-        {
-            game_state->editing_tile = 0;
-        }
-    }
-
     // NOTE(Fermin): Experimental particle system logic START
+	/*
     for(u32 particle_spawn_index = 0;
         particle_spawn_index < 1;
         ++particle_spawn_index)
@@ -746,96 +261,8 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
         part->texture_id = game_state->level_assets.wall_texture_id;
         part->color = color_trans;
     }
+	*/
     // NOTE(Fermin): Experimental particle system logic END
-    
-
-    if(game_state->editing_tile)
-    {
-        // NOTE(Fermin): We can avoid doing this if we use the z coord
-        Tile *highlight = push_struct(&game_state->world_arena, Tile);
-        highlight->world_index = V3{(f32)game_state->editing_tile_x, (f32)game_state->editing_tile_y, map_z};
-        highlight->dim_in_tiles = V2{1.0f, 1.0f};
-        highlight->texture_id = game_state->highlight_texture_id;
-		highlight->color = V4{0.0f, 1.0f, 0.0f, 1.0f};
-		highlight->rotation = 0.0f;
-    }
-
-
-	// NOTE(Fermin): Test flipbook logic
-	{
-		game_state->dude_flipbook_fps = 6;
-		game_state->dude_current_sprite_timer_in_seconds += dt_in_seconds;
-		f32 seconds_per_frame = 1.0f / (f32)game_state->dude_flipbook_fps;
-		if(game_state->dude_current_sprite_timer_in_seconds >= seconds_per_frame)
-		{
-			dude->texture_id = *(game_state->dude_animation_sprite_ids + game_state->dude_next_sprite_index);
-			game_state->dude_next_sprite_index = ++game_state->dude_next_sprite_index % game_state->dude_flipbook_size;
-			game_state->dude_current_sprite_timer_in_seconds = 0.0f;
-		}
-	}
-
-    dude->rotation += dt_in_seconds;
-	Tile *pushed_dude = push_struct(&game_state->world_arena, Tile);
-	*pushed_dude = *dude;
-	
-	// ------------------ DEBUG PRINTS ------------------
-	// TODO(Fermin): This is better but still needs to improve.
-	// Explore a macro/const/dest implementation?
-	debug_print_line = game_state->window_height;
-	print_debug_text(&game_state->ui_arena, "[f]   [ms]");
-	print_debug_text(&game_state->ui_arena, "%i  %.3f", round_f32_to_i32(1.0f/new_input.dt_in_seconds),
-											new_input.dt_in_seconds*1000.0f);
-
-	if(is_set(game_state, game_state_flag_prints))
-	{
-		if(game_state->editing_tile)
-		{
-			// NOTE(Fermin): Rethink how get_tile should be used, these parameters seem inconvenient
-			Tile *editing;
-			if(get_tile(&game_state->world_arena,
-			   game_state->level_cols,
-			   game_state->level_rows,
-			   game_state->editing_tile_x,
-			   game_state->editing_tile_y,
-			   &editing))
-			{
-				print_debug_text(&game_state->ui_arena, "selected tile:");
-				print_debug_text(&game_state->ui_arena, "   x: %i, y: %i", game_state->editing_tile_x, game_state->editing_tile_y);
-				print_debug_text(&game_state->ui_arena, "   texture_id: %i", editing->texture_id);
-			}
-		}
-
-		// --------------- Dude ---------------
-		print_debug_text(&game_state->ui_arena, "dude world_index:");
-		print_debug_text(&game_state->ui_arena, "   %.2f, %.2f", dude->world_index.x, dude->world_index.y);
-
-		// --------------- Game Memory ---------------
-		print_debug_text(&game_state->ui_arena, "game memory (b):");
-		print_debug_text(&game_state->ui_arena, "   size   %zu", game_memory->permanent_storage.size);
-
-		// --------------- World Arena ---------------
-		print_debug_arena(&game_state->ui_arena, "world arena (b):", &game_state->world_arena);
-
-		// --------------- Tmp Arena ---------------
-		print_debug_arena(&game_state->ui_arena, "tmp arena (b):", &game_state->tmp_arena);
-
-		// --------------- Audio Arena ---------------
-		print_debug_arena(&game_state->ui_arena, "audio arena (b):", &game_state->audio_state.arena);
-
-		// --------------- Render Buffer ---------------
-		print_debug_arena(&game_state->ui_arena, "render arena (b):", render_arena);
-
-		// --------------- UI Arena ---------------
-		print_debug_arena(&game_state->ui_arena, "ui arena (b):", &game_state->ui_arena);
-	}
-	// ------------------ DEBUG PRINTS ------------------
-
-	render_arena->used = render_arena->cached;
-	assert(render_arena->used == 0)
-
-	// TODO(Fermin): Can we combine these two since both render Tiles?
-	render_tiles(game_state, render_arena);
-	render_ui(game_state, render_arena);
 }
 
 extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)
