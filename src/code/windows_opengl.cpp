@@ -173,40 +173,6 @@ opengl_init_fbo(i32 window_width, i32 window_height)
 }
 
 
-inline void
-opengl_rectangle(V3 *corners, V4 pre_mul_color, u32 texture_id, V2 min_uv = {0, 0}, V2 max_uv = {1, 1})
-{
-    f32 z = corners[0].z;
-
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    //glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    glColor4f(pre_mul_color.r, pre_mul_color.g, pre_mul_color.b, pre_mul_color.a);
-
-    glBegin(GL_TRIANGLES);
-
-    // NOTE(Fermin): Lower triangle
-    glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex3f(corners[0].x, corners[0].y, z);
-
-    glTexCoord2f(max_uv.x, min_uv.y);
-    glVertex3f(corners[1].x, corners[1].y, z);
-
-    glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex3f(corners[2].x, corners[2].y, z);
-
-    // NOTE(Fermin): Upper triangle
-    glTexCoord2f(min_uv.x, min_uv.y);
-    glVertex3f(corners[0].x, corners[0].y, z);
-
-    glTexCoord2f(max_uv.x, max_uv.y);
-    glVertex3f(corners[2].x, corners[2].y, z);
-
-    glTexCoord2f(min_uv.x, max_uv.y);
-    glVertex3f(corners[3].x, corners[3].y, z);
-
-    glEnd();
-}
-
 static void //internal void *
 opengl_allocate_texture(u32 width, u32 height, void *data)
 {
@@ -292,51 +258,6 @@ opengl_load_texture(char *path, u32 *id, u32 format)
     u8 *data = buffer.data + sizeof(i32)*3;
 
     opengl_load_texture(data, width, height, id, format);
-}
-
-static void
-opengl_render(i32 window_width, i32 window_height, Memory_Arena* render_arena, GLuint buffer)
-{
-    time_function;
-
-    M4 ortho = {};
-    ortho = orthogonal((f32)window_width, (f32)window_height);
-
-	opengl.glBindFramebuffer(GL_FRAMEBUFFER, buffer);
-    glViewport(0, 0, window_width, window_height);
-	//glScissor(0, 0, window_width, window_height);
-
-    //opengl_allocate_texture(buffer.width, buffer.height, buffer.memory);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LEQUAL); // GL_LESS
-
-    glEnable(GL_TEXTURE_2D);
-    //glEnable(GL_SCISSOR_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-    glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
-    glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
-
-    opengl.glUseProgram(opengl.program);
-        
-    opengl.glUniform1i(opengl.texture_sampler_id, 0);
-
-    ortho.m[2].w = 1.0f; // Enables perspective divide by z
-    opengl.glUniformMatrix4fv(opengl.transform_id, 1, GL_FALSE, ortho.e);
-
-    Quad *quads = (Quad *)render_arena->base;
-	u32 quad_count = render_arena->used / sizeof(Quad);
-    for(u32 index = 0; index < quad_count; index++)
-    {
-        Quad *quad = quads + index;
-        opengl_rectangle(quad->corners, quad->color, quad->texture_id);
-    }
-
-    opengl.glUseProgram(0);
 }
 
 static void
@@ -450,7 +371,7 @@ static void // move to opengl
 opengl_draw_gpu_mesh(GPU_Mesh *mesh)
 {
 	opengl.glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, mesh->texture_handle); // TODO: textures
+	glBindTexture(GL_TEXTURE_2D, mesh->texture_handle);
 	
 	opengl.glBindVertexArray(mesh->vao);
 	glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, 0);

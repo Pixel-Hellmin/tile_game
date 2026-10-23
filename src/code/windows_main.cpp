@@ -12,7 +12,6 @@ global char** my_argv;
 global Cmd_Params cmd_params;
 
 // NOTE(Fermin): Start moving these globals to where they belong
-global Memory_Arena render_arena;
 global b32 win32_running;
 global f32 global_perf_count_frequency;
 global Win32_Offscreen_Buffer global_back_buffer;
@@ -351,23 +350,8 @@ win32_resize_DIB_section(i32 width, i32 height)
 }
 
 static void
-win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height, Memory_Arena *render_arena)
+win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_height)
 {
-
-#if 0 /* tile base rendering */
-	if(opengl.post_processing_enabled)
-	{
-		// renders to fbo before post-processing
-		opengl_render(window_width, window_height, render_arena, opengl.fbo);
-		opengl_post_process_and_render_to_screen(); // renders to screen through post-processing shader
-	}
-	else
-	{
-		// renders directly to screen
-		opengl_render(window_width, window_height, render_arena, 0);
-	}
-#endif
-
 	/* doom rendering */
 	{
 		/*
@@ -473,7 +457,7 @@ win32_main_window_callback(HWND window, UINT message, WPARAM w_param,
             PAINTSTRUCT paint;
             HDC device_context = BeginPaint(window, &paint);
             Win32_Window_Dimension dimension = win32_get_window_dimension(window);
-            win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_arena);
+            win32_display_buffer_in_window(device_context, dimension.width, dimension.height);
             EndPaint(window, &paint);
         } break;
 
@@ -783,7 +767,8 @@ static PLATFORM_UPLOAD_STATIC_MESH_TO_GPU(upload_static_mesh_to_gpu)
 	GPU_Mesh *pushed = push_struct(&debug_static_gpu_mesh_arena, GPU_Mesh);
 	debug_static_gpu_mesh_count++;
 	opengl_upload_static_mesh_to_gpu(pushed, mesh);
-	printf("platform API upload_static_mesh_to_gpu debug_static_gpu_mesh_arena used: %zi\n", debug_static_gpu_mesh_arena.used);
+	//printf("platform API upload_static_mesh_to_gpu debug_static_gpu_mesh_arena used: %zi\n",
+		//debug_static_gpu_mesh_arena.used);
 }
 
 static PLATFORM_CLEAR_STATIC_MESH_BUFFERS(clear_static_mesh_buffers)
@@ -793,7 +778,7 @@ static PLATFORM_CLEAR_STATIC_MESH_BUFFERS(clear_static_mesh_buffers)
 					 debug_static_gpu_mesh_arena.size,
 					 debug_static_gpu_mesh_arena.base);
 	debug_static_gpu_mesh_count = 0;
-	printf("platform API clear_static_mesh_buffers\n");
+	//printf("platform API clear_static_mesh_buffers\n");
 }
 
 static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
@@ -809,7 +794,7 @@ static PLATFORM_UPLOAD_TEXTURE_TO_GPU(upload_texture_to_gpu)
 	u32 result = 0;
 
 	result = (u32)opengl_upload_texture_to_gpu(rgba, width, height);
-	printf("platform API upload_texture_to_gpu id: %i\n", result);
+	//printf("platform API upload_texture_to_gpu id: %i\n", result);
 
 	return result;
 }
@@ -960,10 +945,6 @@ int main(int argc, char** argv)
 							 debug_static_gpu_mesh_buffer.size,
 							 debug_static_gpu_mesh_buffer.data);
 			debug_static_gpu_mesh_count = 0;
-
-            // NOTE(Fermin): Partition this into temporal(per frame) and persisten segments instead of using 'cached'
-            Buffer render_buffer = allocate_buffer(gigabytes(1));
-			initialize_arena(&render_arena, render_buffer.size, render_buffer.data);
             // NOTE(Fermin): Game things end
 
             u32 expected_frames_per_update = 1;
@@ -1007,7 +988,7 @@ int main(int argc, char** argv)
                 {
                     time_block("game.update_and_render");
 					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
-                    game.update_and_render(&game_memory, &render_arena, input);
+                    game.update_and_render(&game_memory, input);
                 }
 
 				// NOTE(Fermin): audio
@@ -1091,7 +1072,7 @@ int main(int argc, char** argv)
 				}
 
                 HDC device_context = GetDC(window);
-                win32_display_buffer_in_window(device_context, dimension.width, dimension.height, &render_arena);
+                win32_display_buffer_in_window(device_context, dimension.width, dimension.height);
 
 				*old_input = *new_input;
 

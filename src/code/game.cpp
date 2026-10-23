@@ -9,42 +9,26 @@ partition_memory(Game_State *game_state, Game_Memory *game_memory)
 {
 	size_t total_memory_partitioned = sizeof(Game_State);
 
-	initialize_arena(&game_state->world_arena, gigabytes(1),
+	initialize_arena(&game_state->level_arena, gigabytes(1),
 					 game_memory->permanent_storage.data + total_memory_partitioned);
-	total_memory_partitioned += game_state->world_arena.size;
+	total_memory_partitioned += game_state->level_arena.size;
 
-	initialize_arena(&game_state->ui_arena, gigabytes(1),
+	initialize_arena(&game_state->persistent_arena, gigabytes(1),
 					 game_memory->permanent_storage.data + total_memory_partitioned);
-	total_memory_partitioned += game_state->ui_arena.size;
-
-	initialize_arena(&game_state->flat_arena, gigabytes(1),
-					 game_memory->permanent_storage.data + total_memory_partitioned);
-	total_memory_partitioned += game_state->flat_arena.size;
+	total_memory_partitioned += game_state->persistent_arena.size;
 
 	initialize_arena(&game_state->audio_state.arena, (game_memory->permanent_storage.size - total_memory_partitioned),
 					 game_memory->permanent_storage.data + total_memory_partitioned);
 	total_memory_partitioned += game_state->audio_state.arena.size;
 
-	size_t total_memory_available = game_memory->permanent_storage.size;
-	assert(total_memory_partitioned == total_memory_available)
+	assert(total_memory_partitioned == game_memory->permanent_storage.size)
 }
 
 static void
 load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 {
-	/*
-	 * TODO:
-	 * - Use appropiate arenas
-	 * - Keep the stored the data we need; WAD, Sectors, Flats...
-	 * - Distinguish between map specific data (sectors...) and game data (wad, palette...)
-	 *
-	 * - Keep pointers to data in level_arena in a Loaded_Level struct?
-	 * - Zero out the level arena each load level?
-	 * - Delete static meshes in GPU each load level?
-	*/
-
 	Wad_File *wad                = &game_state->wad;
-	Memory_Arena *level_arena    = &game_state->flat_arena;
+	Memory_Arena *level_arena    = &game_state->level_arena;
 	Memory_Arena *scratch        = &game_state->tmp_arena;
 	Texture_Cache *texture_cache = &game_state->texture_cache;
 
@@ -123,13 +107,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 
 		initialize_audio_state(&game_state->audio_state);
 
-		// @Cleanup: Lets use the arena instead of Buffer?
 		Buffer wad_buffer = game_memory->platform_API.read_file_from_disk("..\\src\\misc\\assets\\DOOM.WAD");
-		game_state->wad = open_wad_from_memory(wad_buffer.data, &game_state->tmp_arena); // use proper arena
+		game_state->wad = open_wad_from_memory(wad_buffer.data, &game_state->persistent_arena);
 		init_texture_cache(game_state, &game_memory->platform_API);
 
 		/*
-		* Textures
 		* Keep the index texture, do the palette lookup in the shader instead of 
 		* uploading a decoded texture to opengl.
 		*/

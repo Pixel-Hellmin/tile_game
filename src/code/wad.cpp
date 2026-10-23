@@ -395,7 +395,6 @@ open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
 		result.lumps[i].file_pos = *(i32 *)(entry + 0);
 		result.lumps[i].size     = *(i32 *)(entry + 4);
 		copy_string(result.lumps[i].name, (char *)(entry + 8), 8);
-		//memcpy(result.lumps[i].name, entry + 8, 8);
 		result.lumps[i].name[8] = 0;
 	}
 	return result;
@@ -585,7 +584,7 @@ static void
 init_texture_cache(Game_State *game_state, Platform_API *platform_API)
 {
 	Wad_File *wad = &game_state->wad;
-	Memory_Arena *arena = &game_state->tmp_arena; // TODO(Fermin): Use right arena
+	Memory_Arena *arena = &game_state->persistent_arena;
 	Texture_Cache *cache = &game_state->texture_cache;
 
 	u32 fallback_texture = make_magenta_texture(platform_API);

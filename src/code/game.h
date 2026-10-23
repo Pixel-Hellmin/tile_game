@@ -53,9 +53,8 @@ struct Game_State
     Particle particles[64];
 
 	Memory_Arena tmp_arena;
-	Memory_Arena world_arena;
-	Memory_Arena ui_arena;
-	Memory_Arena flat_arena;
+	Memory_Arena level_arena;
+	Memory_Arena persistent_arena; // weird name
 
 	Loaded_Sound test_sound;
 	Playing_Sound *test_music;

@@ -56,13 +56,6 @@ struct Cmd_Params
 	b32 edge_balance;
 };
 
-struct Quad
-{
-	V3 corners[4];
-	V4 color;
-	i32 texture_id;
-};
-
 struct Input_Keys
 {
     b32 w;
@@ -190,7 +183,7 @@ struct Game_Memory
 	Cmd_Params *cmd_params;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Memory_Arena *render_arena, Input_Keys *input)
+#define GAME_UPDATE_AND_RENDER(name) void name(Game_Memory *game_memory, Input_Keys *input)
 typedef GAME_UPDATE_AND_RENDER(Game_Update_And_Render);
 GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
 {
