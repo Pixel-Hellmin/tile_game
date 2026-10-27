@@ -4,6 +4,8 @@
 #define ML_DONTPEGBOTTOM 0x0010
 #define MAX_TEXTURE_SIDE 1024
 
+#define NF_SUBSECTOR 0x8000
+
 struct RGB8
 {
 	u8 r, g, b;
@@ -99,6 +101,60 @@ struct Sector
 
     Mesh floor_mesh;
     Mesh ceiling_mesh;
+};
+
+struct Map_Thing
+{
+	i16 x;
+	i16 y;
+	i16 angle;    // degrees, 0 = east, 90 = north
+	i16 type;
+	i16 options;
+};
+
+struct BSP_Seg
+{
+	u16 v1;
+	u16 v2;
+	i16 angle;
+	Line_Def *line;
+	u8 side;      // 0 = front, 1 = back
+	i16 offset;
+};
+
+struct Subsector
+{
+	Sector *sector;
+	u16 seg_count;
+	u16 first_seg;
+};
+
+struct BSP_Node
+{
+	// partition line: a point plus a direction
+	i16 x;
+	i16 y;
+	i16 dx;
+	i16 dy;     
+
+	// per child: top, bottom, left, right 
+	i16 bbox[2][4];
+
+	// NF_SUBSECTOR set means the rest is a subsector index
+	// index 0 = right, index 1 = left
+	u16 children[2];
+};
+
+struct BSP_Map
+{
+	BSP_Seg *segs;
+	u32 seg_count;
+
+	Subsector *subsectors;
+	u32 subsector_count;
+
+	BSP_Node *nodes;
+	u32 node_count;
 };
 
 #define WAD_H

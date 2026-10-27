@@ -38,6 +38,11 @@ struct Loaded_Level
 
 	Line_Def *lines;
 	u32 line_count;
+
+	Map_Thing *things;
+	u32 things_count;
+
+	BSP_Map bsp;
 };
 
 struct Game_State

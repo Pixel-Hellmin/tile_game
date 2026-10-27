@@ -37,21 +37,21 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 
 	Tmp_Memory tmp_memory = begin_tmp_memory(scratch);
 
-	i32 map			  = find_lump(wad, level_name);		     assert(map >= 0);
-	i32 vertexes_lump = find_map_lump(wad, map, "VERTEXES"); assert(vertexes_lump >= 0);
-	i32 sectors_lump  = find_map_lump(wad, map, "SECTORS");  assert(sectors_lump  >= 0);
-	i32 sidedefs_lump = find_map_lump(wad, map, "SIDEDEFS"); assert(sidedefs_lump >= 0);
-	i32 linedefs_lump = find_map_lump(wad, map, "LINEDEFS"); assert(linedefs_lump >= 0);
 
 	/*
 	 * NOTE(Fermin): Load order matters and is fixed:
-	 *	Sectors -> Side_Defs -> Line_Defs
+	 *	Sectors -> Side_Defs -> Line_Defs -> BSP_Map
 	*/
-	u32 vertex_count, sector_count, side_count, line_count;
-	V2       *vertex_positions = load_vertexes(wad, vertexes_lump, &vertex_count, level_arena);
-	Sector   *sectors          = load_sectors(wad, sectors_lump, &sector_count, level_arena, texture_cache);
-	Side_Def *sides            = load_sidedefs(wad, sidedefs_lump, sectors, &side_count, level_arena, texture_cache);
-	Line_Def *lines            = load_linedefs(wad, linedefs_lump, sides, &line_count, level_arena);
+	i32 map = find_lump(wad, level_name);
+	assert(map >= 0);
+
+	u32 vertex_count, sector_count, side_count, line_count, things_count;
+	Map_Thing *things           = load_things(wad, map, &things_count, level_arena);
+	V2        *vertex_positions = load_vertexes(wad, map, &vertex_count, level_arena);
+	Sector    *sectors          = load_sectors(wad, map, &sector_count, level_arena, texture_cache);
+	Side_Def  *sides            = load_sidedefs(wad, map, sectors, &side_count, level_arena, texture_cache);
+	Line_Def  *lines            = load_linedefs(wad, map, sides, &line_count, level_arena);
+	BSP_Map    bsp              = load_bsp(wad, map, lines, line_count, level_arena);
 
 	group_lines_into_sectors(lines, line_count, sectors, sector_count, level_arena, scratch);
 	for(u32 i = 0; i < sector_count; ++i)
@@ -84,8 +84,63 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 	game_state->loaded_level.side_count       = side_count;
 	game_state->loaded_level.lines            = lines;
 	game_state->loaded_level.line_count       = line_count;
+	game_state->loaded_level.things           = things;
+	game_state->loaded_level.things_count     = things_count;
+	game_state->loaded_level.bsp			  = bsp;
 
 	end_tmp_memory(tmp_memory);
+	printf("load_level level_arena used: %zi(b)\n", level_arena->used);
+	printf("load_level persistent_arena used: %zi(b)\n", game_state->persistent_arena.used);
+}
+
+static b32
+find_player_start(Loaded_Level *level, Map_Thing *out)
+{
+	for(u32 i = 0; i < level->things_count; ++i)
+	{
+		if(level->things[i].type == 1)
+		{ 
+			*out = level->things[i];
+			return true;
+		}
+	}
+	return false;
+}
+
+static u32
+point_on_node_side(f32 x, f32 y, BSP_Node *node)
+{
+	/*
+	 * 0 = front (right of the partition direction),
+	 * 1 = back (left of the partition direction).
+	 * f64 because the products reach ~4.3e9. Same test as R_PointOnSide.
+	 * cross(a, b) > 0 when b is CCW from a
+	 * cross(a, b) < 0 when b is CW from a
+	*/
+	V2 point = {(x - node->x), (y - node->y)};
+	V2 partition = {(f32)node->dx, (f32)node->dy};
+	f64 cross = cross_f64(partition, point);
+
+	// TODO(Fermin): ties go to the left child(back) always for now. 
+	// Add special case branches for gameplay.
+	return (cross < 0) ? 0 : 1;
+}
+
+static Subsector *
+point_in_subsector(BSP_Map *bsp, f32 x, f32 y)
+{
+	if(bsp->node_count == 0) { return bsp->subsectors; } // single-subsector map
+	
+	//A map with 32768 or more nodes can’t be represented in vanilla’s format
+	assert(bsp->node_count - 1 < NF_SUBSECTOR);
+
+	u32 n = bsp->node_count - 1; // root is the last node
+	while(!(n & NF_SUBSECTOR))
+	{
+		BSP_Node *node = bsp->nodes + n;
+		n = node->children[point_on_node_side(x, y, node)];
+	}
+	return bsp->subsectors + (n & ~NF_SUBSECTOR);
 }
 
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
@@ -116,14 +171,16 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		* uploading a decoded texture to opengl.
 		*/
 		load_level("E1M9", &game_memory->platform_API, game_state);
+		Map_Thing spawn = {};
+		find_player_start(&game_state->loaded_level, &spawn);
+		f32 spawn_z = point_in_subsector(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
+		*game_memory->debug_player_pos = { (f32)spawn.x, (f32)spawn.y, spawn_z };
+		*game_memory->debug_player_angle = radians((f32)spawn.angle);
 
 		set_flag(game_state, game_state_flag_prints);
 
 		game_state->test_sound = DEBUG_load_WAV("..\\src\\misc\\assets\\sounds\\test_music.wav");
 		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
-
-		*game_memory->debug_player_pos = { 1544.0f, -3380.0f, 0.0f };
-		*game_memory->debug_player_angle = 1.5707963f;
 
         game_state->initialized = 1;
     }
@@ -136,6 +193,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     if(new_input.f1 && !old_input.f1)
     {
 		load_level("E1M1", &game_memory->platform_API, game_state);
+		Map_Thing spawn = {};
+		find_player_start(&game_state->loaded_level, &spawn);
+		f32 spawn_z = point_in_subsector(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
+		*game_memory->debug_player_pos = { (f32)spawn.x, (f32)spawn.y, spawn_z };
+		*game_memory->debug_player_angle = radians((f32)spawn.angle);
         toggle_flag(game_state, game_state_flag_prints);
     }
     if(new_input.f3 && !old_input.f3)

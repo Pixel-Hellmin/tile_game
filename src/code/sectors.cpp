@@ -1,13 +1,6 @@
 /*
 change file name
-
-1. Per-map loading and a map selector.
-
-Every loader (VERTEXES, SECTORS, SIDEDEFS, LINEDEFS, and later THINGS) goes through find_map_lump with a marker index.
-One load_map(marker) call tears down the old map’s meshes and builds the new one.
-The decision is how to free GPU meshes and arena memory when switching, so it needs a per-map arena and a
-list of GL buffers to delete.
-A key binding or command-line argument picks the map.
+3 Camera
 
 2. Spawn point and level camera.
 
@@ -205,6 +198,9 @@ turn_class(V2 in, V2 out)
 	 * Lower is preferred. Origin doesn't matter, cross and inner only use
 	 * a vector's direction and length, not its position. To visualize this
 	 * imagin both vectors origin in the same point.
+	 *
+	 * cross(a, b) > 0 when b is CCW from a
+	 * cross(a, b) < 0 when b is CW from a
 	*/
 
 	f64 cross_p = cross_f64(in, out);

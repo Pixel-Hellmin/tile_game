@@ -194,7 +194,7 @@ load_pnames(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 
 	i32 pnames_lump = find_last_lump_between(wad, "PNAMES", 0, wad->lump_count);
 	assert(pnames_lump >= 0);
-	u8 *pnames = wad->data + wad->lumps[pnames_lump].file_pos;
+	u8 *pnames = get_lump_data(wad, pnames_lump);
 
 	cache->patch_name_count = read_u32(pnames);
 	cache->patch_lumps = push_array(arena, cache->patch_name_count, i32);
@@ -245,7 +245,7 @@ load_texture_defs(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 	for(u32 t = 0; t < 2; ++t)
 	{
 		if(texture_lumps[t] < 0) { continue; }
-		cache->texture_count += read_u32(wad->data + wad->lumps[texture_lumps[t]].file_pos);
+		cache->texture_count += read_u32(get_lump_data(wad, texture_lumps[t]));
 	}
 
 	cache->defs = push_array(arena, cache->texture_count, Composite_Texture_Def);
@@ -257,7 +257,7 @@ load_texture_defs(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 
 		if(texture_lumps[l] < 0) { continue; }
 
-		u8 *lump_data  = wad->data + wad->lumps[texture_lumps[l]].file_pos;
+		u8 *lump_data  = get_lump_data(wad, texture_lumps[l]);
 		u32 numtextures = read_u32(lump_data);
 		i32 *offsets = (i32 *)(lump_data + 4);
 
@@ -313,7 +313,7 @@ composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memo
 			continue;
 		}
 
-		u8 *lump_data = wad->data + wad->lumps[patch_def->patch_lump].file_pos;
+		u8 *lump_data = get_lump_data(wad, patch_def->patch_lump);
 		Decoded_Patch patch = decode_patch(lump_data, palette, arena);
 
 		for(u32 y = 0; y < patch.height; ++y)
@@ -401,7 +401,7 @@ open_wad_from_memory(u8 *file_data, Memory_Arena *arena)
 }
 
 static V2 *
-load_vertexes(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
+load_vertexes(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena)
 {
 	/*
 	* Lump: VERTEXES
@@ -412,6 +412,9 @@ load_vertexes(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 	* 0		  2		i16	  x position
 	* 2		  2	    i16   y position
 	*/
+
+	i32 lump = find_map_lump(wad, map, "VERTEXES");
+	assert(lump >= 0);
 
 	u32 count = get_lump_size(wad, lump) / 4;
 	i16 *raw = (i16 *)get_lump_data(wad, lump);
@@ -427,7 +430,7 @@ load_vertexes(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena)
 }
 
 static Sector *
-load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena, Texture_Cache *cache)
+load_sectors(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena, Texture_Cache *cache)
 {
 	/*
 	* Lump: SECTORS
@@ -443,6 +446,9 @@ load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena, Textu
 	* 22	  2	    i16	   special type
 	* 24	  2	    i16	   tag number
 	*/
+
+	i32 lump = find_map_lump(wad, map, "SECTORS");
+	assert(lump >= 0);
 
 	u32 count = get_lump_size(wad, lump) / 26;
 	u8 *raw = get_lump_data(wad, lump);
@@ -466,7 +472,7 @@ load_sectors(Wad_File *wad, i32 lump, u32 *out_count, Memory_Arena *arena, Textu
 }
 
 static Side_Def *
-load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count,
+load_sidedefs(Wad_File *wad, i32 map, Sector *sectors, u32 *out_count,
 			  Memory_Arena *arena, Texture_Cache *cache)
 {
 	/*
@@ -482,6 +488,9 @@ load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count,
 	* 20	  8		i8[8]  name of middle texture
 	* 28	  2	    i16	   sector number this sidedef faces
 	*/
+
+	i32 lump = find_map_lump(wad, map, "SIDEDEFS");
+	assert(lump >= 0);
 
 	u32 count = get_lump_size(wad, lump) / 30;
 	u8 *raw = get_lump_data(wad, lump);
@@ -505,7 +514,7 @@ load_sidedefs(Wad_File *wad, i32 lump, Sector *sectors, u32 *out_count,
 }
 
 static Line_Def *
-load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_Arena *arena)
+load_linedefs(Wad_File *wad, i32 map, Side_Def *sides, u32 *out_count, Memory_Arena *arena)
 {
 	/*
 	* Lump: LINEDEFS
@@ -521,6 +530,9 @@ load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_A
 	* 10	  2	    i16	   sidenum[0]  front sidedef
 	* 12	  2	    i16	   sidenum[1]  back sidedef
 	*/
+
+	i32 lump = find_map_lump(wad, map, "LINEDEFS");
+	assert(lump >= 0);
 
 	u32 count = get_lump_size(wad, lump) / 14;
 	u8 *raw = get_lump_data(wad, lump);
@@ -554,6 +566,196 @@ load_linedefs(Wad_File *wad, i32 lump, Side_Def *sides, u32 *out_count, Memory_A
 	return lines;
 }
 
+static Map_Thing *
+load_things(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena)
+{
+	/*
+	* Lump: THINGS
+	* https://doomwiki.org/wiki/Thing#THINGS_lump
+	*
+	* Things represent players, monsters, pick-ups, and projectiles.
+	*
+	* offset  size  type   description
+	* 0		  2		i16	   x position
+	* 2		  2	    i16    y position
+	* 4       2     i16    angle facing
+	* 6       2     i16    DoomEd thing type
+	* 8 	  2		i16    flags
+	*/
+
+	i32 lump = find_map_lump(wad, map, "THINGS");
+	assert(lump >= 0);
+
+	u8 *data = get_lump_data(wad, lump);
+	u32 count = wad->lumps[lump].size / 10;
+	*out_count = count;
+
+	Map_Thing *things = push_array(arena, count, Map_Thing);
+	for(u32 i = 0; i < count; ++i)
+	{
+		u8 *e = data + i * 10;
+		things[i] = {
+			read_i16(e),
+			read_i16(e + 2),
+			read_i16(e + 4),
+			read_i16(e + 6),
+			read_i16(e + 8)
+		};
+	}
+
+	return things;
+}
+
+static void
+load_segs(Wad_File *wad, i32 map, Line_Def *lines, u32 line_count, BSP_Map *bsp, Memory_Arena *arena)
+{
+	/*
+	* Lump: SEGS
+	* https://doomwiki.org/wiki/Seg
+	*
+	* Segs are segments of linedefs, and describe the portion of a linedef
+	* that borders the subsector that the seg belongs to.
+	*
+	* offset  size  type   description
+	* 0		  2		i16	   starting vertix number
+	* 2		  2	    i16    ending vertex number
+	* 4       2     i16    angle, full circle is -32768 to 32767
+	* 6       2     i16    Linedef number
+	* 8 	  2		i16    direction: 0 (same as linedef) or 1 (opposite of linedef)
+	* 10 	  2		i16    offset: distance along linedef to start of seg
+	*/
+
+	i32 lump = find_map_lump(wad, map, "SEGS");
+	assert(lump >= 0);
+
+	u8 *data = get_lump_data(wad, lump);
+	bsp->seg_count = wad->lumps[lump].size / 12;
+	bsp->segs = push_array(arena, bsp->seg_count, BSP_Seg);
+
+	for(u32 i = 0; i < bsp->seg_count; ++i)
+	{
+		u8 *e = data + i * 12;
+		BSP_Seg *s = bsp->segs + i;
+
+		s->v1     = read_u16(e);
+		s->v2     = read_u16(e + 2);
+		s->angle  = read_i16(e + 4);
+
+		u16 line_index = read_u16(e + 6);
+		assert(line_index < line_count);
+		s->line = lines + line_index;
+
+		s->side   = (u8)read_i16(e + 8);
+		s->offset = read_i16(e + 10);
+	}
+}
+
+static void
+load_ssectors(Wad_File *wad, i32 map, BSP_Map *bsp, Memory_Arena *arena)
+{
+	/*
+	* Lump: SSECTORS
+	* https://doomwiki.org/wiki/Subsector
+	*
+	* A subsector is a range of seg (linedef segment) numbers.
+	* These segs form part (or all) of a single sector.
+	*
+	* offset  size  type   description
+	* 0		  2		i16	   seg count
+	* 2		  2	    i16    first seg number
+	*/
+
+	i32 lump = find_map_lump(wad, map, "SSECTORS");
+	assert(lump >= 0);
+
+	u8 *data = get_lump_data(wad, lump);
+	bsp->subsector_count = wad->lumps[lump].size / 4;
+	bsp->subsectors = push_array(arena, bsp->subsector_count, Subsector);
+
+	for(u32 i = 0; i < bsp->subsector_count; ++i)
+	{
+		u8 *e = data + i * 4;
+		Subsector *ss = bsp->subsectors + i;
+
+		ss->seg_count = read_u16(e);
+		ss->first_seg = read_u16(e + 2);
+		assert(ss->first_seg < bsp->seg_count);
+
+		BSP_Seg *seg = bsp->segs + ss->first_seg;
+		ss->sector = seg->side ? seg->line->back_sector : seg->line->front_sector;
+		assert(ss->sector);
+	}
+}
+
+static void
+load_nodes(Wad_File *wad, i32 map, BSP_Map *bsp, Memory_Arena *arena)
+{
+	/*
+	* Lump: NODES
+	* https://doomwiki.org/wiki/Node
+	*
+	* The nodes lump constitutes a binary space partition of the level.
+	* It is a binary tree that sorts all the subsectors into the correct order for drawing.
+	* Each child may be either another node or a subsector on the map.
+	*
+	* Each of the two bounding boxes describe a rectangle which is the area covered by
+	* each of the two child nodes respectively. A bounding box consists of four
+	* short values (top, bottom, left and right) giving the upper and lower bounds of
+	* the y coordinate and the lower and upper bounds of the x coordinate (in that order).
+	*
+	* The type of each child field is determined by its sign bit (bit 15).
+	* If bit 15 is zero, the child field gives the node number of a subnode.
+	* If bit 15 is set, then bits 0-14 give the number of a subsector.
+	*
+	* offset  size  type   description
+	* 0		  2		i16	   x coord of partition line start
+	* 2		  2	    i16    y coord of partition line start
+	* 4		  2		i16	   change in x from start to end of partition line
+	* 6		  2	    i16    change in y from start to end of partition line
+	* 8		  8		i16[4] right bounding box
+	* 16      8	    i16[4] left bounding box
+	* 24	  2		i16	   right child's node number or subsector
+	* 26	  2	    i16    left child's node number or subsector
+	*/
+
+	i32 lump = find_map_lump(wad, map, "NODES");
+	assert(lump >= 0);
+
+	u8 *data = get_lump_data(wad, lump);
+	bsp->node_count = wad->lumps[lump].size / 28;
+	bsp->nodes = push_array(arena, bsp->node_count, BSP_Node);
+	for(u32 i = 0; i < bsp->node_count; ++i)
+	{
+		u8 *e = data + i * 28;
+		BSP_Node *n = bsp->nodes + i;
+
+		n->x = read_i16(e);
+		n->y = read_i16(e + 2);
+		n->dx = read_i16(e + 4);
+		n->dy = read_i16(e + 6);
+
+		for(u32 b = 0; b < 8; ++b)
+		{ 
+			((i16 *)n->bbox)[b] = read_i16(e + 8 + b * 2);
+		}
+
+		n->children[0] = read_u16(e + 24);
+		n->children[1] = read_u16(e + 26);
+	}
+}
+
+static BSP_Map
+load_bsp(Wad_File *wad, i32 map, Line_Def *lines, u32 line_count, Memory_Arena *arena)
+{
+	BSP_Map bsp = {};
+
+	load_segs(wad, map, lines, line_count, &bsp, arena);
+	load_ssectors(wad, map, &bsp, arena);
+	load_nodes(wad, map, &bsp, arena);
+
+	return bsp;
+}
+
 static u32
 get_or_load_flat_id(Wad_File *wad, Texture_Cache *cache, u32 flat_number, Platform_API *platform_API)
 {
@@ -567,7 +769,7 @@ get_or_load_flat_id(Wad_File *wad, Texture_Cache *cache, u32 flat_number, Platfo
 	u32 *id = cache->flat_ids + flat_number;
 	if(*id) { return *id; }
 
-	u8 *src = wad->data + wad->lumps[cache->first_flat + flat_number].file_pos; // indices
+	u8 *src = get_lump_data(wad, cache->first_flat + flat_number); // indices
 	u32 rgba[64 * 64];
 	for(u32 p = 0; p < 64 * 64; ++p)
 	{
