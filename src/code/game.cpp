@@ -94,7 +94,7 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 }
 
 static b32
-find_player_start(Loaded_Level *level, Map_Thing *out)
+find_player_spawn(Loaded_Level *level, Map_Thing *out)
 {
 	for(u32 i = 0; i < level->things_count; ++i)
 	{
@@ -104,11 +104,13 @@ find_player_start(Loaded_Level *level, Map_Thing *out)
 			return true;
 		}
 	}
+
+	printf("no player start found\n");
 	return false;
 }
 
 static u32
-point_on_node_side(f32 x, f32 y, BSP_Node *node)
+node_child_from_point(BSP_Node *node, f32 x, f32 y)
 {
 	/*
 	 * 0 = front (right of the partition direction),
@@ -127,7 +129,7 @@ point_on_node_side(f32 x, f32 y, BSP_Node *node)
 }
 
 static Subsector *
-point_in_subsector(BSP_Map *bsp, f32 x, f32 y)
+subsector_from_point(BSP_Map *bsp, f32 x, f32 y)
 {
 	if(bsp->node_count == 0) { return bsp->subsectors; } // single-subsector map
 	
@@ -138,9 +140,86 @@ point_in_subsector(BSP_Map *bsp, f32 x, f32 y)
 	while(!(n & NF_SUBSECTOR))
 	{
 		BSP_Node *node = bsp->nodes + n;
-		n = node->children[point_on_node_side(x, y, node)];
+		n = node->children[node_child_from_point(node, x, y)];
 	}
 	return bsp->subsectors + (n & ~NF_SUBSECTOR);
+}
+
+static Camera
+camera_from_spawn(Map_Thing *spawn, f32 floor_z)
+{
+	Camera result = {};
+
+	result.pos = { (f32)spawn->x, (f32)spawn->y, floor_z + CAMERA_VIEW_HEIGHT };
+	result.yaw = radians((f32)spawn->angle); // thing angle is in degrees
+	result.pitch = 0.0f;
+
+	return result;
+}
+
+static M4
+camera_view_proj(Camera *cam, i32 window_width, i32 window_height)
+{
+	f32 aspect_ratio = (f32)window_width / (f32)window_height;
+	f32 cp = cosf(cam->pitch);
+	V3 forward = { cosf(cam->yaw) * cp, sinf(cam->yaw) * cp, sinf(cam->pitch) };
+	V3 target  = { cam->pos.x + forward.x, cam->pos.y + forward.y, cam->pos.z + forward.z };
+	V3 up      = { 0.0f, 0.0f, 1.0f };
+
+	M4 view = look_at(cam->pos, target, up);
+	M4 proj = perspective(radians(73.7f), aspect_ratio, 1.0f, 20000.0f);
+
+	return proj * view;
+}
+
+static void
+camera_update(Camera *cam, Camera_Input *in, f32 dt)
+{
+	// NOTE(Fermin): moving the mouse right turns clockwise, which lowers yaw.
+	cam->yaw   -= in->mouse_dx * CAMERA_MOUSE_SENS;
+	cam->pitch += in->mouse_dy * CAMERA_MOUSE_SENS;
+
+	if(cam->pitch >  CAMERA_MAX_PITCH) { cam->pitch =  CAMERA_MAX_PITCH; }
+	if(cam->pitch < -CAMERA_MAX_PITCH) { cam->pitch = -CAMERA_MAX_PITCH; }
+
+	// NOTE(Fermin): keep yaw in [-pi, pi] so it doesn't lose precision over long sessions.
+	if(cam->yaw >  Pi32) { cam->yaw -= 2.0f * Pi32; }
+	if(cam->yaw < -Pi32) { cam->yaw += 2.0f * Pi32; }
+
+	/*
+	* NOTE(Fermin): Walk on the horizontal part only so looking up doesn't slow you down.
+	* Rotating a 2D vector (x, y) by 90° counterclockwise gives (-y, x),
+	* and clockwise gives (y, -x).
+	*/
+
+	f32 forward_x = cosf(cam->yaw), forward_y = sinf(cam->yaw);
+	f32 right_x = forward_y,        right_y = -forward_x;   // forward rotated 90 degrees clockwise
+
+	f32 speed = CAMERA_BASE_SPEED * (in->boost ? CAMERA_BOOST_FACTOR : 1.0f) * dt;
+
+	// Moving in x and y combined is 1.41 the single direction speed.
+	// If we want diagonals to match normalize move_forward and move_right.
+	cam->pos.x += (forward_x * in->move_forward + right_x * in->move_right) * speed;
+	cam->pos.y += (forward_y * in->move_forward + right_y * in->move_right) * speed;
+	cam->pos.z += in->move_up * speed;
+}
+
+static Camera_Input
+get_camera_input(Input_Keys *input)
+{
+	Camera_Input result = {};
+
+	result.move_forward += input->w;
+	result.move_forward -= input->s;
+	result.move_right   += input->d;
+	result.move_right   -= input->a;
+	result.move_up      += input->space;
+	result.move_up      -= input->control;
+	result.boost         = input->shift;
+	result.mouse_dx      = input->cursor.x;
+	result.mouse_dy      = input->cursor.y;
+	
+	return result;
 }
 
 // NOTE(Fermin): extern "C" makes the compiler not mangle the function
@@ -170,12 +249,11 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
 		* Keep the index texture, do the palette lookup in the shader instead of 
 		* uploading a decoded texture to opengl.
 		*/
-		load_level("E1M9", &game_memory->platform_API, game_state);
+		load_level("E1M1", &game_memory->platform_API, game_state);
 		Map_Thing spawn = {};
-		find_player_start(&game_state->loaded_level, &spawn);
-		f32 spawn_z = point_in_subsector(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
-		*game_memory->debug_player_pos = { (f32)spawn.x, (f32)spawn.y, spawn_z };
-		*game_memory->debug_player_angle = radians((f32)spawn.angle);
+		find_player_spawn(&game_state->loaded_level, &spawn);
+		f32 spawn_z = subsector_from_point(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
+		game_state->camera = camera_from_spawn(&spawn, spawn_z);
 
 		set_flag(game_state, game_state_flag_prints);
 
@@ -192,55 +270,53 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     f32 dude_speed = 50.0 * dt_in_seconds;
     if(new_input.f1 && !old_input.f1)
     {
-		load_level("E1M1", &game_memory->platform_API, game_state);
+		load_level("E1M8", &game_memory->platform_API, game_state);
 		Map_Thing spawn = {};
-		find_player_start(&game_state->loaded_level, &spawn);
-		f32 spawn_z = point_in_subsector(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
-		*game_memory->debug_player_pos = { (f32)spawn.x, (f32)spawn.y, spawn_z };
-		*game_memory->debug_player_angle = radians((f32)spawn.angle);
+		find_player_spawn(&game_state->loaded_level, &spawn);
+		f32 spawn_z = subsector_from_point(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
+		game_state->camera = camera_from_spawn(&spawn, spawn_z);
+
         toggle_flag(game_state, game_state_flag_prints);
     }
     if(new_input.f3 && !old_input.f3)
     {
+		load_level("E1M9", &game_memory->platform_API, game_state);
+		Map_Thing spawn = {};
+		find_player_spawn(&game_state->loaded_level, &spawn);
+		f32 spawn_z = subsector_from_point(&game_state->loaded_level.bsp, (f32)spawn.x, (f32)spawn.y)->sector->floor_height;
+		game_state->camera = camera_from_spawn(&spawn, spawn_z);
+
         toggle_flag(game_state, game_state_flag_free_cam_mode);
 		game_state->test_music = play_sound(&game_state->audio_state, &game_state->test_sound);
     }
 
     if(new_input.w)
     {
-		game_memory->debug_player_pos->y += 3.0f * dude_speed;
 		change_volume(game_state->test_music, 2.0f, V2{1.0f, 1.0f});
     }
     if(new_input.s)
     {
-		game_memory->debug_player_pos->y += -3.0f * dude_speed;
 		change_volume(game_state->test_music, 2.0f, V2{0.0f, 0.0f});
     }
     if(new_input.a)
     {
-		game_memory->debug_player_pos->x += -3.0f * dude_speed;
 		change_volume(game_state->test_music, 5.0f, V2{1.0f, 0.0f});
     }
     if(new_input.d)
     {
-		game_memory->debug_player_pos->x += 3.0f * dude_speed;
 		change_volume(game_state->test_music, 5.0f, V2{0.0f, 1.0f});
     }
     if(new_input.q)
     {
-		*game_memory->debug_player_angle += 0.2f * dude_speed;
     }
     if(new_input.e)
     {
-		*game_memory->debug_player_angle += -0.2f * dude_speed;
     }
     if(new_input.space)
     {
-		game_memory->debug_player_pos->z += 3.0f * dude_speed;
     }
     if(new_input.shift)
     {
-		game_memory->debug_player_pos->z -= 3.0f * dude_speed;
     }
 
     // NOTE(Fermin): Experimental particle system logic START
@@ -307,6 +383,10 @@ extern "C" GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 	*/
     // NOTE(Fermin): Experimental particle system logic END
+
+	Camera_Input camera_input = get_camera_input(&new_input);
+	camera_update(&game_state->camera, &camera_input, dt_in_seconds);
+	*game_memory->view_proj = camera_view_proj(&game_state->camera, game_memory->window_width, game_memory->window_height);
 }
 
 extern "C" GAME_GET_SOUND_SAMPLES(game_get_sound_samples)

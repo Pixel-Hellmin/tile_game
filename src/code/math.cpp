@@ -585,7 +585,15 @@ static inline M4 m4_ident()
 
 static inline M4 perspective(f32 fov_radians, f32 aspect_ratio, f32 z_near, f32 z_far)
 {
-    // NOTE(Fermin): This is a row-major perspective matrix
+    /* 
+	* m[0]{ x y z w }
+	* m[1]{ x y z w }
+	* m[2]{ x y z w }
+	* m[3]{ x y z w }
+	*
+	* Column-vector convention (v' = P * V * v), stored row-major: m[i] is row i.
+	* Translation is in the last column (m[0].w, m[1].w, m[2].w).
+	*/
 
     M4 result = {};
 
@@ -727,18 +735,22 @@ M4 translate(V3 translation)
 
 static inline M4 look_at(V3 pos, V3 target, V3 up)
 {
-    // NOTE(Fermin): For the view matrix's coordinate system we want its z-axis
-	// to be positive and because by convention (in OpenGL) the camera
-	// points towards the negative z-axis we want to negate the direction vector.
-	// If we switch the subtraction order around we now get a
-	// vector pointing towards the camera's positive z-axis:
     V3 camera_direction = normalize(pos - target);
     V3 camera_right = normalize(cross(up, camera_direction));
     V3 camera_up = cross(camera_direction, camera_right);
 
     M4 result = {};
 
-    /* ROW MAJOR */
+    /* 
+	* m[0]{ x y z w }
+	* m[1]{ x y z w }
+	* m[2]{ x y z w }
+	* m[3]{ x y z w }
+	*
+	* Column-vector convention (v' = P * V * v), stored row-major: m[i] is row i.
+	* Translation is in the last column (m[0].w, m[1].w, m[2].w).
+	*/
+
     result.m[0].x = camera_right.x;
     result.m[0].y = camera_right.y;
     result.m[0].z = camera_right.z;

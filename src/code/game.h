@@ -9,6 +9,28 @@
 #include "audio.h"
 #include "wad.h"
 
+#define CAMERA_VIEW_HEIGHT   41.0f
+#define CAMERA_BASE_SPEED    300.0f   // units per second
+#define CAMERA_BOOST_FACTOR  4.0f
+#define CAMERA_MOUSE_SENS    0.0025f  // radians per pixel
+#define CAMERA_MAX_PITCH     (89.0f * Pi32 / 180.0f)
+
+struct Camera_Input
+{
+	f32 move_forward;   // -1..1 (S/W)
+	f32 move_right;     // -1..1 (A/D)
+	f32 move_up;        // -1..1 (Ctrl/Space)
+	f32 mouse_dx, mouse_dy;   // pixels this frame
+	b32 boost;          // Shift
+};
+
+struct Camera
+{
+	V3 pos;    // eye pos, DOOM units, z up
+	f32 yaw;   // radians
+	f32 pitch; // radians, clamped to +-89 degrees
+};
+
 enum Game_State_Debug_Flags
 {
     game_state_flag_prints = (1 << 1),
@@ -56,6 +78,8 @@ struct Game_State
     // NOTE(Fermin): Testing particle system stuff. Move this to where it makes sense
     u32 next_particle;
     Particle particles[64];
+
+	Camera camera;
 
 	Memory_Arena tmp_arena;
 	Memory_Arena level_arena;

@@ -18,8 +18,7 @@ global Win32_Offscreen_Buffer global_back_buffer;
 global LPDIRECTSOUNDBUFFER secondary_buffer;
 
 // temp for testing
-global V3 debug_player_pos;
-global f32 debug_player_angle;
+global M4 view_proj;
 global Memory_Arena debug_static_gpu_mesh_arena;
 global u32 debug_static_gpu_mesh_count;
 
@@ -354,29 +353,6 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 {
 	/* doom rendering */
 	{
-		/*
-		 * There is something very wrong with my matrices operations.
-		 * Check our convention and order of operations.
-		 *
-		 * Some of this code goes in opengl files
-		*/
-
-		f32 aspect_ratio = (f32)window_width / (f32)window_height;
-		M4 proj = perspective(radians(73.7f), aspect_ratio, 1.0f, 8192.0f);
-
-		f32 player_x = debug_player_pos.x;
-		f32 player_y = debug_player_pos.y;
-		f32 player_z = debug_player_pos.z;
-		f32 player_angle = debug_player_angle;
-		V3 eye_pos    = { player_x, player_y, player_z + 41.0f }; // NOTE(Fermin): DOOM's VIEWHEIGHT = 41 units above the floor
-		V3 forward    = { cosf(player_angle), sinf(player_angle), 0.0f };
-		V3 target     = { eye_pos.x + forward.x, eye_pos.y + forward.y, eye_pos.z };
-		V3 up         = { 0.0f, 0.0f, 1.0f }; // NOTE(Fermin): Z is up, matches build_flat_mesh's v3{p.x,p.y,z}
-		
-		M4 view = look_at(eye_pos, target, up);
-
-		M4 view_proj = proj * view;
-
 		opengl.glBindFramebuffer(GL_FRAMEBUFFER, 0); // render to screen
 		glViewport(0, 0, window_width, window_height);
 
@@ -384,7 +360,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
 
 		opengl.glUseProgram(opengl.program);
-		opengl.glUniformMatrix4fv(opengl.transform_id, 1, GL_TRUE, view_proj.e); // GL_TRUE?
+		opengl.glUniformMatrix4fv(opengl.transform_id, 1, GL_TRUE, view_proj.e);
 
 		if(cmd_params.edges)
 		{
@@ -620,6 +596,10 @@ win32_process_pending_messages(Input_Keys *new_input)
                     else if(vk_code == VK_SHIFT)
                     {
                         win32_process_keyboard_message(&new_input->shift, is_down);
+                    }
+                    else if(vk_code == VK_CONTROL)
+                    {
+                        win32_process_keyboard_message(&new_input->control, is_down);
                     }
                     else if(vk_code == VK_SPACE)
                     {
@@ -914,6 +894,12 @@ int main(int argc, char** argv)
 
             win32_running = 1;
 
+			// NOTE(Fermin): Set cursor on center of screen before we start game loop
+			Win32_Window_Dimension dimension = win32_get_window_dimension(window);
+			POINT center = { dimension.width/2, dimension.height/2 };
+			ClientToScreen(window, &center);
+			SetCursorPos(center.x, center.y);
+
             // NOTE(Fermin): Game things start
             Win32_Game_Code game = win32_load_game_code(src_game_code_dll_full_path,
 														tmp_game_code_dll_full_path);
@@ -935,8 +921,7 @@ int main(int argc, char** argv)
 
 			game_memory.cmd_params = &cmd_params;
 
-			game_memory.debug_player_pos = &debug_player_pos;
-			game_memory.debug_player_angle = &debug_player_angle;
+			game_memory.view_proj = &view_proj;
 			
             init_font(&game_memory.debug_font_consola, "..\\src\\misc\\assets\\consola.font");
 
@@ -967,7 +952,6 @@ int main(int argc, char** argv)
                     game_memory.debug_initialized = 0;
                 }
 
-                Win32_Window_Dimension dimension = win32_get_window_dimension(window);
                 game_memory.window_width = dimension.width;
                 game_memory.window_height = dimension.height;
                 win32_process_pending_messages(new_input);
@@ -978,16 +962,22 @@ int main(int argc, char** argv)
                 f32 mouse_y = (f32)(dimension.height  - mouse_p.y);
                 f32 mouse_x = (f32)mouse_p.x;
 
+				POINT center = { dimension.width/2, dimension.height/2 };
+				ClientToScreen(window, &center);
+                SetCursorPos(center.x, center.y);
+
                 // NOTE(Fermin): Map from screen coords to normalize device coords (-1, 1)
-                new_input->cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
-                new_input->cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
+                //new_input->cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;
+                //new_input->cursor.y = (mouse_y/dimension.height + (mouse_y - dimension.height)/dimension.height);
+				// NOTE(Fermin): Delta from center of window in pixels
+				new_input->cursor.x = mouse_x - round_f32_to_i32(((f32)dimension.width / 2.0f));
+				new_input->cursor.y = mouse_y - round_f32_to_i32(((f32)dimension.height / 2.0f));
 
                 win32_process_keyboard_message(&new_input->left_mouse, GetKeyState(VK_LBUTTON) & (1 << 15));
                 // SetCursor(0); // To disable cursor
                 
                 {
                     time_block("game.update_and_render");
-					// NOTE(Fermin): The goal is to pass here only game memory, input and render buffer
                     game.update_and_render(&game_memory, input);
                 }
 

@@ -66,6 +66,7 @@ struct Input_Keys
     b32 e;
     b32 space;
     b32 shift;
+    b32 control;
     b32 left_mouse;
     b32 f1;
     b32 f2;
@@ -174,10 +175,8 @@ struct Game_Memory
 
 	Font debug_font_consola;
 	b32 debug_initialized;
-	// NOTE(Fermin): We need these for opengl matrices.
-	// Should we compute these in the game? Pass down the data? API call?
-	V3 *debug_player_pos;
-	f32 *debug_player_angle;
+
+	M4 *view_proj; // I dont think this should be here
 
 	Platform_API platform_API;
 	Cmd_Params *cmd_params;

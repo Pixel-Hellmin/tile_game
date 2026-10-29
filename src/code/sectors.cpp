@@ -1,12 +1,5 @@
 /*
 change file name
-3 Camera
-
-2. Spawn point and level camera.
-
-Read THINGS type 1 for position and angle, and put a free-fly camera there so you can inspect the level.
-The eye height needs the floor under the spawn. A simple point-in-sector test is enough for now.
-The BSP lookup can wait for gameplay.
 
 3. Lighting. This is the biggest design decision, and it should come before animation.
 
