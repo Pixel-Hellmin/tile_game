@@ -149,6 +149,12 @@ struct Decoded_Patch
 #define PLATFORM_UPLOAD_TEXTURE_TO_GPU(name) u32 name(u32 *rgba, u32 width, u32 height)
 	typedef PLATFORM_UPLOAD_TEXTURE_TO_GPU(Platform_Upload_Texture_To_Gpu);
 
+#define PLATFORM_UPLOAD_PALETTE_TO_GPU(name) u32 name(u32 *rgba, u32 row_count)
+	typedef PLATFORM_UPLOAD_PALETTE_TO_GPU(Platform_Upload_Palette_To_Gpu);
+
+#define PLATFORM_UPLOAD_COLORMAP_TO_GPU(name) u32 name(u8 *maps, u32 map_count)
+	typedef PLATFORM_UPLOAD_COLORMAP_TO_GPU(Platform_Upload_Colormap_To_Gpu);
+
 #define PLATFORM_CLEAR_STATIC_MESH_BUFFERS(name) void name()
 	typedef PLATFORM_CLEAR_STATIC_MESH_BUFFERS(Platform_Clear_Static_Mesh_Buffers);
 
@@ -160,6 +166,8 @@ struct Platform_API
 	Platform_Upload_Static_Mesh_To_Gpu *upload_static_mesh_to_gpu;
 	Platform_Upload_Patch_To_Gpu *upload_patch_to_gpu;
 	Platform_Upload_Texture_To_Gpu *upload_texture_to_gpu;
+	Platform_Upload_Palette_To_Gpu *upload_palette_to_gpu;
+	Platform_Upload_Colormap_To_Gpu *upload_colormap_to_gpu;
 	Platform_Clear_Static_Mesh_Buffers *clear_static_mesh_buffers;
 	Platform_Read_File_From_Disk *read_file_from_disk;
 };

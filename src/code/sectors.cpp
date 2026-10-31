@@ -2,7 +2,6 @@
 change file name
 
 3. Lighting. This is the biggest design decision, and it should come before animation.
-
 Today the light level is baked into each mesh vertex. Sector specials such as flicker, strobe and glow change
 a sector’s light at runtime, so baking blocks them.
 I’d propose a per-sector light table, uploaded as a small texture or uniform buffer, with each vertex
@@ -11,6 +10,24 @@ Then comes the fake contrast, where walls aligned to the x or y axis get a ±1 l
 which is cheap once the table exists.
 Then distance dimming. It needs the palette shader (Option B) with COLORMAP,
 so we’d decide whether to switch to it here.
+
+plan:
+	1. Switch textures to palette indices and add the palette and COLORMAP lookup, with no distance falloff yet. The map should look like fullbright vanilla.
+		- (d)Load the 14 palettes and COLORMAP, and upload their textures.
+		- Change the upload path and the platform function to take indices.
+		- Change the flat and wall loaders to pass indices.
+		- Update the shader, and bind the three textures to separate units.
+		- Run the screenshot diff.
+	2. Add sector light through the table and the 16-level quantization.
+	3. Add wall contrast.
+	4. Add distance dimming, walls first and then flats.
+	5. Add the extralight and fixed-colormap uniforms, then palette switching.
+
+Load the 14 palettes and COLORMAP, and upload their textures.
+Change the upload path and the platform function to take indices.
+Change the flat and wall loaders to pass indices.
+Update the shader, and bind the three textures to separate units.
+Run the screenshot diff.
 
 4. Sky. Draw SKY1 mapped by view angle as a background, using the sky ceilings and the skipped upper walls as the mask.
 

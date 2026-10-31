@@ -32,6 +32,8 @@
 #define GL_STATIC_DRAW								  0x88E4
 #define GL_ELEMENT_ARRAY_BUFFER						  0x8893
 #define GL_CLAMP_TO_EDGE							  0x812F
+#define GL_R8UI										  0x8232
+#define GL_RED_INTEGER								  0x8D94
 
 #define opengl_binding(return, name, type, ...) \
 	typedef return name(__VA_ARGS__); \

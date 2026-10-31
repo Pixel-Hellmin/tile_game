@@ -108,6 +108,64 @@ load_playpal(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
     }
 }
 
+static void
+load_playpal_texture(Wad_File *wad, Texture_Cache *cache, Platform_API *platform_API)
+{
+	/*
+	* Parses PLAYPAL lump
+	* https://doomwiki.org/wiki/PLAYPAL
+	*
+	* Loads pallete of colors textures index into.
+	* N palettes of 256 * RGB (768 bytes each)
+	*
+	* We create one texture of all the palettes and upload this to the gpu.
+	*/
+
+	i32 lump = find_lump(wad, "PLAYPAL");
+	assert(lump >= 0);
+
+	cache->palette_count = wad->lumps[lump].size / 768;
+	assert(cache->palette_count > 0 && cache->palette_count <= 14);
+
+	u8 *pal = get_lump_data(wad, lump);
+
+	u32 rgba[256 * 14];
+	for(u32 i = 0; i < 256 * cache->palette_count; ++i)
+	{
+		// little endian; in mem its RGBA
+		u8 *c = pal + i * 3;
+		rgba[i] = 0xFF000000u | ((u32)c[2] << 16) | ((u32)c[1] << 8) | c[0]; 
+	}
+	cache->palette_id = platform_API->upload_palette_to_gpu(rgba, cache->palette_count);
+}
+
+static void
+load_colormap_texture(Wad_File *wad, Texture_Cache *cache, Platform_API *platform_API)
+{
+	/*
+	* Parses COLORMAP lump
+	* https://doomwiki.org/wiki/COLORMAP
+	*
+	* 34 maps that map colors decreasing in brightness within the PLAYPAL
+	* palette chosen at that time.
+	* No actual RGB values are defined - only the indexed location of the
+	* colors from the current PLAYPAL palette in use.
+	*
+	* We create one texture of all the colormaps and upload this to the gpu.
+	* N maps of 256 bytes.
+	*/
+	
+	i32 lump = find_lump(wad, "COLORMAP");
+	assert(lump >= 0);
+
+	cache->colormap_count = wad->lumps[lump].size / 256;
+	assert(cache->colormap_count >= 33);
+
+	u8 *maps = get_lump_data(wad, lump);
+
+	cache->colormap_id = platform_API->upload_colormap_to_gpu(maps, cache->colormap_count);
+}
+
 static Decoded_Patch
 decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
 {
@@ -773,7 +831,8 @@ get_or_load_flat_id(Wad_File *wad, Texture_Cache *cache, u32 flat_number, Platfo
 	u32 rgba[64 * 64];
 	for(u32 p = 0; p < 64 * 64; ++p)
 	{
-		u8 *c = (u8 *)cache->palette + src[p] * 3; // * 3 because palette is RGB8 *
+		// little endian; in mem its RGBA
+		u8 *c = (u8 *)cache->palette + src[p] * 3;
 		rgba[p] = 0xFF000000u | ((u32)c[2] << 16) | ((u32)c[1] << 8) | c[0];
 	}
 
@@ -802,6 +861,8 @@ init_texture_cache(Game_State *game_state, Platform_API *platform_API)
 	load_pnames(wad, cache, arena);
 	load_playpal(wad, cache, arena);
 	load_texture_defs(wad, cache, arena);
+	load_playpal_texture(wad, cache, platform_API);
+	load_colormap_texture(wad, cache, platform_API);
 
 	cache->textures[cache->texture_count] = { fallback_texture, 64, 64 };
 }

@@ -367,6 +367,46 @@ opengl_upload_texture_to_gpu(u32 *rgba, u32 width, u32 height)
 	return id;
 }
 
+static GLuint
+opengl_upload_palette_to_gpu(u32 *rgba, u32 row_count)
+{
+	GLuint id;
+	glGenTextures(1, &id);
+	glBindTexture(GL_TEXTURE_2D, id);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // global pixel-store state; “rows are tightly packed”, no padding
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, (GLsizei)row_count, 0,
+			  GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+
+	return id;
+}
+
+static GLuint
+opengl_upload_colormap_to_gpu(u8 *maps, u32 map_count)
+{
+	GLuint id;
+	glGenTextures(1, &id);
+	glBindTexture(GL_TEXTURE_2D, id);
+
+	// NOTE(Fermin): integer textures can't be filtered. With GL_LINEAR the texture is
+	// incomplete and samples as zero, so NEAREST is required, not just preferred.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // global pixel-store state; “rows are tightly packed”, no padding
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, (GLsizei)map_count, 0,
+			  GL_RED_INTEGER, GL_UNSIGNED_BYTE, maps);
+
+	return id;
+}
+
 static void // move to opengl
 opengl_draw_gpu_mesh(GPU_Mesh *mesh)
 {

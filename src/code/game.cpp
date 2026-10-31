@@ -37,7 +37,6 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 
 	Tmp_Memory tmp_memory = begin_tmp_memory(scratch);
 
-
 	/*
 	 * NOTE(Fermin): Load order matters and is fixed:
 	 *	Sectors -> Side_Defs -> Line_Defs -> BSP_Map

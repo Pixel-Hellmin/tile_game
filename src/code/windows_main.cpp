@@ -779,6 +779,23 @@ static PLATFORM_UPLOAD_TEXTURE_TO_GPU(upload_texture_to_gpu)
 	return result;
 }
 
+static PLATFORM_UPLOAD_PALETTE_TO_GPU(upload_palette_to_gpu)
+{
+	u32 result = 0;
+
+	result = (u32)opengl_upload_palette_to_gpu(rgba, row_count);
+
+	return result;
+}
+
+static PLATFORM_UPLOAD_COLORMAP_TO_GPU(upload_colormap_to_gpu)
+{
+	u32 result = 0;
+
+	result = (u32)opengl_upload_colormap_to_gpu(maps, map_count);
+
+	return result;
+}
 
 static PLATFORM_READ_FILE_FROM_DISK(read_file_from_disk)
 {
@@ -916,6 +933,8 @@ int main(int argc, char** argv)
 			game_memory.platform_API.upload_static_mesh_to_gpu = upload_static_mesh_to_gpu;
 			game_memory.platform_API.upload_patch_to_gpu = upload_patch_to_gpu;
 			game_memory.platform_API.upload_texture_to_gpu = upload_texture_to_gpu;
+			game_memory.platform_API.upload_palette_to_gpu = upload_palette_to_gpu;
+			game_memory.platform_API.upload_colormap_to_gpu = upload_colormap_to_gpu;
 			game_memory.platform_API.clear_static_mesh_buffers = clear_static_mesh_buffers;
 			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
 
@@ -956,15 +975,26 @@ int main(int argc, char** argv)
                 game_memory.window_height = dimension.height;
                 win32_process_pending_messages(new_input);
 
-                POINT mouse_p;
-                GetCursorPos(&mouse_p);
-                ScreenToClient(window, &mouse_p);
-                f32 mouse_y = (f32)(dimension.height  - mouse_p.y);
-                f32 mouse_x = (f32)mouse_p.x;
 
-				POINT center = { dimension.width/2, dimension.height/2 };
-				ClientToScreen(window, &center);
-                SetCursorPos(center.x, center.y);
+				f32 mouse_y = round_f32_to_i32(((f32)dimension.height / 2.0f));
+				f32 mouse_x = round_f32_to_i32(((f32)dimension.width / 2.0f));
+				if(GetForegroundWindow() == window)
+				{
+					POINT mouse_p;
+					GetCursorPos(&mouse_p);
+					ScreenToClient(window, &mouse_p);
+					mouse_y = (f32)(dimension.height  - mouse_p.y);
+					mouse_x = (f32)mouse_p.x;
+
+					POINT center = { dimension.width/2, dimension.height/2 };
+					ClientToScreen(window, &center);
+					SetCursorPos(center.x, center.y);
+					ShowCursor(FALSE);
+				}
+				else
+				{
+					ShowCursor(TRUE);
+				}
 
                 // NOTE(Fermin): Map from screen coords to normalize device coords (-1, 1)
                 //new_input->cursor.x = mouse_x/dimension.width + (mouse_x - dimension.width)/dimension.width;

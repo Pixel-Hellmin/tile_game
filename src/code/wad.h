@@ -59,6 +59,11 @@ struct Texture_Cache
 
 	u32 patch_name_count;
 	i32 *patch_lumps; // PNAMES index -> lump index
+	
+	u32 palette_id; // 256 x palette_count RGBA8, row = PLAYPAL palette
+	u32 palette_count;
+	u32 colormap_id; // 256 x colormap_count R8UI, row = COLORMAP map
+	u32 colormap_count;
 };
 
 struct Wad_File
