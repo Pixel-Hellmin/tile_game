@@ -28,12 +28,16 @@
 #define GL_DEPTH_ATTACHMENT							  0x8D00
 #define GL_FRAMEBUFFER_COMPLETE						  0x8CD5
 #define GL_TEXTURE0									  0x84C0
+#define GL_TEXTURE1									  0x84C1
+#define GL_TEXTURE2									  0x84C2
 #define GL_ARRAY_BUFFER								  0x8892
 #define GL_STATIC_DRAW								  0x88E4
 #define GL_ELEMENT_ARRAY_BUFFER						  0x8893
 #define GL_CLAMP_TO_EDGE							  0x812F
 #define GL_R8UI										  0x8232
 #define GL_RED_INTEGER								  0x8D94
+#define GL_RG8UI									  0x8238
+#define GL_RG_INTEGER								  0x8228
 
 #define opengl_binding(return, name, type, ...) \
 	typedef return name(__VA_ARGS__); \
@@ -84,7 +88,11 @@ typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
 struct Opengl {
     GLuint program;
     GLuint transform_id;
-    GLuint texture_sampler_id;
+    GLuint u_texture_loc;
+    GLuint u_palette_loc;
+    GLuint u_colormap_loc;
+    GLuint u_colormap_row_loc;
+    GLuint u_palette_row_loc;
     GLuint default_internal_texture_format;
 	GLuint fbo;
 	GLuint fbo_texture;

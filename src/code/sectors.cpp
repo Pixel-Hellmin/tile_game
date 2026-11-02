@@ -12,11 +12,11 @@ Then distance dimming. It needs the palette shader (Option B) with COLORMAP,
 so we’d decide whether to switch to it here.
 
 plan:
-	1. Switch textures to palette indices and add the palette and COLORMAP lookup, with no distance falloff yet. The map should look like fullbright vanilla.
+	1.(d) Switch textures to palette indices and add the palette and COLORMAP lookup, with no distance falloff yet. The map should look like fullbright vanilla.
 		- (d)Load the 14 palettes and COLORMAP, and upload their textures.
-		- Change the upload path and the platform function to take indices.
-		- Change the flat and wall loaders to pass indices.
-		- Update the shader, and bind the three textures to separate units.
+		- (d)Change the upload path and the platform function to take indices.
+		- (d)Change the flat and wall loaders to pass indices.
+		- (d)Update the shader, and bind the three textures to separate units.
 		- Run the screenshot diff.
 	2. Add sector light through the table and the 16-level quantization.
 	3. Add wall contrast.

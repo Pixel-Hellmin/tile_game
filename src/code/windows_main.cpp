@@ -19,6 +19,8 @@ global LPDIRECTSOUNDBUFFER secondary_buffer;
 
 // temp for testing
 global M4 view_proj;
+global u32 palette_id;
+global u32 colormap_id;
 global Memory_Arena debug_static_gpu_mesh_arena;
 global u32 debug_static_gpu_mesh_count;
 
@@ -368,7 +370,15 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 			glLineWidth(2.0f); 
 		}
 
-		opengl.glUniform1i(opengl.texture_sampler_id, 0);
+		opengl.glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, palette_id);
+		opengl.glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, colormap_id);
+		opengl.glActiveTexture(GL_TEXTURE0);
+
+		opengl.glUniform1i(opengl.u_texture_loc, 0);
+		opengl.glUniform1i(opengl.u_palette_loc, 1);
+		opengl.glUniform1i(opengl.u_colormap_loc, 2);
+		opengl.glUniform1i(opengl.u_colormap_row_loc, 0);
+		opengl.glUniform1i(opengl.u_palette_row_loc, 0);
 
 		for(u32 i = 0; i < debug_static_gpu_mesh_count; i++)
 		{
@@ -765,7 +775,7 @@ static PLATFORM_UPLOAD_PATCH_TO_GPU(upload_patch_to_gpu)
 {
 	// NOTE(Fermin): We dont use this. DELETE?
 	// TODO: Return texture handle
-	opengl_upload_patch_to_gpu(patch);
+	//opengl_upload_patch_to_gpu(patch);
 	printf("platform API upload_patch_to_gpu\n");
 }
 
@@ -773,7 +783,7 @@ static PLATFORM_UPLOAD_TEXTURE_TO_GPU(upload_texture_to_gpu)
 {
 	u32 result = 0;
 
-	result = (u32)opengl_upload_texture_to_gpu(rgba, width, height);
+	result = (u32)opengl_upload_texture_to_gpu(pixels, width, height);
 	//printf("platform API upload_texture_to_gpu id: %i\n", result);
 
 	return result;
@@ -785,6 +795,7 @@ static PLATFORM_UPLOAD_PALETTE_TO_GPU(upload_palette_to_gpu)
 
 	result = (u32)opengl_upload_palette_to_gpu(rgba, row_count);
 
+	palette_id = result;
 	return result;
 }
 
@@ -794,6 +805,7 @@ static PLATFORM_UPLOAD_COLORMAP_TO_GPU(upload_colormap_to_gpu)
 
 	result = (u32)opengl_upload_colormap_to_gpu(maps, map_count);
 
+	colormap_id = result;
 	return result;
 }
 

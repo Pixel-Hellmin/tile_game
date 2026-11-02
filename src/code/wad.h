@@ -41,8 +41,6 @@ struct Lump_Info
 
 struct Texture_Cache
 {
-	RGB8 *palette;
-
 	// NOTE(Fermin): flat number = lump index - first_flat.
 	// Entry [flat_count] is the missing-flat fallback.
 	i32 first_flat;

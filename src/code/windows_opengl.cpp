@@ -128,10 +128,12 @@ opengl_init(Opengl_Info info)
 #include "shaders.h"
 
     opengl.program = opengl_create_program(defines, header_code, doom_vertex_code, doom_fragment_code);
-    //opengl.transform_id = opengl.glGetUniformLocation(opengl.program, "transform");
-    //opengl.texture_sampler_id = opengl.glGetUniformLocation(opengl.program, "texture_sampler");
     opengl.transform_id = opengl.glGetUniformLocation(opengl.program, "u_view_proj");
-    opengl.texture_sampler_id = opengl.glGetUniformLocation(opengl.program, "u_flat_texture");
+    opengl.u_texture_loc = opengl.glGetUniformLocation(opengl.program, "u_texture");
+    opengl.u_palette_loc = opengl.glGetUniformLocation(opengl.program, "u_palette");
+    opengl.u_colormap_loc = opengl.glGetUniformLocation(opengl.program, "u_colormap");
+    opengl.u_colormap_row_loc = opengl.glGetUniformLocation(opengl.program, "u_colormap_row");
+    opengl.u_palette_row_loc = opengl.glGetUniformLocation(opengl.program, "u_palette_row");
 
 	/* This is broken since we are using glsl version 330 instead of 130
 	opengl.filter_program = opengl_create_program(defines, header_code, filter_vertex_code, filter_fragment_code);
@@ -286,6 +288,7 @@ opengl_post_process_and_render_to_screen()
 	glEnable(GL_BLEND);
 }
 
+/*
 static GLuint
 opengl_upload_patch_to_gpu(Decoded_Patch *patch)
 {
@@ -297,9 +300,10 @@ opengl_upload_patch_to_gpu(Decoded_Patch *patch)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // patches don't tile like flats/walls do
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, patch->width, patch->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, patch->rgba);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, patch->width, patch->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, patch->pixels);
 	return texture;
 }
+*/
 
 static void
 opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
@@ -350,19 +354,22 @@ opengl_clear_static_mesh_buffers(Memory_Arena *arena, u32 count)
 }
 
 static GLuint
-opengl_upload_texture_to_gpu(u32 *rgba, u32 width, u32 height)
+opengl_upload_texture_to_gpu(u8 *pixels, u32 width, u32 height)
 {
 	GLuint id;
+	opengl.glActiveTexture(GL_TEXTURE0); // NOTE(Fermin): uploads must not clobber the palette/colormap units
 	glGenTextures(1, &id);  
     glBindTexture(GL_TEXTURE_2D, id);  
 
+	// NOTE(Fermin): integer textures can't be filtered; NEAREST is required. REPEAT still works.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, opengl.default_internal_texture_format,
-			  width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8UI, (GLsizei)width, (GLsizei)height,
+			  0, GL_RG_INTEGER, GL_UNSIGNED_BYTE, pixels);
 
 	return id;
 }
@@ -371,6 +378,7 @@ static GLuint
 opengl_upload_palette_to_gpu(u32 *rgba, u32 row_count)
 {
 	GLuint id;
+	opengl.glActiveTexture(GL_TEXTURE0); // NOTE(Fermin): uploads must not clobber the palette/colormap units
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 
@@ -390,6 +398,7 @@ static GLuint
 opengl_upload_colormap_to_gpu(u8 *maps, u32 map_count)
 {
 	GLuint id;
+	opengl.glActiveTexture(GL_TEXTURE0); // NOTE(Fermin): uploads must not clobber the palette/colormap units
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 

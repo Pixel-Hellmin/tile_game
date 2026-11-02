@@ -56,17 +56,24 @@ char *doom_fragment_code = R"FOO(
 	in vec2 v_uv;
 	in float v_light;
 
-	uniform sampler2D u_flat_texture;
+	uniform usampler2D u_texture;  // unit 0: RG8UI (index, coverage)
+	uniform sampler2D u_palette;   // unit 1: 256 x 14 RGBA8
+	uniform usampler2D u_colormap; // unit 2: 256 x 34 R8UI
+	uniform int u_colormap_row;
+	uniform int u_palette_row;
 
 	out vec4 out_color;
 
 	void main()
 	{
-		vec4 tex_color = texture(u_flat_texture, v_uv);
+		uvec2 t = texture(u_texture, v_uv).rg;
 		// NOTE(Fermin): binary transparency, like vanilla.
 		// This disables or weakens early-z testing for all fragments
-		if(tex_color.a < 0.5) { discard; }
-		out_color = vec4(tex_color.rgb * v_light, tex_color.a);
+		if(t.g == 0u) { discard; }   // coverage
+
+		uint index = texelFetch(u_colormap, ivec2(int(t.r), u_colormap_row), 0).r;
+		vec3 rgb   = texelFetch(u_palette,  ivec2(int(index), u_palette_row), 0).rgb;
+		out_color  = vec4(rgb, 1.0);
 	}
 )FOO";
 

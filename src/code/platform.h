@@ -132,7 +132,7 @@ struct Decoded_Patch
 	 *
 	*/
 
-	u8 *rgba;    // RGBA8, width*height*4 bytes
+	u8 *pixels; // width*height*2 bytes. Palette index and alpha.
 	u32 width, height;
 	i32 left_offset, top_offset;
 };
@@ -146,7 +146,7 @@ struct Decoded_Patch
 #define PLATFORM_UPLOAD_PATCH_TO_GPU(name) void name(Decoded_Patch *patch)
 	typedef PLATFORM_UPLOAD_PATCH_TO_GPU(Platform_Upload_Patch_To_Gpu);
 
-#define PLATFORM_UPLOAD_TEXTURE_TO_GPU(name) u32 name(u32 *rgba, u32 width, u32 height)
+#define PLATFORM_UPLOAD_TEXTURE_TO_GPU(name) u32 name(u8 *pixels, u32 width, u32 height)
 	typedef PLATFORM_UPLOAD_TEXTURE_TO_GPU(Platform_Upload_Texture_To_Gpu);
 
 #define PLATFORM_UPLOAD_PALETTE_TO_GPU(name) u32 name(u32 *rgba, u32 row_count)

@@ -1,8 +1,12 @@
 static u32
 make_magenta_texture(Platform_API *platform_API)
 {
-	u32 pixels[64 * 64];
-	for(u32 i = 0; i < 64 * 64; ++i) { pixels[i] = 0xFFFF00FFu; }
+	u8 pixels[64 * 64 * 2];
+	for(u32 i = 0; i < 64 * 64; ++i)
+	{ 
+		pixels[i+0] = 251; // palette index for magenta color
+		pixels[i+1] = 255;
+	}
 	return platform_API->upload_texture_to_gpu(pixels, 64, 64);
 }
 
@@ -84,31 +88,6 @@ get_lump_size(Wad_File *wad, i32 idx)
 }
 
 static void
-load_playpal(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
-{
-	/*
-	* Parses PLAYPAL lump
-	* https://doomwiki.org/wiki/PLAYPAL
-	*
-	* Loads pallete of colors textures index into.
-	*/
-
-	i32 lump = find_lump(wad, "PLAYPAL");
-	assert(lump  >= 0);
-
-	u8 *raw = (u8 *)get_lump_data(wad, lump);
-
-	// NOTE(Fermin): Loading palette 0 only
-    cache->palette = push_array(arena, 256, RGB8);
-    for(u32 i = 0; i < 256; ++i)
-    {
-        cache->palette[i].r = raw[i*3 + 0];
-        cache->palette[i].g = raw[i*3 + 1];
-        cache->palette[i].b = raw[i*3 + 2];
-    }
-}
-
-static void
 load_playpal_texture(Wad_File *wad, Texture_Cache *cache, Platform_API *platform_API)
 {
 	/*
@@ -167,7 +146,7 @@ load_colormap_texture(Wad_File *wad, Texture_Cache *cache, Platform_API *platfor
 }
 
 static Decoded_Patch
-decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
+decode_patch(u8 *lump_data, Memory_Arena *arena)
 {
 	/*
 	 * Decoding a single patch lump or graphic stored in picture format
@@ -204,7 +183,7 @@ decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
 	result.top_offset  = header[3];
 
 	u32 pixel_count = result.width * result.height;
-	result.rgba = push_array(arena, pixel_count * 4, u8); // push_array zero-inits -> alpha=0 (transparent) everywhere by default
+	result.pixels = push_array(arena, pixel_count * 2, u8); // push_array zero-inits -> alpha=0 (transparent) everywhere by default
 
 	i32 *column_offsets = (i32 *)(lump_data + 8); // 4 x i16
 
@@ -225,12 +204,9 @@ decode_patch(u8 *lump_data, RGB8 *palette, Memory_Arena *arena)
 			for(u8 y = 0; y < length; ++y)
 			{
 				u32 dest_y = top_delta + y;
-				u32 dest = (dest_y * result.width + x) * 4;
-				RGB8 c = palette[pixel_indices[y]];
-				result.rgba[dest+0] = c.r;
-				result.rgba[dest+1] = c.g;
-				result.rgba[dest+2] = c.b;
-				result.rgba[dest+3] = 255;
+				u32 dest = (dest_y * result.width + x) * 2;
+				result.pixels[dest+0] = pixel_indices[y];
+				result.pixels[dest+1] = 255;
 			}
 		}
 	}
@@ -353,14 +329,14 @@ load_texture_defs(Wad_File *wad, Texture_Cache *cache, Memory_Arena *arena)
 }
 
 static Decoded_Patch
-composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memory_Arena *arena)
+composite_texture(Wad_File* wad, Composite_Texture_Def *def, Memory_Arena *arena)
 {
 	Decoded_Patch result = {};
 	result.width = def->width;
 	result.height = def->height;
 
 	u32 pixel_count = result.width * result.height;
-	result.rgba = push_array(arena, pixel_count * 4, u8); // zero-init -> fully transparent base
+	result.pixels = push_array(arena, pixel_count * 2, u8); // zero-init -> fully transparent base
 
 	for(u32 i = 0; i < def->patch_count; ++i)
 	{
@@ -372,7 +348,7 @@ composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memo
 		}
 
 		u8 *lump_data = get_lump_data(wad, patch_def->patch_lump);
-		Decoded_Patch patch = decode_patch(lump_data, palette, arena);
+		Decoded_Patch patch = decode_patch(lump_data, arena);
 
 		for(u32 y = 0; y < patch.height; ++y)
 		{
@@ -384,14 +360,12 @@ composite_texture(Wad_File* wad, Composite_Texture_Def *def, RGB8 *palette, Memo
 				i32 dest_x = patch_def->origin_x + x;
 				if(dest_x < 0 || (u32)dest_x >= result.width) { continue; }
 
-				u32 src = (y * patch.width + x) * 4;
-				if(patch.rgba[src + 3] == 0) { continue; } // alpha; transparent source pixel -- don't stamp, preserve whatever's underneath
+				u32 src = (y * patch.width + x) * 2;
+				if(patch.pixels[src + 1] == 0) { continue; } // alpha; transparent source pixel -- don't stamp, preserve whatever's underneath
 
-				u32 dst = ((u32)dest_y * result.width + (u32)dest_x) * 4;
-				result.rgba[dst+0] = patch.rgba[src+0];
-				result.rgba[dst+1] = patch.rgba[src+1];
-				result.rgba[dst+2] = patch.rgba[src+2];
-				result.rgba[dst+3] = 255;
+				u32 dst = ((u32)dest_y * result.width + (u32)dest_x) * 2;
+				result.pixels[dst+0] = patch.pixels[src+0];
+				result.pixels[dst+1] = 255;
 			}
 		}
 	}
@@ -407,8 +381,8 @@ get_or_load_wall_texture(Wad_File *wad, Texture_Cache *cache, u32 number, Platfo
 
 	Composite_Texture_Def *def = cache->defs + number;
 	assert(def->width <= MAX_TEXTURE_SIDE && def->height <= MAX_TEXTURE_SIDE);
-	Decoded_Patch composited = composite_texture(wad, def, cache->palette, tmp_arena);
-	tex->id = platform_API->upload_texture_to_gpu((u32 *)composited.rgba, composited.width, composited.height);
+	Decoded_Patch composited = composite_texture(wad, def, tmp_arena);
+	tex->id = platform_API->upload_texture_to_gpu(composited.pixels, composited.width, composited.height);
 
 	return tex;
 }
@@ -828,15 +802,14 @@ get_or_load_flat_id(Wad_File *wad, Texture_Cache *cache, u32 flat_number, Platfo
 	if(*id) { return *id; }
 
 	u8 *src = get_lump_data(wad, cache->first_flat + flat_number); // indices
-	u32 rgba[64 * 64];
+	u8 pixels[64 * 64 * 2];
 	for(u32 p = 0; p < 64 * 64; ++p)
 	{
-		// little endian; in mem its RGBA
-		u8 *c = (u8 *)cache->palette + src[p] * 3;
-		rgba[p] = 0xFF000000u | ((u32)c[2] << 16) | ((u32)c[1] << 8) | c[0];
+		pixels[p * 2 + 0] = src[p]; // R = palette index
+		pixels[p * 2 + 1] = 255;    // G = coverage (flats are always opaque). Then why we need this?
 	}
 
-	*id = platform_API->upload_texture_to_gpu(rgba, 64, 64);
+	*id = platform_API->upload_texture_to_gpu(pixels, 64, 64);
 
 	return *id;
 }
@@ -859,7 +832,6 @@ init_texture_cache(Game_State *game_state, Platform_API *platform_API)
 	cache->sky_flat_number = find_flat_number(cache, wad, "F_SKY1");
 
 	load_pnames(wad, cache, arena);
-	load_playpal(wad, cache, arena);
 	load_texture_defs(wad, cache, arena);
 	load_playpal_texture(wad, cache, platform_API);
 	load_colormap_texture(wad, cache, platform_API);
