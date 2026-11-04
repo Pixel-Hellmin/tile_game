@@ -97,7 +97,11 @@ struct Sector
     f32 ceiling_height;
     u32 floor_flat;			  // flat numbers
     u32 ceiling_flat;
-    f32 light_level;          // 0..1, normalized from the WAD's 0..255 lightlevel
+
+	i16 light; // raw 0..255 from WAD
+	i16 special;
+	i16 tag;
+	u32 index; // position in the sectors array
 
     Line_Def **lines;         // NOTE(Fermin): every line whose front or back references this sector
     u32 line_count;

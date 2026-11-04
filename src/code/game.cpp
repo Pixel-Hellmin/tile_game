@@ -47,7 +47,7 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 	u32 vertex_count, sector_count, side_count, line_count, things_count;
 	Map_Thing *things           = load_things(wad, map, &things_count, level_arena);
 	V2        *vertex_positions = load_vertexes(wad, map, &vertex_count, level_arena);
-	Sector    *sectors          = load_sectors(wad, map, &sector_count, level_arena, texture_cache);
+	Sector    *sectors          = load_sectors(wad, map, &sector_count, level_arena, texture_cache, &game_state->loaded_level.light_levels);
 	Side_Def  *sides            = load_sidedefs(wad, map, sectors, &side_count, level_arena, texture_cache);
 	Line_Def  *lines            = load_linedefs(wad, map, sides, &line_count, level_arena);
 	BSP_Map    bsp              = load_bsp(wad, map, lines, line_count, level_arena);
@@ -59,6 +59,8 @@ load_level(char *level_name, Platform_API *platform_API, Game_State *game_state)
 								 platform_API, wad, texture_cache, i,
 								 map);
 	}
+	u32 tmp_id = 0;
+	platform_API->upload_light_table_to_gpu(&tmp_id, game_state->loaded_level.light_levels, sector_count);
 
 	Wall_Build_Context context = {};
 	context.cache = texture_cache;

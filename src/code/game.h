@@ -65,6 +65,8 @@ struct Loaded_Level
 	u32 things_count;
 
 	BSP_Map bsp;
+
+	u8 *light_levels;
 };
 
 struct Game_State

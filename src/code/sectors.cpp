@@ -694,7 +694,7 @@ triangulate_ear_clip(u32 *loop_vertices, u32 loop_vertex_count, V2 *vertex_posit
 }
 
 static Mesh
-build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light,
+build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, u32 sector_index,
 				b32 flip_winding, Memory_Arena *arena)
 {
     Mesh result = {};
@@ -718,7 +718,7 @@ build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light,
             Mesh_Vertex *v = result.vertices + out_index;
             v->position = { p.x, p.y, z };
             v->uv = { (p.x / 64.0f), (p.y / 64.0f) }; // DOOM flats are 64x64, world units map 1:1 to UV at that scale
-            v->light = light;
+            v->sector_index = sector_index;
 
             result.indices[out_index] = out_index;
         }
@@ -728,7 +728,7 @@ build_flat_mesh(Triangulated_Loop *tri, V2 *vertex_positions, f32 z, f32 light,
 }
 
 static Mesh
-build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
+build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, u32 sector_index,
                  f32 x_offset, f32 anchor_top, f32 tex_w, f32 tex_h, Memory_Arena *arena)
 {
     f32 wall_length = length(p2 - p1);
@@ -761,7 +761,7 @@ build_wall_quad(V2 p1, V2 p2, f32 bottom_z, f32 top_z, f32 light,
     {
         result.vertices[i].position = positions[i];
         result.vertices[i].uv = uvs[i];
-        result.vertices[i].light = light;
+        result.vertices[i].sector_index = sector_index;
     }
 
 	u32 idx[6] = { 0, 1, 2, 0, 2, 3 }; 
@@ -815,7 +815,7 @@ add_wall_segment(Wall_Segment_List *list, Wall_Part part, u32 texture_number,
     Wall_Segment *seg = list->segments + list->segment_count++;
     seg->part = part;
     seg->texture_number = texture_number;
-    seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->light_level,
+    seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->index,
                                 side->x_offset, anchor, (f32)tex->width, tex_h, context->scratch);
     seg->mesh.texture_handle = tex->id;
 }
@@ -849,7 +849,7 @@ add_masked_middle_segment(Wall_Segment_List *list, Line_Def *line, Side_Def *sid
 	Wall_Segment *seg = list->segments + list->segment_count++;
 	seg->part = WallPart_Masked_Middle;
 	seg->texture_number = side->middle_texture;
-	seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->light_level,
+	seg->mesh = build_wall_quad(p1, p2, bottom_z, top_z, near_s->index,
 							 side->x_offset, anchor, tex_w, tex_h, ctx->scratch);
 	seg->mesh.texture_handle = tex->id;
 }
@@ -973,7 +973,7 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *scr
 																 vertex_positions, scratch);
 
 		Mesh floor_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
-										 sector->floor_height, sector->light_level,
+										 sector->floor_height, sector->index,
 										 true, scratch);
 		floor_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->floor_flat, platform_API);
 		platform_API->upload_static_mesh_to_gpu(&floor_mesh);
@@ -981,7 +981,7 @@ build_sector_render_data(Sector *sector, V2 *vertex_positions, Memory_Arena *scr
 		if(sector->ceiling_flat == texture_cache->sky_flat_number) { continue; } // temp
 
 		Mesh ceiling_mesh = build_flat_mesh(&floor_triangles, vertex_positions,
-										 sector->ceiling_height, sector->light_level,
+										 sector->ceiling_height, sector->index,
 										 false, scratch);
 		ceiling_mesh.texture_handle = get_or_load_flat_id(wad, texture_cache, sector->ceiling_flat, platform_API);
 		platform_API->upload_static_mesh_to_gpu(&ceiling_mesh);

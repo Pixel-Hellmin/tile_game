@@ -24,18 +24,19 @@ typedef int32_t    b32;
 
 #define Pi32 3.14159265359f
 #define F32_MAX 3.402823466e+38f
+#define U32Max ((u32) - 1)
 
 #define kilobytes(value) ((value)*1024LL)
 #define megabytes(value) (kilobytes(value)*1024LL)
 #define gigabytes(value) (megabytes(value)*1024LL)
-
-#define U32Max ((u32) - 1)
 
 #define assert(expression) if(!(expression)) {*(int *)0 = 0;}
 #define invalid_code_path assert(!"invalid_code_path")
 #define array_count(array) (sizeof(array) / sizeof((array)[0]))
 #define align_pow2(value, alignment) ((value + ((alignment) - 1)) & ~((alignment) - 1))
 #define align4(value) align_pow2(value, 4)
+
+#define LIGHT_TABLE_WIDTH 256
 
 // NOTE(Fermin): This is used to store u32 as a (void *) type.
 // Not actual pointers, useful when using u32 and pointers as
@@ -106,7 +107,7 @@ struct Mesh_Vertex
 {
     V3 position; // in the world
     V2 uv;
-    f32 light;   // flat per-sector light
+    u32 sector_index;   // looks up the current light in the light table
 };
 
 struct Mesh
@@ -155,6 +156,12 @@ struct Decoded_Patch
 #define PLATFORM_UPLOAD_COLORMAP_TO_GPU(name) u32 name(u8 *maps, u32 map_count)
 	typedef PLATFORM_UPLOAD_COLORMAP_TO_GPU(Platform_Upload_Colormap_To_Gpu);
 
+#define PLATFORM_UPLOAD_LIGHT_TABLE_TO_GPU(name) void name(u32 *id, u8 *levels, u32 sector_count)
+	typedef PLATFORM_UPLOAD_LIGHT_TABLE_TO_GPU(Platform_Upload_Light_Table_To_Gpu);
+
+#define PLATFORM_UPDATE_LIGHT_TABLE_IN_GPU(name) void name(u32 id, u8 *levels, u32 sector_count)
+	typedef PLATFORM_UPDATE_LIGHT_TABLE_IN_GPU(Platform_Update_Light_Table_In_Gpu);
+
 #define PLATFORM_CLEAR_STATIC_MESH_BUFFERS(name) void name()
 	typedef PLATFORM_CLEAR_STATIC_MESH_BUFFERS(Platform_Clear_Static_Mesh_Buffers);
 
@@ -168,6 +175,8 @@ struct Platform_API
 	Platform_Upload_Texture_To_Gpu *upload_texture_to_gpu;
 	Platform_Upload_Palette_To_Gpu *upload_palette_to_gpu;
 	Platform_Upload_Colormap_To_Gpu *upload_colormap_to_gpu;
+	Platform_Upload_Light_Table_To_Gpu *upload_light_table_to_gpu;
+	Platform_Update_Light_Table_In_Gpu *update_light_table_in_gpu;
 	Platform_Clear_Static_Mesh_Buffers *clear_static_mesh_buffers;
 	Platform_Read_File_From_Disk *read_file_from_disk;
 };
@@ -201,6 +210,9 @@ typedef GAME_GET_SOUND_SAMPLES(Game_Get_Sound_Samples);
 GAME_GET_SOUND_SAMPLES(game_get_sound_samples_stub)
 {
 }
+
+static u32
+light_table_rows(u32 sector_count) { return (sector_count + LIGHT_TABLE_WIDTH - 1) / LIGHT_TABLE_WIDTH; }
 
 #define PLATFORM_H
 #endif

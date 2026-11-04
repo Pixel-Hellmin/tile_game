@@ -3,6 +3,13 @@
 static u16
 read_u16(u8 *p)
 {
+	/*
+	 * We read data	byte-wise like this instead of casting the pointer
+	 * directly because of three reasons:
+	 * Alignment; Unaligned loads can fault or return garbage in some architectures
+	 * Aliasing; Can break depending on the compiler
+	 * Endianness; This is explicit. Pointer cast reads the host CPU's order
+	*/
 	return (u16)(p[0] | (p[1] << 8));
 }
 

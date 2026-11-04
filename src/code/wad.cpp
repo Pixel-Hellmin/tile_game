@@ -462,7 +462,8 @@ load_vertexes(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena)
 }
 
 static Sector *
-load_sectors(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena, Texture_Cache *cache)
+load_sectors(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena, Texture_Cache *cache,
+			 u8 **light_levels)
 {
 	/*
 	* Lump: SECTORS
@@ -485,6 +486,8 @@ load_sectors(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena, Textur
 	u32 count = get_lump_size(wad, lump) / 26;
 	u8 *raw = get_lump_data(wad, lump);
 
+	u32 rows = light_table_rows(count);
+	*light_levels = push_array(arena, rows * LIGHT_TABLE_WIDTH, u8);
 	Sector *sectors = push_array(arena, count, Sector);
 	for(u32 i = 0; i < count; ++i)
 	{
@@ -494,9 +497,13 @@ load_sectors(Wad_File *wad, i32 map, u32 *out_count, Memory_Arena *arena, Textur
 		sectors[i].ceiling_height = (f32)read_i16(e + 2);
 		sectors[i].floor_flat	  = find_flat_number(cache, wad, (char *)(e + 4));
 		sectors[i].ceiling_flat   = find_flat_number(cache, wad, (char *)(e + 12));
-		sectors[i].light_level	  = (f32)read_i16(e + 20) / 255.0f;
-		
-		// special @ e+22, tag @ e+24 -- doors/lifts, not consumed yet
+		sectors[i].light		  = read_i16(e + 20);
+		sectors[i].special		  = read_i16(e + 22);
+		sectors[i].tag			  = read_i16(e + 24);
+		sectors[i].index		  = i;
+
+		// TODO(Fermin): Clamp 0..255
+		(*light_levels)[i] = (u8)read_i16(e + 20);
 	}
 
 	*out_count = count;

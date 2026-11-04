@@ -128,12 +128,14 @@ opengl_init(Opengl_Info info)
 #include "shaders.h"
 
     opengl.program = opengl_create_program(defines, header_code, doom_vertex_code, doom_fragment_code);
-    opengl.transform_id = opengl.glGetUniformLocation(opengl.program, "u_view_proj");
+    opengl.transform_loc = opengl.glGetUniformLocation(opengl.program, "u_view_proj");
     opengl.u_texture_loc = opengl.glGetUniformLocation(opengl.program, "u_texture");
     opengl.u_palette_loc = opengl.glGetUniformLocation(opengl.program, "u_palette");
     opengl.u_colormap_loc = opengl.glGetUniformLocation(opengl.program, "u_colormap");
-    opengl.u_colormap_row_loc = opengl.glGetUniformLocation(opengl.program, "u_colormap_row");
     opengl.u_palette_row_loc = opengl.glGetUniformLocation(opengl.program, "u_palette_row");
+    opengl.u_light_table_loc = opengl.glGetUniformLocation(opengl.program, "u_light_table");
+    opengl.u_extralight_loc = opengl.glGetUniformLocation(opengl.program, "u_extralight");
+    opengl.u_fixed_colormap_loc = opengl.glGetUniformLocation(opengl.program, "u_fixed_colormap");
 
 	/* This is broken since we are using glsl version 330 instead of 130
 	opengl.filter_program = opengl_create_program(defines, header_code, filter_vertex_code, filter_fragment_code);
@@ -330,7 +332,7 @@ opengl_upload_static_mesh_to_gpu(GPU_Mesh *result, Mesh *mesh)
 	opengl.glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, uv));
 	opengl.glEnableVertexAttribArray(1);
 
-	opengl.glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, light));
+	opengl.glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(Mesh_Vertex), (void *)offsetof(Mesh_Vertex, sector_index));
 	opengl.glEnableVertexAttribArray(2);
 
 	opengl.glBindVertexArray(0); // unbind so later calls don't accidentally clobber this VAO's state
@@ -414,6 +416,37 @@ opengl_upload_colormap_to_gpu(u8 *maps, u32 map_count)
 			  GL_RED_INTEGER, GL_UNSIGNED_BYTE, maps);
 
 	return id;
+}
+
+static void
+opengl_upload_light_table_to_gpu(GLuint *id, u8 *levels, u32 sector_count)
+{
+	if(*id != 0)
+	{
+		glDeleteTextures(1, id);
+	}
+
+	opengl.glActiveTexture(GL_TEXTURE0);
+	glGenTextures(1, id);
+	glBindTexture(GL_TEXTURE_2D, *id);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, LIGHT_TABLE_WIDTH, (GLsizei)light_table_rows(sector_count), 0,
+			  GL_RED_INTEGER, GL_UNSIGNED_BYTE, levels);
+}
+
+static void
+opengl_update_light_table_in_gpu(GLuint id, u8 *levels, u32 sector_count)
+{
+	opengl.glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, id);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	// Overwrites texels in the existing storage
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, LIGHT_TABLE_WIDTH, (GLsizei)light_table_rows(sector_count),
+				 GL_RED_INTEGER, GL_UNSIGNED_BYTE, levels);
 }
 
 static void // move to opengl

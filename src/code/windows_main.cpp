@@ -21,6 +21,7 @@ global LPDIRECTSOUNDBUFFER secondary_buffer;
 global M4 view_proj;
 global u32 palette_id;
 global u32 colormap_id;
+global u32 light_table_id = 0;
 global Memory_Arena debug_static_gpu_mesh_arena;
 global u32 debug_static_gpu_mesh_count;
 
@@ -156,6 +157,7 @@ win32_init_opengl(HWND window)
 		win32_get_opengl_function(GL_Enable_Vertex_Attrib_Array, glEnableVertexAttribArray)
 		win32_get_opengl_function(GL_Delete_Buffers,             glDeleteBuffers)
 		win32_get_opengl_function(GL_Delete_Vertex_Arrays,		 glDeleteVertexArrays)
+		win32_get_opengl_function(GL_Vertex_Attrib_I_Pointer,	 glVertexAttribIPointer)
 		
         wgl_swap_interval = (Wgl_Swap_Interval_Ext *)wglGetProcAddress("wglSwapIntervalEXT");
         if(wgl_swap_interval)
@@ -362,7 +364,7 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 		glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
 
 		opengl.glUseProgram(opengl.program);
-		opengl.glUniformMatrix4fv(opengl.transform_id, 1, GL_TRUE, view_proj.e);
+		opengl.glUniformMatrix4fv(opengl.transform_loc, 1, GL_TRUE, view_proj.e);
 
 		if(cmd_params.edges)
 		{
@@ -372,13 +374,16 @@ win32_display_buffer_in_window(HDC device_context, i32 window_width, i32 window_
 
 		opengl.glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, palette_id);
 		opengl.glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, colormap_id);
+		opengl.glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, light_table_id);
 		opengl.glActiveTexture(GL_TEXTURE0);
 
 		opengl.glUniform1i(opengl.u_texture_loc, 0);
 		opengl.glUniform1i(opengl.u_palette_loc, 1);
 		opengl.glUniform1i(opengl.u_colormap_loc, 2);
-		opengl.glUniform1i(opengl.u_colormap_row_loc, 0);
+		opengl.glUniform1i(opengl.u_light_table_loc, 3);
 		opengl.glUniform1i(opengl.u_palette_row_loc, 0);
+		opengl.glUniform1i(opengl.u_extralight_loc, 0);
+		opengl.glUniform1i(opengl.u_fixed_colormap_loc, -1);
 
 		for(u32 i = 0; i < debug_static_gpu_mesh_count; i++)
 		{
@@ -809,6 +814,16 @@ static PLATFORM_UPLOAD_COLORMAP_TO_GPU(upload_colormap_to_gpu)
 	return result;
 }
 
+static PLATFORM_UPLOAD_LIGHT_TABLE_TO_GPU(upload_light_table_to_gpu)
+{
+	opengl_upload_light_table_to_gpu(&light_table_id, levels, sector_count);
+}
+
+static PLATFORM_UPDATE_LIGHT_TABLE_IN_GPU(update_light_table_in_gpu)
+{
+	opengl_update_light_table_in_gpu(light_table_id, levels, sector_count);
+}
+
 static PLATFORM_READ_FILE_FROM_DISK(read_file_from_disk)
 {
 	Buffer result = {};
@@ -947,6 +962,8 @@ int main(int argc, char** argv)
 			game_memory.platform_API.upload_texture_to_gpu = upload_texture_to_gpu;
 			game_memory.platform_API.upload_palette_to_gpu = upload_palette_to_gpu;
 			game_memory.platform_API.upload_colormap_to_gpu = upload_colormap_to_gpu;
+			game_memory.platform_API.upload_light_table_to_gpu = upload_light_table_to_gpu;
+			game_memory.platform_API.update_light_table_in_gpu = update_light_table_in_gpu;
 			game_memory.platform_API.clear_static_mesh_buffers = clear_static_mesh_buffers;
 			game_memory.platform_API.read_file_from_disk = read_file_from_disk;
 

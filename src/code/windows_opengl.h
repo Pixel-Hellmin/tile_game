@@ -30,6 +30,7 @@
 #define GL_TEXTURE0									  0x84C0
 #define GL_TEXTURE1									  0x84C1
 #define GL_TEXTURE2									  0x84C2
+#define GL_TEXTURE3									  0x84C3
 #define GL_ARRAY_BUFFER								  0x8892
 #define GL_STATIC_DRAW								  0x88E4
 #define GL_ELEMENT_ARRAY_BUFFER						  0x8893
@@ -80,6 +81,7 @@ opengl_binding(void,   GL_Vertex_Attrib_Pointer,      glVertexAttribPointer,	 GL
 opengl_binding(void,   GL_Enable_Vertex_Attrib_Array, glEnableVertexAttribArray, GLuint index)
 opengl_binding(void,   GL_Delete_Buffers,             glDeleteBuffers,           GLsizei n, const GLuint *buffers)
 opengl_binding(void,   GL_Delete_Vertex_Arrays,       glDeleteVertexArrays,      GLsizei n, const GLuint *arrays)
+opengl_binding(void,   GL_Vertex_Attrib_I_Pointer,    glVertexAttribIPointer,    GLuint index, GLint size, GLenum type, GLsizei stride, const void *pointer)
 #undef opengl_binding
 
 typedef HGLRC WINAPI Wgl_Create_Context_Attribs_Arb(HDC hdc, HGLRC h_share_context, const int *attrib_list);
@@ -87,16 +89,22 @@ typedef BOOL WINAPI Wgl_Swap_Interval_Ext(int interval);
 
 struct Opengl {
     GLuint program;
-    GLuint transform_id;
+
+    GLuint transform_loc;
     GLuint u_texture_loc;
     GLuint u_palette_loc;
     GLuint u_colormap_loc;
-    GLuint u_colormap_row_loc;
     GLuint u_palette_row_loc;
+    GLuint u_light_table_loc;
+    GLuint u_extralight_loc;
+    GLuint u_fixed_colormap_loc;
+
     GLuint default_internal_texture_format;
+
 	GLuint fbo;
 	GLuint fbo_texture;
 	GLuint fbo_depth;
+
     GLuint filter_program;
     GLuint filter_texture_sampler_id;
     GLint  max_multisample_count;
@@ -137,6 +145,7 @@ struct Opengl {
 	GL_Enable_Vertex_Attrib_Array *glEnableVertexAttribArray;
 	GL_Delete_Buffers             *glDeleteBuffers;
 	GL_Delete_Vertex_Arrays       *glDeleteVertexArrays;
+	GL_Vertex_Attrib_I_Pointer    *glVertexAttribIPointer;
 };
 
 struct Opengl_Info
